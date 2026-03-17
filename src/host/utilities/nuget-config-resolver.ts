@@ -20,7 +20,7 @@ export default class NuGetConfigResolver {
 
   static async GetSourcesAndDecodePasswords(workspaceRoot?: string): Promise<SourceWithCredentials[]> {
     Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Starting resolution (workspaceRoot: ${workspaceRoot})`);
-    const config = vscode.workspace.getConfiguration("NugetWorkbench");
+    const config = vscode.workspace.getConfiguration("NugetPackageManager");
     const sourcesMap = new Map<string, SourceWithCredentials>();
     
     const sourcesWithCreds = await this.GetSourcesWithCredentials(workspaceRoot);

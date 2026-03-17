@@ -200,9 +200,7 @@ export class ConsolidateView extends LitElement {
 
     this.isConsolidating = true;
     try {
-      for (const pkg of this.packages) {
-        await this.consolidateSingle(pkg);
-      }
+      await Promise.allSettled(this.packages.map((pkg) => this.consolidateSingle(pkg)));
     } finally {
       this.isConsolidating = false;
       await this.LoadInconsistentPackages();

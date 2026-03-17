@@ -1,9 +1,9 @@
-# NuGet Workbench
+# NuGet Package Manager
 
 **A full-featured NuGet package manager for Visual Studio Code** — browse, install, update, and audit packages across all your .NET projects without leaving the editor.
 
-[![Release](https://img.shields.io/github/v/release/nuget-workbench/nuget-workbench-vscode?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=nuget-workbench.nuget-workbench)
-[![CI](https://img.shields.io/github/actions/workflow/status/nuget-workbench/nuget-workbench-vscode/ci.yml?label=CI)](https://github.com/nuget-workbench/nuget-workbench-vscode/actions)
+[![Release](https://img.shields.io/github/v/release/nuget-workbench/nuget-package-manager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=nuget-package-manager.nuget-package-manager)
+[![CI](https://img.shields.io/github/actions/workflow/status/nuget-workbench/nuget-package-manager/ci.yml?label=CI)](https://github.com/nuget-workbench/nuget-package-manager/actions)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.87%2B-grey)](https://code.visualstudio.com/)
 
@@ -68,21 +68,21 @@
 
 1. Open VS Code
 2. Press `Ctrl+Shift+X` to open the Extensions panel
-3. Search for **NuGet Workbench**
+3. Search for **NuGet Package Manager**
 4. Click **Install**
 
 Or install directly from the command line:
 
 ```bash
-code --install-extension nuget-workbench.nuget-workbench
+code --install-extension nuget-package-manager.nuget-package-manager
 ```
 
 ### From a .vsix file
 
-Download the latest `.vsix` from the [Releases page](https://github.com/nuget-workbench/nuget-workbench-vscode/releases), then:
+Download the latest `.vsix` from the [Releases page](https://github.com/nuget-workbench/nuget-package-manager/releases), then:
 
 ```bash
-code --install-extension nuget-workbench-x.x.x.vsix
+code --install-extension nuget-package-manager-x.x.x.vsix
 ```
 
 Or via the Extensions panel: click **···** → **Install from VSIX…**
@@ -97,7 +97,7 @@ Or via the Extensions panel: click **···** → **Install from VSIX…**
 4. Use the **BROWSE** tab to search for and install packages.
 5. Run **UPDATES** to check for outdated packages, **VULNERABILITIES** for security issues, and **CONSOLIDATE** to fix version drift across projects.
 
-> **Tip:** Use the Command Palette (`Ctrl+Shift+P`) and type `NuGet Workbench` to jump directly to any feature.
+> **Tip:** Use the Command Palette (`Ctrl+Shift+P`) and type `NuGet Package Manager` to jump directly to any feature.
 
 ---
 
@@ -172,42 +172,42 @@ Access these from the Command Palette (`Ctrl+Shift+P`):
 
 | Command | ID | Description |
 |---|---|---|
-| **NuGet Workbench: Open Packages** | `nugetWorkbench.open` | Focus the NuGet panel |
-| **NuGet Workbench: Add Package** | `nugetWorkbench.install` | Prompt for a package ID and open Browse with it pre-searched |
-| **NuGet Workbench: Update Package** | `nugetWorkbench.update` | Focus the NuGet panel and switch to the Updates tab |
-| **NuGet Workbench: Remove Package** | `nugetWorkbench.remove` | Focus the NuGet panel and switch to the Installed tab |
-| **Settings** | `nugetWorkbench.openSettings` | Open the NuGet Workbench settings view |
-| **Report Problem** | `nugetWorkbench.reportProblem` | Open a new GitHub issue |
+| **NuGet Package Manager: Open Packages** | `nugetPackageManager.open` | Focus the NuGet panel |
+| **NuGet Package Manager: Add Package** | `nugetPackageManager.install` | Prompt for a package ID and open Browse with it pre-searched |
+| **NuGet Package Manager: Update Package** | `nugetPackageManager.update` | Focus the NuGet panel and switch to the Updates tab |
+| **NuGet Package Manager: Remove Package** | `nugetPackageManager.remove` | Focus the NuGet panel and switch to the Installed tab |
+| **Settings** | `nugetPackageManager.openSettings` | Open the NuGet Package Manager settings view |
+| **Report Problem** | `nugetPackageManager.reportProblem` | Open a new GitHub issue |
 
 ---
 
 ## Configuration
 
-Open VS Code Settings (`Ctrl+,`) and search for **NuGet Workbench**, or edit `settings.json` directly.
+Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or edit `settings.json` directly.
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `NugetWorkbench.sources` | `string[]` | `[nuget.org]` | List of NuGet feed URLs to search and update from. Each entry is a JSON string `{"name":"...","url":"..."}`. |
-| `NugetWorkbench.defaultSource` | `string` | `""` | Default source URL pre-selected in the source dropdown. Empty = use the first configured source. |
-| `NugetWorkbench.prerelease` | `boolean` | `false` | Include pre-release versions when checking for updates. |
-| `NugetWorkbench.skipRestore` | `boolean` | `false` | Skip the restore preview and compatibility check when installing/updating packages. |
-| `NugetWorkbench.enablePackageVersionInlineInfo` | `boolean` | `false` | Show inline gutter decorations in `.csproj` files with available update versions. |
-| `NugetWorkbench.statusBarLoadingIndicator` | `boolean` | `false` | Show a loading progress indicator in the VS Code status bar. |
-| `NugetWorkbench.pageSize` | `number` | `20` | Number of packages returned per search page. |
-| `NugetWorkbench.showOutputOnError` | `boolean` | `true` | Automatically reveal the NuGet output log when an operation fails. |
-| `NugetWorkbench.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Workbench output channel. |
+| `NugetPackageManager.sources` | `string[]` | `[nuget.org]` | List of NuGet feed URLs to search and update from. Each entry is a JSON string `{"name":"...","url":"..."}`. |
+| `NugetPackageManager.defaultSource` | `string` | `""` | Default source URL pre-selected in the source dropdown. Empty = use the first configured source. |
+| `NugetPackageManager.prerelease` | `boolean` | `false` | Include pre-release versions when checking for updates. |
+| `NugetPackageManager.skipRestore` | `boolean` | `false` | Skip the restore preview and compatibility check when installing/updating packages. |
+| `NugetPackageManager.enablePackageVersionInlineInfo` | `boolean` | `false` | Show inline gutter decorations in `.csproj` files with available update versions. |
+| `NugetPackageManager.statusBarLoadingIndicator` | `boolean` | `false` | Show a loading progress indicator in the VS Code status bar. |
+| `NugetPackageManager.pageSize` | `number` | `20` | Number of packages returned per search page. |
+| `NugetPackageManager.showOutputOnError` | `boolean` | `true` | Automatically reveal the NuGet output log when an operation fails. |
+| `NugetPackageManager.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Package Manager output channel. |
 
 ### Example `settings.json`
 
 ```jsonc
 {
-  "NugetWorkbench.sources": [
+  "NugetPackageManager.sources": [
     "{\"name\": \"nuget.org\", \"url\": \"https://api.nuget.org/v3/index.json\"}",
     "{\"name\": \"My Feed\",   \"url\": \"https://pkgs.dev.azure.com/my-org/_packaging/my-feed/nuget/v3/index.json\"}"
   ],
-  "NugetWorkbench.prerelease": false,
-  "NugetWorkbench.enablePackageVersionInlineInfo": true,
-  "NugetWorkbench.skipRestore": false
+  "NugetPackageManager.prerelease": false,
+  "NugetPackageManager.enablePackageVersionInlineInfo": true,
+  "NugetPackageManager.skipRestore": false
 }
 ```
 
@@ -215,7 +215,7 @@ Open VS Code Settings (`Ctrl+,`) and search for **NuGet Workbench**, or edit `se
 
 ## Private Feed Authentication
 
-NuGet Workbench supports private package feeds out of the box.
+NuGet Package Manager supports private package feeds out of the box.
 
 ### NuGet.config (automatic)
 
@@ -238,7 +238,7 @@ For non-standard authentication flows, configure a script path per source. The s
 ```jsonc
 // settings.json
 {
-  "NugetWorkbench.sources": [
+  "NugetPackageManager.sources": [
     "{\"name\": \"Internal\", \"url\": \"https://my.internal.feed/v3/index.json\", \"passwordScriptPath\": \"/path/to/get-token.sh\"}"
   ]
 }
@@ -248,7 +248,7 @@ For non-standard authentication flows, configure a script path per source. The s
 
 ## Central Package Management (CPM)
 
-NuGet Workbench has first-class support for [Central Package Management](https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management).
+NuGet Package Manager has first-class support for [Central Package Management](https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management).
 
 - **Auto-detection** — projects using `Directory.Packages.props` are detected and labelled in the project tree
 - **Version source tracking** — each installed package shows whether its version comes from `project`, `central`, or `override`
@@ -259,7 +259,7 @@ NuGet Workbench has first-class support for [Central Package Management](https:/
 
 ## Inline Version Decorations
 
-Enable `NugetWorkbench.enablePackageVersionInlineInfo` to see available updates directly in your project files:
+Enable `NugetPackageManager.enablePackageVersionInlineInfo` to see available updates directly in your project files:
 
 ```xml
 <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />  ← 13.0.3 available
@@ -275,11 +275,11 @@ Contributions are welcome — bug reports, feature requests, documentation impro
 
 ### Reporting Issues
 
-Please use the [GitHub Issues](https://github.com/nuget-workbench/nuget-workbench-vscode/issues) tracker. Include:
+Please use the [GitHub Issues](https://github.com/nuget-workbench/nuget-package-manager/issues) tracker. Include:
 - VS Code version
 - Extension version
 - Steps to reproduce
-- Relevant output from the **NuGet Workbench** output channel (set `logLevel` to `DEBUG`)
+- Relevant output from the **NuGet Package Manager** output channel (set `logLevel` to `DEBUG`)
 
 ### Development Setup
 
@@ -287,8 +287,8 @@ Please use the [GitHub Issues](https://github.com/nuget-workbench/nuget-workbenc
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/nuget-workbench/nuget-workbench-vscode.git
-cd nuget-workbench-vscode
+git clone https://github.com/nuget-workbench/nuget-package-manager.git
+cd nuget-package-manager
 
 # 2. Install dependencies
 npm install
@@ -337,7 +337,7 @@ The script (`tools/take-screenshots.mjs`) starts a local HTTP server, loads the 
 
 ```bash
 npm run package
-# → releases/nuget-workbench-x.x.x.vsix
+# → releases/nuget-package-manager-x.x.x.vsix
 ```
 
 ### Pull Request Guidelines
@@ -362,7 +362,7 @@ The extension runs in two isolated processes that communicate via a typed RPC la
 ┌─────────────────────────────────────────────┐   ┌──────────────────────────────────────────────┐
 │  VS Code Extension Host  (Node.js)           │   │  Webview  (Browser / Lit)                    │
 │                                             │   │                                              │
-│  extension.ts                               │   │  main.ts  →  nuget-workbench (root element) │
+│  extension.ts                               │   │  main.ts  →  nuget-package-manager (root element) │
 │  host-api.ts  ──  RpcHost                  │◄──►│  RpcClient  →  packages-view                │
 │  nuget/api.ts  (axios → NuGet API)         │   │  components/*  (@state, @property)           │
 │  utilities/  (csproj parser, decorator)    │   │  registrations.ts  (singletons)              │
@@ -398,7 +398,7 @@ src/
 
 ## Credits
 
-NuGet Workbench builds on the work of:
+NuGet Package Manager builds on the work of:
 
 - [pcislo/vscode-nuget-gallery](https://github.com/pcislo/vscode-nuget-gallery) by [Patryk Cislo](https://github.com/pcislo) — the original extension this project descends from
 - [shis91/vscode-nuget-gallery](https://github.com/shis91/vscode-nuget-gallery) by [shis91](https://github.com/shis91) — major feature additions including CPM, authentication, and test infrastructure

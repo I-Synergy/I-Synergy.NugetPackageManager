@@ -26,6 +26,8 @@ import type {
   GetVulnerablePackagesResponse,
   ShowConfirmationRequest,
   ShowConfirmationResponse,
+  GetOperationProgressRequest,
+  GetOperationProgressResponse,
 } from "@/common/rpc/types";
 import type { Result } from "@/common/rpc/result";
 import { ok, fail } from "@/common/rpc/result";
@@ -98,15 +100,21 @@ export function createHostAPI(): HostAPI {
 
       Logger.info(`getProjects: Found ${projectFiles.length} project files`);
 
-      const projects: Project[] = [];
-      for (const file of projectFiles) {
-        try {
+      const parseResults = await Promise.allSettled(
+        projectFiles.map(async (file) => {
           const cpmVersions = await CpmResolver.GetPackageVersions(file.fsPath);
           const project = await ProjectParser.Parse(file.fsPath, cpmVersions);
           project.CpmEnabled = cpmVersions !== null;
-          projects.push(project);
-        } catch (e) {
-          Logger.error(`getProjects: Failed to parse project ${file.fsPath}`, e);
+          return project;
+        })
+      );
+      const projects: Project[] = [];
+      for (let i = 0; i < parseResults.length; i++) {
+        const r = parseResults[i];
+        if (r.status === "fulfilled") {
+          projects.push(r.value);
+        } else {
+          Logger.error(`getProjects: Failed to parse project ${projectFiles[i].fsPath}`, r.reason);
         }
       }
 
@@ -253,17 +261,17 @@ export function createHostAPI(): HostAPI {
 
     async updateProject(request: UpdateProjectRequest): Promise<Result<UpdateProjectResponse>> {
       Logger.info(`updateProject: ${request.Type} ${request.PackageId} in ${request.ProjectPath}`);
-      const skipRestoreConfig = vscode.workspace.getConfiguration("NugetWorkbench").get<string>("skipRestore") ?? "";
+      const skipRestoreConfig = vscode.workspace.getConfiguration("NugetPackageManager").get<string>("skipRestore") ?? "";
       const isCpmEnabled = await CpmResolver.GetPackageVersions(request.ProjectPath) !== null;
       const skipRestore = !!skipRestoreConfig && !isCpmEnabled;
 
       try {
         if (request.Type === "UPDATE") {
-          await executeAddPackage(request.PackageId, request.ProjectPath, request.Version, skipRestore, request.SourceUrl);
+          await executeAddPackage(request.PackageId, request.ProjectPath, request.Version, skipRestore, request.SourceUrl, request.OperationId);
         } else if (request.Type === "UNINSTALL") {
-          await executeRemovePackage(request.PackageId, request.ProjectPath);
+          await executeRemovePackage(request.PackageId, request.ProjectPath, request.OperationId);
         } else {
-          await executeAddPackage(request.PackageId, request.ProjectPath, request.Version, skipRestore, request.SourceUrl);
+          await executeAddPackage(request.PackageId, request.ProjectPath, request.Version, skipRestore, request.SourceUrl, request.OperationId);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -283,12 +291,12 @@ export function createHostAPI(): HostAPI {
 
     async getConfiguration(): Promise<Result<GetConfigurationResponse>> {
       Logger.info("getConfiguration: Retrieving configuration");
-      let config = vscode.workspace.getConfiguration("NugetWorkbench");
+      let config = vscode.workspace.getConfiguration("NugetPackageManager");
       try {
         await config.update("sources", undefined, vscode.ConfigurationTarget.Workspace);
         await config.update("skipRestore", undefined, vscode.ConfigurationTarget.Workspace);
       } catch { /* workspace config cleanup */ }
-      config = vscode.workspace.getConfiguration("NugetWorkbench");
+      config = vscode.workspace.getConfiguration("NugetPackageManager");
 
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       const sourcesWithCreds = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
@@ -329,7 +337,7 @@ export function createHostAPI(): HostAPI {
 
     async updateConfiguration(request: UpdateConfigurationRequest): Promise<Result<void>> {
       Logger.info("updateConfiguration: Updating configuration");
-      const config = vscode.workspace.getConfiguration("NugetWorkbench");
+      const config = vscode.workspace.getConfiguration("NugetPackageManager");
 
       const sources = request.Configuration.Sources.map((x) =>
         JSON.stringify({
@@ -387,15 +395,21 @@ export function createHostAPI(): HostAPI {
           projectFiles = projectFiles.filter((f) => request.ProjectPaths!.includes(f.fsPath));
         }
 
-        const projects: Project[] = [];
-        for (const file of projectFiles) {
-          try {
+        const parseResults = await Promise.allSettled(
+          projectFiles.map(async (file) => {
             const cpmVersions = await CpmResolver.GetPackageVersions(file.fsPath);
             const project = await ProjectParser.Parse(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmVersions !== null;
-            projects.push(project);
-          } catch (e) {
-            Logger.error(`getOutdatedPackages: Failed to parse ${file.fsPath}`, e);
+            return project;
+          })
+        );
+        const projects: Project[] = [];
+        for (let i = 0; i < parseResults.length; i++) {
+          const r = parseResults[i];
+          if (r.status === "fulfilled") {
+            projects.push(r.value);
+          } else {
+            Logger.error(`getOutdatedPackages: Failed to parse ${projectFiles[i].fsPath}`, r.reason);
           }
         }
 
@@ -479,7 +493,7 @@ export function createHostAPI(): HostAPI {
           for (const projectPath of update.ProjectPaths) {
             const isCpm = await CpmResolver.GetPackageVersions(projectPath) !== null;
             const skipRestore =
-              !!vscode.workspace.getConfiguration("NugetWorkbench").get<string>("skipRestore") && !isCpm;
+              !!vscode.workspace.getConfiguration("NugetPackageManager").get<string>("skipRestore") && !isCpm;
 
             await executeAddPackage(update.PackageId, projectPath, update.Version, skipRestore);
           }
@@ -511,18 +525,23 @@ export function createHostAPI(): HostAPI {
           projectFiles = projectFiles.filter((f) => request.ProjectPaths!.includes(f.fsPath));
         }
 
-        const projects: Project[] = [];
-        let anyCpmEnabled = false;
-
-        for (const file of projectFiles) {
-          try {
+        const parseResults = await Promise.allSettled(
+          projectFiles.map(async (file) => {
             const cpmVersions = await CpmResolver.GetPackageVersions(file.fsPath);
             const project = await ProjectParser.Parse(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmVersions !== null;
-            if (project.CpmEnabled) anyCpmEnabled = true;
-            projects.push(project);
-          } catch (e) {
-            Logger.error(`getInconsistentPackages: Failed to parse ${file.fsPath}`, e);
+            return project;
+          })
+        );
+        const projects: Project[] = [];
+        let anyCpmEnabled = false;
+        for (let i = 0; i < parseResults.length; i++) {
+          const r = parseResults[i];
+          if (r.status === "fulfilled") {
+            projects.push(r.value);
+            if (r.value.CpmEnabled) anyCpmEnabled = true;
+          } else {
+            Logger.error(`getInconsistentPackages: Failed to parse ${projectFiles[i].fsPath}`, r.reason);
           }
         }
 
@@ -591,14 +610,19 @@ export function createHostAPI(): HostAPI {
           projectFiles = projectFiles.filter((f) => request.ProjectPaths!.includes(f.fsPath));
         }
 
-        const projects: Project[] = [];
-        for (const file of projectFiles) {
-          try {
+        const parseResults = await Promise.allSettled(
+          projectFiles.map(async (file) => {
             const cpmVersions = await CpmResolver.GetPackageVersions(file.fsPath);
-            const project = await ProjectParser.Parse(file.fsPath, cpmVersions);
-            projects.push(project);
-          } catch (e) {
-            Logger.error(`getVulnerablePackages: Failed to parse ${file.fsPath}`, e);
+            return ProjectParser.Parse(file.fsPath, cpmVersions);
+          })
+        );
+        const projects: Project[] = [];
+        for (let i = 0; i < parseResults.length; i++) {
+          const r = parseResults[i];
+          if (r.status === "fulfilled") {
+            projects.push(r.value);
+          } else {
+            Logger.error(`getVulnerablePackages: Failed to parse ${projectFiles[i].fsPath}`, r.reason);
           }
         }
 
@@ -626,19 +650,23 @@ export function createHostAPI(): HostAPI {
 
         StatusBarUtils.show(30, "Fetching vulnerability data...");
 
-        // Fetch vulnerability data from all sources
+        // Fetch vulnerability data from all sources in parallel
         const allVulnerabilities = new Map<string, VulnerabilityEntry[]>();
-        for (const source of sources) {
-          try {
+        const vulnResults = await Promise.allSettled(
+          sources.map(async (source) => {
             const api = await nugetApiFactory.GetSourceApi(source.Url);
-            const vulns = await api.GetVulnerabilitiesAsync();
-            for (const [packageId, entries] of vulns) {
+            return { source, vulns: await api.GetVulnerabilitiesAsync() };
+          })
+        );
+        for (const result of vulnResults) {
+          if (result.status === "fulfilled") {
+            for (const [packageId, entries] of result.value.vulns) {
               const existing = allVulnerabilities.get(packageId) ?? [];
               existing.push(...entries);
               allVulnerabilities.set(packageId, existing);
             }
-          } catch (e) {
-            Logger.warn(`getVulnerablePackages: Failed to fetch vulns from ${source.Url}`, e);
+          } else {
+            Logger.warn(`getVulnerablePackages: Failed to fetch vulns from a source`, result.reason);
           }
         }
 
@@ -697,6 +725,14 @@ export function createHostAPI(): HostAPI {
       return ok({ Confirmed: answer === "Yes" });
     },
 
+    async getOperationProgress(request: GetOperationProgressRequest): Promise<Result<GetOperationProgressResponse>> {
+      const progress = TaskExecutor.GetProgress(request.OperationId);
+      if (progress === null) {
+        return ok({ Stage: "", Percent: 0, Active: false });
+      }
+      return ok({ Stage: progress.stage, Percent: progress.percent, Active: true });
+    },
+
     async consolidatePackages(request: ConsolidateRequest): Promise<Result<void>> {
       Logger.info(
         `consolidatePackages: ${request.PackageId} to ${request.TargetVersion} across ${request.ProjectPaths.length} projects`
@@ -711,7 +747,7 @@ export function createHostAPI(): HostAPI {
 
           const isCpm = await CpmResolver.GetPackageVersions(projectPath) !== null;
           const skipRestore =
-            !!vscode.workspace.getConfiguration("NugetWorkbench").get<string>("skipRestore") && !isCpm;
+            !!vscode.workspace.getConfiguration("NugetPackageManager").get<string>("skipRestore") && !isCpm;
 
           await executeAddPackage(request.PackageId, projectPath, request.TargetVersion, skipRestore);
         }
@@ -734,19 +770,10 @@ export function createHostAPI(): HostAPI {
 // Shared Helpers
 // ============================================================
 
-async function executeRemovePackage(packageId: string, projectPath: string): Promise<void> {
+async function executeRemovePackage(packageId: string, projectPath: string, operationId?: string): Promise<void> {
   StatusBarUtils.ShowText(`Removing package ${packageId}...`);
-  const args = ["package", "remove", packageId, "--project", projectPath.replace(/\\/g, "/")];
-
-  const task = new vscode.Task(
-    { type: "dotnet", task: "dotnet remove package" },
-    vscode.TaskScope.Workspace,
-    "nuget-workbench",
-    "dotnet",
-    new vscode.ShellExecution("dotnet", args)
-  );
-  task.presentationOptions.reveal = vscode.TaskRevealKind.Silent;
-  await TaskExecutor.ExecuteTask(task);
+  const args = ["remove", projectPath.replace(/\\/g, "/"), "package", packageId];
+  await TaskExecutor.ExecuteCommand("dotnet", args, operationId ?? `remove-${packageId}`);
 }
 
 async function executeAddPackage(
@@ -754,10 +781,11 @@ async function executeAddPackage(
   projectPath: string,
   version?: string,
   skipRestore = false,
-  sourceUrl?: string
+  sourceUrl?: string,
+  operationId?: string
 ): Promise<void> {
   StatusBarUtils.ShowText(`Installing package ${packageId} ${version || "latest"}...`);
-  const args = ["package", "add", packageId, "--project", projectPath.replace(/\\/g, "/")];
+  const args = ["add", projectPath.replace(/\\/g, "/"), "package", packageId];
 
   if (version) {
     args.push("--version", version);
@@ -769,15 +797,7 @@ async function executeAddPackage(
     args.push("-s", sourceUrl);
   }
 
-  const task = new vscode.Task(
-    { type: "dotnet", task: "dotnet add package" },
-    vscode.TaskScope.Workspace,
-    "nuget-workbench",
-    "dotnet",
-    new vscode.ShellExecution("dotnet", args)
-  );
-  task.presentationOptions.reveal = vscode.TaskRevealKind.Silent;
-  await TaskExecutor.ExecuteTask(task);
+  await TaskExecutor.ExecuteCommand("dotnet", args, operationId ?? `add-${packageId}`);
 }
 
 async function getLatestVersion(

@@ -24,8 +24,8 @@ type HostCommand =
   | { type: "command"; command: "navigate-tab"; tab: string }
   | { type: "command"; command: "navigate-route"; route: string };
 
-@customElement("nuget-workbench")
-export class NuGetWorkbench extends LitElement {
+@customElement("nuget-package-manager")
+export class NuGetPackageManager extends LitElement {
   @state() private configLoaded = false;
   @state() private currentRoute = router.CurrentRoute;
 
@@ -50,7 +50,7 @@ export class NuGetWorkbench extends LitElement {
     switch (cmd.command) {
       case "search": {
         router.Navigate("BROWSE");
-        this.updateComplete.then(() => {
+        void this.updateComplete.then(() => {
           const packagesView = this.shadowRoot?.querySelector("packages-view") as PackagesView | null;
           packagesView?.setSearchQuery(cmd.query);
         });
@@ -58,7 +58,7 @@ export class NuGetWorkbench extends LitElement {
       }
       case "navigate-tab": {
         router.Navigate("BROWSE");
-        this.updateComplete.then(() => {
+        void this.updateComplete.then(() => {
           const packagesView = this.shadowRoot?.querySelector("packages-view") as PackagesView | null;
           packagesView?.setTab(cmd.tab as "browse" | "installed" | "updates" | "consolidate" | "vulnerabilities");
         });

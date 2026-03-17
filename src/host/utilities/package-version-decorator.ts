@@ -23,8 +23,8 @@ export class PackageVersionDecorator implements vscode.Disposable {
 
         // Listen for configuration changes
         this._disposables.push(vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('NugetWorkbench.enablePackageVersionInlineInfo') ||
-                e.affectsConfiguration('NugetWorkbench.prerelease')) {
+            if (e.affectsConfiguration('NugetPackageManager.enablePackageVersionInlineInfo') ||
+                e.affectsConfiguration('NugetPackageManager.prerelease')) {
                 this.updateConfiguration();
                 if (vscode.window.activeTextEditor) {
                     this.triggerUpdateDecorations(vscode.window.activeTextEditor);
@@ -53,7 +53,7 @@ export class PackageVersionDecorator implements vscode.Disposable {
     }
 
     private updateConfiguration() {
-        const config = vscode.workspace.getConfiguration('NugetWorkbench');
+        const config = vscode.workspace.getConfiguration('NugetPackageManager');
         this._isEnabled = config.get<boolean>('enablePackageVersionInlineInfo', false);
         this._prerelease = config.get<boolean>('prerelease', false);
         Logger.debug(`PackageVersionDecorator.updateConfiguration: Configuration updated, enabled=${this._isEnabled}, prerelease=${this._prerelease}`);
