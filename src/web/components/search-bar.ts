@@ -112,6 +112,8 @@ export class SearchBar extends LitElement {
   }
 
   private sortChanged(value: string): void {
+    const valid: SortOption[] = ["relevance", "downloads", "recent", "name-asc"];
+    if (!valid.includes(value as SortOption)) return;
     this.sortBy = value as SortOption;
     this.emitFilterChangedEvent();
   }

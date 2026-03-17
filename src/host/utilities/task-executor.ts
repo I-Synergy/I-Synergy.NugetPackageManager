@@ -89,7 +89,6 @@ export class TaskExecutor {
   async ExecuteTask(task: vscode.Task): Promise<void> {
     Logger.info(`TaskExecutor.ExecuteTask: Executing task ${task.name}`);
 
-    // Log task details if available
     if (task.execution instanceof vscode.ShellExecution) {
       const shellExec = task.execution as vscode.ShellExecution;
       const args = typeof shellExec.args === 'string' ? shellExec.args : (shellExec.args || []).map(a => typeof a === 'string' ? a : a.value).join(' ');
@@ -101,14 +100,27 @@ export class TaskExecutor {
 
     const releaser = await this.globalMutex.acquire();
     const mutex = new Mutex();
-    mutex.acquire();
+    const release = await mutex.acquire();
     const execution = await vscode.tasks.executeTask(task);
+
+    let settled = false;
+    const timeoutHandle = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        Logger.error(`TaskExecutor.ExecuteTask: Task ${task.name} timed out after 120s`);
+        release();
+      }
+    }, 120_000);
+
     const callback = vscode.tasks.onDidEndTask((x) => {
-      if (x.execution.task == execution.task) {
+      if (x.execution.task == execution.task && !settled) {
+        settled = true;
         Logger.info(`TaskExecutor.ExecuteTask: Task ${task.name} completed`);
-        mutex.release();
+        clearTimeout(timeoutHandle);
+        release();
       }
     });
+
     await mutex.waitForUnlock();
     releaser();
     callback.dispose();
