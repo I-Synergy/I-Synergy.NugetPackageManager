@@ -1,80 +1,68 @@
 # GitHub Copilot Instructions
 
-You are assisting with a .NET project following Clean Architecture, CQRS, and DDD patterns.
-
 ## Project Context
 
-See `.claude/project/architecture.md` for complete architecture documentation and `.claude/project/tech-stack.md` for the full technology stack.
+**NuGet Package Manager** is a Visual Studio Code extension (TypeScript/Node.js) for browsing, installing, updating, and auditing NuGet packages across .NET projects. It is NOT a .NET/C# project.
 
-## Critical Rules
-
-See `.claude/reference/critical-rules.md` for complete rules with examples. Violations cause bugs.
-
-**Key rules:**
-- Commands use individual parameters (NOT model objects passed directly)
-- Data access: EF Core primitives on named DbSet properties only — `FirstOrDefaultAsync`, `Add`, `Remove`, `SaveChangesAsync`
-- Delete: `FirstOrDefaultAsync` + `Remove` + check `rowsAffected > 0` — no extension methods
-- Update: `FirstOrDefaultAsync` + mutate properties + `SaveChangesAsync` — NO `.Update()` call (change tracker handles it)
-- Mapping: Mapster only — `entity.Adapt<T>()` or `ProjectToType<T>()` — NOT AutoMapper, NOT manual mapping
-- Async: always `CancellationToken` — NO `.Wait()` or `.Result`
-- Return types: responses wrap models — never return domain entities directly
-- Handler naming: `Create{Entity}CommandHandler` / `Get{Entity}ByIdQueryHandler` (must end in `CommandHandler` or `QueryHandler`)
-- Entity construction: direct `new Entity { ... }` in handlers — NOT `command.Adapt<Entity>()`
-- Enum naming: plural names (`PaymentProviders`, not `PaymentProvider`) except `*Status` enums
+See `CLAUDE.md` for the full development guide.
 
 ## Architecture
 
-**Clean Architecture Layers:**
-- Domain: `{ApplicationName}.Domain.*` — CQRS handlers, domain logic
-- Application: `{ApplicationName}.Services.*` — API endpoints
-- Infrastructure: `{ApplicationName}.Data.*` — EF Core persistence
-- Presentation: `{ApplicationName}.UI.*` — Blazor/MAUI
+The extension has two separate runtime contexts:
 
-**Vertical Slice Organization:**
 ```
-{ApplicationName}.Domain.{Domain}/
-  Features/{Entity}/
-    Commands/Create{Entity}/
-      Create{Entity}Command.cs
-      Create{Entity}CommandHandler.cs
-      Create{Entity}Response.cs
-    Queries/Get{Entity}ById/
-      ...
-  Models/{Entity}.cs             (positional record, no "Model" suffix)
-  Mappers/Configuration.cs       (single Mapster IRegister per domain)
-  Extensions/ServiceCollectionExtensions.cs
+VS Code Extension Host (Node.js)         Webview (Browser / Lit components)
+  src/host/extension.ts                    src/web/main.ts
+  src/host/host-api.ts  <-- RPC -->        src/web/components/
+  src/common/rpc/rpc-host.ts               src/common/rpc/rpc-client.ts
 ```
 
-## Forbidden Technologies
+All host ↔ webview communication goes through a typed RPC layer defined in `src/common/rpc/types.ts`. Every RPC method returns `Result<T>` — a discriminated union `{ ok: true, value: T } | { ok: false, error: string }`.
 
-See `.claude/reference/forbidden-tech.md` for the complete list.
+## Key Rules
 
-- NO MediatR — use I-Synergy.Framework.CQRS
-- NO AutoMapper — use Mapster
-- NO xUnit/NUnit — use MSTest
-- NO FluentValidation — use DataAnnotations
-- NO repository interfaces — use EF Core directly via named DbSet properties
-- NO `.Update()` on tracked EF entities — change tracker handles it
+### TypeScript
+- `strict: true` — no `any` unless unavoidable
+- Prefix unused variables with `_`
+- Conventional commits: `feat:`, `fix:`, `refactor:`, `chore:`
 
-## Patterns & Templates
+### RPC Methods (host-api.ts)
+- Always return `Result<T>` using `ok(value)` / `fail(message)` helpers
+- Validate all inputs at the RPC boundary (workspace paths, URLs, sort options)
+- Never pass user-controlled strings directly to `child_process.spawn` args without validation
 
-- CQRS: `.claude/patterns/cqrs-patterns.md`
-- API: `.claude/patterns/api-patterns.md`
-- Testing: `.claude/patterns/testing-patterns.md`
-- Templates: `.claude/reference/templates/` — `command-handler.cs.txt`, `query-handler.cs.txt`, `endpoint.cs.txt`, `mapping-config.cs.txt`
+### Web Components (Lit)
+- Use `@state()` for reactive internal state, `@property()` for external inputs
+- Store event listeners as class fields; always clean up in `disconnectedCallback`
+- Use `await element.updateComplete` in tests, not manual DOM ticks
+- No raw `innerHTML` — use Lit `html` template literals (XSS-safe)
 
-## Naming Conventions
+### Security
+- Nonces: `globalThis.crypto.randomUUID().replace(/-/g, "")` — works in Node.js 19+ and browser
+- Project paths must be validated inside a workspace folder before passing to dotnet
+- Source URLs must be validated with `new URL()` before passing to dotnet
+- Password script extensions are restricted to `.ps1`, `.bat`, `.cmd`, `.sh`
 
-- Commands: `{Action}{Entity}Command` — e.g. `CreateBudgetCommand`
-- Queries: `Get{Entity}{Criteria}Query` — e.g. `GetBudgetByIdQuery`
-- Command handlers: `{Action}{Entity}CommandHandler` — e.g. `CreateBudgetCommandHandler`
-- Query handlers: `Get{Entity}{Criteria}QueryHandler` — e.g. `GetBudgetByIdQueryHandler`
-- Models: no "Model" suffix — `Budget` not `BudgetModel`
+### Progress Tracking
+- `child_process.spawn` is used (not `vscode.Task`) so stdout can be parsed for progress stages
+- `TaskExecutor.ExecuteCommand` stores progress in a `Map<string, OperationProgress>` keyed by `operationId`
+- Webview polls `getOperationProgress` every 300ms; always stop polling in `disconnectedCallback`
 
-## Token Replacements
+## Build Commands
 
-See `.claude/reference/tokens.md` for complete definitions.
+```bash
+npm run esbuild    # compile host + web bundles
+npm run lint       # ESLint 9
+npm test           # VSCode Test CLI + Mocha
+npm run package    # produce .vsix
+```
 
-- `{ApplicationName}` — your application name
-- `{Domain}` — domain/bounded context
-- `{Entity}` — entity name (PascalCase)
+## File Conventions
+
+| Path pattern | Purpose |
+|---|---|
+| `src/host/*.ts` | Extension host (Node.js) — VS Code API, dotnet CLI |
+| `src/host/utilities/*.ts` | Host utilities (nuget config, task executor, decorators) |
+| `src/web/components/*.ts` | Lit web components (browser) |
+| `src/common/rpc/` | Shared RPC types, host, client |
+| `src/common/*.ts` | Shared types/utilities (must be isomorphic — no Node.js-only imports) |
