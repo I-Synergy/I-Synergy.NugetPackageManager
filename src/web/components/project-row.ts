@@ -112,6 +112,11 @@ export class ProjectRow extends LitElement {
     this.progress = null;
   }
 
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.stopPolling();
+  }
+
   private async update_(type: "INSTALL" | "UNINSTALL" | "UPDATE"): Promise<void> {
     if (this.loaders.get(this.packageId) === true) return;
 

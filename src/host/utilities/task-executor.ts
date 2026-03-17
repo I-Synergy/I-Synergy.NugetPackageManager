@@ -64,8 +64,12 @@ export class TaskExecutor {
           Logger.info(`TaskExecutor.ExecuteCommand: Completed successfully`);
           resolve();
         } else {
+          const detail = stderrBuf.trim() || stdoutBuf.trim();
+          const message = detail
+            ? `dotnet exited with code ${code}: ${detail.split("\n").slice(-3).join(" ").trim()}`
+            : `dotnet exited with code ${code}`;
           Logger.error(`TaskExecutor.ExecuteCommand: Exited with code ${code}`);
-          reject(new Error(`dotnet exited with code ${code}`));
+          reject(new Error(message));
         }
       });
 

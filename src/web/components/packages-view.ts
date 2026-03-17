@@ -362,9 +362,6 @@ export class PackagesView extends LitElement {
 
   private toggleProjectTree(): void {
     this.showProjectTree = !this.showProjectTree;
-    this.updatesCount = null;
-    this.consolidateCount = null;
-    this.vulnerabilitiesCount = null;
     void this.updateComplete.then(() => {
       this.initSplitter();
       this.reloadChildViews();
@@ -442,6 +439,7 @@ export class PackagesView extends LitElement {
   }
 
   setTab(tab: TabId): void {
+    if (tab === this.activeTab) return;
     this.activeTab = tab;
     void this.updateComplete.then(() => {
       if (tab === "updates") {
@@ -505,9 +503,6 @@ export class PackagesView extends LitElement {
 
   private OnProjectSelectionChanged(paths: string[]): void {
     this.selectedProjectPaths = paths;
-    this.updatesCount = null;
-    this.consolidateCount = null;
-    this.vulnerabilitiesCount = null;
     this.reloadChildViews();
     this.debouncedLoadProjectsPackages();
   }
@@ -608,15 +603,21 @@ export class PackagesView extends LitElement {
     }
 
     try {
-      const promises = this.projectsPackages.map(async (pkg) => {
-        await this.UpdatePackage(pkg, forceReload);
-        completed++;
-        void hostApi.updateStatusBar({
-          Percentage: (completed / total) * 100,
-          Message: "Loading installed packages...",
-        });
-      });
-      await Promise.allSettled(promises);
+      const CONCURRENCY = 5;
+      let idx = 0;
+      const runNext = async (): Promise<void> => {
+        while (idx < this.projectsPackages.length) {
+          const pkg = this.projectsPackages[idx++];
+          await this.UpdatePackage(pkg, forceReload);
+          completed++;
+          void hostApi.updateStatusBar({
+            Percentage: (completed / total) * 100,
+            Message: "Loading installed packages...",
+          });
+        }
+      };
+      const workers = Array.from({ length: Math.min(CONCURRENCY, this.projectsPackages.length) }, runNext);
+      await Promise.allSettled(workers);
     } finally {
       this.projectsPackages = [...this.projectsPackages];
       if (total > 0) {
@@ -667,9 +668,6 @@ export class PackagesView extends LitElement {
     await this.LoadProjectsPackages(forceReload || sourceChanged);
 
     if (sourceChanged || forceReload) {
-      this.updatesCount = null;
-      this.consolidateCount = null;
-      this.vulnerabilitiesCount = null;
       this.reloadChildViews();
     }
   }
@@ -729,9 +727,6 @@ export class PackagesView extends LitElement {
   ): Promise<void> {
     await this.LoadPackages(false, forceReload);
     await this.LoadProjects(forceReload);
-    this.updatesCount = null;
-    this.consolidateCount = null;
-    this.vulnerabilitiesCount = null;
     this.reloadChildViews();
   }
 
@@ -795,7 +790,11 @@ export class PackagesView extends LitElement {
       this.projects = result.value.Projects.map(
         (x) => new ProjectViewModel(x)
       );
-      this.selectedProjectPaths = this.projects.map((p) => p.Path);
+      const validPaths = new Set(this.projects.map((p) => p.Path));
+      this.selectedProjectPaths = this.selectedProjectPaths.filter((p) => validPaths.has(p));
+      if (this.selectedProjectPaths.length === 0) {
+        this.selectedProjectPaths = this.projects.map((p) => p.Path);
+      }
       await this.LoadProjectsPackages(forceReload);
     }
   }
@@ -813,6 +812,9 @@ export class PackagesView extends LitElement {
           ? html`<div class="error">
               <span class="codicon codicon-error"></span>
               ${this.packagesLoadingErrorMessage || "Failed to fetch packages"}
+              <button class="icon-btn" title="Retry" aria-label="Retry" @click=${() => this.LoadPackages()}>
+                <span class="codicon codicon-refresh"></span>
+              </button>
             </div>`
           : html`
               ${this.packages.map(

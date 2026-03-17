@@ -200,7 +200,12 @@ export class ConsolidateView extends LitElement {
 
     this.isConsolidating = true;
     try {
-      await Promise.allSettled(this.packages.map((pkg) => this.consolidateSingle(pkg)));
+      const results = await Promise.allSettled(this.packages.map((pkg) => this.consolidateSingle(pkg)));
+      const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (failed.length > 0) {
+        this.hasError = true;
+        this.statusText = `${failed.length} package${failed.length !== 1 ? "s" : ""} failed to consolidate`;
+      }
     } finally {
       this.isConsolidating = false;
       await this.LoadInconsistentPackages();
