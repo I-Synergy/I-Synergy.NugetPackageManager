@@ -4,7 +4,7 @@ export default class StatusBarUtils {
   private static _item: vscode.StatusBarItem;
 
   public static show(percentage: number, message?: string) {
-    const config = vscode.workspace.getConfiguration("NugetWorkbench");
+    const config = vscode.workspace.getConfiguration("NugetPackageManager");
     if (!config.get("statusBarLoadingIndicator")) {
       return;
     }
@@ -18,7 +18,7 @@ export default class StatusBarUtils {
   }
 
   public static ShowText(message: string) {
-    const config = vscode.workspace.getConfiguration("NugetWorkbench");
+    const config = vscode.workspace.getConfiguration("NugetPackageManager");
     if (!config.get("statusBarLoadingIndicator")) {
       return;
     }

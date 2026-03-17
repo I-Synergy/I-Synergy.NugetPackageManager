@@ -38,7 +38,44 @@ const styles = css`
       }
     }
   }
+
+  .progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 120px;
+    max-width: 180px;
+
+    .progress-stage {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .progress-track {
+      height: 4px;
+      background: var(--vscode-progressBar-background);
+      opacity: 0.3;
+      border-radius: 2px;
+      overflow: hidden;
+
+      .progress-fill {
+        height: 100%;
+        background: var(--vscode-progressBar-background);
+        opacity: 1;
+        border-radius: 2px;
+        transition: width 0.3s ease;
+      }
+    }
+  }
 `;
+
+type ProgressState = {
+  stage: string;
+  percent: number;
+};
 
 @customElement("project-row")
 export class ProjectRow extends LitElement {
@@ -49,12 +86,35 @@ export class ProjectRow extends LitElement {
   @property() packageVersion!: string;
   @property() sourceUrl!: string;
   @state() private loaders = new Map<string, boolean>();
+  @state() private progress: ProgressState | null = null;
+
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   get projectPackage() {
     return this.project.Packages.find((x) => x.Id === this.packageId);
   }
 
+  private startPolling(operationId: string): void {
+    this.pollTimer = setInterval(() => {
+      void hostApi.getOperationProgress({ OperationId: operationId }).then((result) => {
+        if (result.ok && result.value.Active) {
+          this.progress = { stage: result.value.Stage, percent: result.value.Percent };
+        }
+      });
+    }, 300);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer !== null) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    this.progress = null;
+  }
+
   private async update_(type: "INSTALL" | "UNINSTALL" | "UPDATE"): Promise<void> {
+    if (this.loaders.get(this.packageId) === true) return;
+
     if (type === "UNINSTALL") {
       const confirm = await hostApi.showConfirmation({
         Message: `Uninstall ${this.packageId}?`,
@@ -63,18 +123,25 @@ export class ProjectRow extends LitElement {
       if (!confirm.ok || !confirm.value.Confirmed) return;
     }
 
+    const operationId = `${type.toLowerCase()}-${this.packageId}-${Date.now()}`;
+
     const request: UpdateProjectRequest = {
       Type: type,
       ProjectPath: this.project.Path,
       PackageId: this.packageId,
       Version: this.packageVersion,
       SourceUrl: this.sourceUrl,
+      OperationId: operationId,
     };
 
     this.loaders.set(request.PackageId, true);
+    this.progress = { stage: "Starting...", percent: 5 };
     this.requestUpdate();
+    this.startPolling(operationId);
 
     const result = await hostApi.updateProject(request);
+    this.stopPolling();
+
     if (result.ok) {
       this.project.Packages = result.value.Project.Packages.map(
         (x) => new ProjectPackageViewModel(x)
@@ -92,9 +159,22 @@ export class ProjectRow extends LitElement {
     this.requestUpdate();
   }
 
+  private renderProgress() {
+    const p = this.progress;
+    if (!p) return html`<span class="spinner medium" role="status" aria-label="Loading"></span>`;
+    return html`
+      <div class="progress-container">
+        <span class="progress-stage">${p.stage}</span>
+        <div class="progress-track">
+          <div class="progress-fill" style="width: ${p.percent}%"></div>
+        </div>
+      </div>
+    `;
+  }
+
   private renderActions() {
     if (this.loaders.get(this.packageId) === true) {
-      return html`<span class="spinner medium" role="status" aria-label="Loading"></span>`;
+      return this.renderProgress();
     }
 
     const pkg = this.projectPackage;

@@ -23,7 +23,7 @@ body:
       label: Steps to Reproduce
       description: Steps to reproduce the behavior.
       placeholder: |
-        1. Open NuGet Workbench
+        1. Open NuGet Package Manager
         2. Go to '...'
         3. Click on '...'
         4. See error

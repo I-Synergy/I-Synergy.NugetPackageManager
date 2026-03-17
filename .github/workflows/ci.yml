@@ -68,11 +68,11 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Package .vsix
-        run: npx @vscode/vsce package --no-dependencies --out nuget-workbench.vsix
+        run: npx @vscode/vsce package --no-dependencies --out nuget-package-manager.vsix
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: nuget-workbench.vsix
+          files: nuget-package-manager.vsix
           body_path: RELEASE_NOTES.md
           generate_release_notes: false

@@ -79,10 +79,10 @@ export class SearchBar extends LitElement {
     this.emitFilterChangedEvent();
   }
 
-  private async prereleaseChangedEvent(target: EventTarget): Promise<void> {
+  private prereleaseChangedEvent(target: EventTarget): void {
     this.prerelease = (target as HTMLInputElement).checked;
-    await this.savePrereleaseToConfiguration();
     this.emitFilterChangedEvent();
+    void this.savePrereleaseToConfiguration();
   }
 
   private async savePrereleaseToConfiguration(): Promise<void> {

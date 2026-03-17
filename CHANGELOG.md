@@ -18,13 +18,13 @@
 - feat: Tab badges showing result counts on Updates, Consolidate, and Vulnerabilities tabs
 - fix: Selected package row now uses the active selection highlight color instead of the inactive one
 - ux: Search bar is now hidden on the Updates, Consolidate, and Vulnerabilities tabs where it is not relevant
-- breaking: Renamed commands `nuget-workbench.openSettings` and `nuget-workbench.reportProblem`
-  to `nugetWorkbench.openSettings` and `nugetWorkbench.reportProblem` for consistency with other command IDs
+- breaking: Renamed commands `nuget-package-manager.openSettings` and `nuget-package-manager.reportProblem`
+  to `nugetPackageManager.openSettings` and `nugetPackageManager.reportProblem` for consistency with other command IDs
 - chore: Moved screenshot tooling from `screenshot-harness/` to `tools/`
 
 ## 1.0.0 (2026-02-18)
 
-- feat: Rebrand from "NuGet Gallery" to **NuGet Workbench** with new extension ID
+- feat: Rebrand from "NuGet Gallery" to **NuGet Package Manager** with new extension ID
 - feat: Typed RPC layer with `Result<T>` for host-webview communication
 - feat: UI migration from FAST Element to Lit (LitElement)
 - feat: Vulnerability scanning view with severity badges and advisory links

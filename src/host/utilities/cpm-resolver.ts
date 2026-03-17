@@ -8,7 +8,7 @@ export default class CpmResolver {
   private static cache: Map<string, Map<string, string>> = new Map();
 
   static async GetPackageVersions(projectPath: string): Promise<Map<string, string> | null> {
-    const cpmFilePath = this.FindDirectoryPackagesPropsFile(projectPath);
+    const cpmFilePath = await this.FindDirectoryPackagesPropsFile(projectPath);
     if (!cpmFilePath) {
       return null;
     }
@@ -23,14 +23,17 @@ export default class CpmResolver {
     return this.ParsePackageVersions(cpmFilePath);
   }
 
-  private static FindDirectoryPackagesPropsFile(projectPath: string): string | null {
+  private static async FindDirectoryPackagesPropsFile(projectPath: string): Promise<string | null> {
     let currentDir = path.dirname(projectPath);
     const root = path.parse(currentDir).root;
 
     while (currentDir !== root) {
       const cpmPath = path.join(currentDir, "Directory.Packages.props");
-      if (fs.existsSync(cpmPath)) {
+      try {
+        await fs.promises.access(cpmPath);
         return cpmPath;
+      } catch {
+        // file doesn't exist at this level, walk up
       }
 
       const parentDir = path.dirname(currentDir);
@@ -109,8 +112,8 @@ export default class CpmResolver {
     }
   }
 
-  static ClearCacheForProject(projectPath: string): void {
-    const cpmFilePath = this.FindDirectoryPackagesPropsFile(projectPath);
+  static async ClearCacheForProject(projectPath: string): Promise<void> {
+    const cpmFilePath = await this.FindDirectoryPackagesPropsFile(projectPath);
     if (cpmFilePath) {
       this.ClearCache(cpmFilePath);
     }

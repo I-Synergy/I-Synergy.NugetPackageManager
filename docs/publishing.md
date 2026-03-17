@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-1. Create a publisher on [Visual Studio Marketplace](https://marketplace.visualstudio.com/manage) (publisher ID: `nuget-workbench`)
+1. Create a publisher on [Visual Studio Marketplace](https://marketplace.visualstudio.com/manage) (publisher ID: `nuget-package-manager`)
 2. Generate a Personal Access Token (PAT) in [Azure DevOps](https://dev.azure.com/) with **Marketplace > Manage** scope
 3. Add the PAT as a repository secret named `VSCE_PAT` (Settings > Secrets > Actions)
 
@@ -43,7 +43,7 @@ The **CI** workflow runs on every push and PR. When a tag `v*` is pushed (via `n
 ## Manual publish
 
 ```bash
-npm run package                           # builds releases/nuget-workbench-x.x.x.vsix
-npx @vscode/vsce login nuget-workbench   # authenticate with PAT
+npm run package                           # builds releases/nuget-package-manager-x.x.x.vsix
+npx @vscode/vsce login nuget-package-manager   # authenticate with PAT
 npx @vscode/vsce publish --no-dependencies
 ```

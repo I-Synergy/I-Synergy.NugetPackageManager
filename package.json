@@ -1,7 +1,7 @@
 {
-  "name": "nuget-workbench",
-  "publisher": "nuget-workbench",
-  "displayName": "NuGet Workbench",
+  "name": "nuget-package-manager",
+  "publisher": "nuget-package-manager",
+  "displayName": "NuGet Package Manager",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
   "version": "1.0.3",
   "license": "MIT",
@@ -24,14 +24,14 @@
     "Programming Languages",
     "Other"
   ],
-  "homepage": "https://github.com/nuget-workbench/nuget-workbench-vscode",
+  "homepage": "https://github.com/nuget-workbench/nuget-package-manager",
   "bugs": {
-    "url": "https://github.com/nuget-workbench/nuget-workbench-vscode/issues",
+    "url": "https://github.com/nuget-workbench/nuget-package-manager/issues",
     "email": "daniel-rck@proton.me"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/nuget-workbench/nuget-workbench-vscode.git"
+    "url": "https://github.com/nuget-workbench/nuget-package-manager.git"
   },
   "activationEvents": [
     "workspaceContains:**/*.csproj",
@@ -42,28 +42,28 @@
   "contributes": {
     "commands": [
       {
-        "command": "nugetWorkbench.open",
-        "title": "NuGet Workbench: Open Packages"
+        "command": "nugetPackageManager.open",
+        "title": "NuGet Package Manager: Open Packages"
       },
       {
-        "command": "nugetWorkbench.install",
-        "title": "NuGet Workbench: Add Package"
+        "command": "nugetPackageManager.install",
+        "title": "NuGet Package Manager: Add Package"
       },
       {
-        "command": "nugetWorkbench.update",
-        "title": "NuGet Workbench: Update Package"
+        "command": "nugetPackageManager.update",
+        "title": "NuGet Package Manager: Update Package"
       },
       {
-        "command": "nugetWorkbench.remove",
-        "title": "NuGet Workbench: Remove Package"
+        "command": "nugetPackageManager.remove",
+        "title": "NuGet Package Manager: Remove Package"
       },
       {
-        "command": "nugetWorkbench.openSettings",
+        "command": "nugetPackageManager.openSettings",
         "title": "Settings",
         "icon": "$(extensions-manage)"
       },
       {
-        "command": "nugetWorkbench.reportProblem",
+        "command": "nugetPackageManager.reportProblem",
         "title": "Report Problem",
         "icon": "$(report)"
       }
@@ -71,13 +71,13 @@
     "menus": {
       "view/title": [
         {
-          "command": "nugetWorkbench.reportProblem",
-          "when": "view == nugetWorkbench.packageView",
+          "command": "nugetPackageManager.reportProblem",
+          "when": "view == nugetPackageManager.packageView",
           "group": "navigation@1"
         },
         {
-          "command": "nugetWorkbench.openSettings",
-          "when": "view == nugetWorkbench.packageView",
+          "command": "nugetPackageManager.openSettings",
+          "when": "view == nugetPackageManager.packageView",
           "group": "navigation@2"
         }
       ]
@@ -85,45 +85,45 @@
     "viewsContainers": {
       "panel": [
         {
-          "id": "nugetWorkbenchView",
+          "id": "nugetPackageManagerView",
           "title": "NuGet",
           "icon": "resources/nuget.svg"
         }
       ]
     },
     "views": {
-      "nugetWorkbenchView": [
+      "nugetPackageManagerView": [
         {
           "type": "webview",
-          "id": "nugetWorkbench.packageView",
+          "id": "nugetPackageManager.packageView",
           "name": "NuGet Packages"
         }
       ]
     },
     "configuration": {
-      "title": "NuGet Workbench",
+      "title": "NuGet Package Manager",
       "properties": {
-        "NugetWorkbench.defaultSource": {
+        "NugetPackageManager.defaultSource": {
           "type": "string",
           "default": "",
           "description": "Default package source URL. If empty, uses the default from nuget.config."
         },
-        "NugetWorkbench.pageSize": {
+        "NugetPackageManager.pageSize": {
           "type": "number",
           "default": 20,
           "description": "Number of packages per search page."
         },
-        "NugetWorkbench.showOutputOnError": {
+        "NugetPackageManager.showOutputOnError": {
           "type": "boolean",
           "default": true,
           "description": "Automatically expand the output log when an operation fails."
         },
-        "NugetWorkbench.skipRestore": {
+        "NugetPackageManager.skipRestore": {
           "type": "boolean",
           "default": false,
           "description": "Skip performing a restore preview and compatibility check"
         },
-        "NugetWorkbench.sources": {
+        "NugetPackageManager.sources": {
           "type": "array",
           "items": {
             "type": "string"
@@ -135,7 +135,7 @@
           ],
           "description": "NuGet sources"
         },
-        "NugetWorkbench.logLevel": {
+        "NugetPackageManager.logLevel": {
           "type": "string",
           "default": "INFO",
           "enum": [
@@ -146,17 +146,17 @@
           ],
           "description": "Minimum logging level"
         },
-        "NugetWorkbench.enablePackageVersionInlineInfo": {
+        "NugetPackageManager.enablePackageVersionInlineInfo": {
           "type": "boolean",
           "default": false,
           "description": "Show inline information about newer package versions in project files"
         },
-        "NugetWorkbench.prerelease": {
+        "NugetPackageManager.prerelease": {
           "type": "boolean",
           "default": false,
           "description": "Include prerelease versions when checking for package updates"
         },
-        "NugetWorkbench.statusBarLoadingIndicator": {
+        "NugetPackageManager.statusBarLoadingIndicator": {
           "type": "boolean",
           "default": false,
           "description": "Show a loading indicator in the status bar when loading packages"

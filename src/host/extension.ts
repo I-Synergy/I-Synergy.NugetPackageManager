@@ -12,15 +12,15 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(new PackageVersionDecorator());
 
-  const previousVersion: string | undefined = context.globalState.get("NugetWorkbench.version");
-  context.globalState.update("NugetWorkbench.version", context.extension.packageJSON.version);
+  const previousVersion: string | undefined = context.globalState.get("NugetPackageManager.version");
+  context.globalState.update("NugetPackageManager.version", context.extension.packageJSON.version);
   if (previousVersion == undefined) {
     Logger.info("Extension.activate: Extension installed");
   } else if (previousVersion != context.extension.packageJSON.version)
     Logger.info("Extension.activate: Extension upgraded from version %s", previousVersion);
 
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("nugetWorkbench.packageView", provider, {
+    vscode.window.registerWebviewViewProvider("nugetPackageManager.packageView", provider, {
       webviewOptions: {
         retainContextWhenHidden: true,
       },
@@ -28,47 +28,47 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetWorkbench.open", () => {
-      vscode.commands.executeCommand("nugetWorkbench.packageView.focus");
+    vscode.commands.registerCommand("nugetPackageManager.open", () => {
+      vscode.commands.executeCommand("nugetPackageManager.packageView.focus");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetWorkbench.install", async () => {
+    vscode.commands.registerCommand("nugetPackageManager.install", async () => {
       const packageId = await vscode.window.showInputBox({
         prompt: "Enter the NuGet package ID to install",
         placeHolder: "e.g. Newtonsoft.Json",
       });
       if (!packageId) return;
-      vscode.commands.executeCommand("nugetWorkbench.packageView.focus");
+      vscode.commands.executeCommand("nugetPackageManager.packageView.focus");
       provider.sendSearchQuery(packageId);
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetWorkbench.update", () => {
-      vscode.commands.executeCommand("nugetWorkbench.packageView.focus");
+    vscode.commands.registerCommand("nugetPackageManager.update", () => {
+      vscode.commands.executeCommand("nugetPackageManager.packageView.focus");
       provider.sendNavigateToTab("updates");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetWorkbench.remove", () => {
-      vscode.commands.executeCommand("nugetWorkbench.packageView.focus");
+    vscode.commands.registerCommand("nugetPackageManager.remove", () => {
+      vscode.commands.executeCommand("nugetPackageManager.packageView.focus");
       provider.sendNavigateToTab("installed");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetWorkbench.reportProblem", async () => {
+    vscode.commands.registerCommand("nugetPackageManager.reportProblem", async () => {
       vscode.env.openExternal(
-        vscode.Uri.parse("https://github.com/nuget-workbench/nuget-workbench-vscode/issues/new")
+        vscode.Uri.parse("https://github.com/nuget-workbench/nuget-package-manager/issues/new")
       );
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetWorkbench.openSettings", () => {
+    vscode.commands.registerCommand("nugetPackageManager.openSettings", () => {
       provider.sendNavigateToRoute("SETTINGS");
     })
   );
@@ -135,10 +135,10 @@ class NugetViewProvider implements vscode.WebviewViewProvider {
       <meta name="viewport" content="width=device-width,initial-scale=1.0">
       <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonceValue}';">
       <link rel="stylesheet" type="text/css" href="${webCssSrc}"/>
-		  <title>NuGet Workbench</title>
+		  <title>NuGet Package Manager</title>
 		</head>
 		<body>
-		  <nuget-workbench></nuget-workbench>
+		  <nuget-package-manager></nuget-package-manager>
 		  <script type="module" nonce="${nonceValue}" src="${webJsSrc}"></script>
 		</body>
 	  </html>

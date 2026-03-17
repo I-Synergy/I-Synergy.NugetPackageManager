@@ -365,7 +365,7 @@ export class PackagesView extends LitElement {
     this.updatesCount = null;
     this.consolidateCount = null;
     this.vulnerabilitiesCount = null;
-    this.updateComplete.then(() => {
+    void this.updateComplete.then(() => {
       this.initSplitter();
       this.reloadChildViews();
     });
@@ -488,7 +488,7 @@ export class PackagesView extends LitElement {
 
   setSearchQuery(query: string): void {
     this.setTab("browse");
-    this.updateComplete.then(() => {
+    void this.updateComplete.then(() => {
       const searchBar = this.shadowRoot?.querySelector("search-bar") as SearchBar | null;
       searchBar?.setSearchQuery(query);
     });
@@ -504,7 +504,7 @@ export class PackagesView extends LitElement {
   }
 
   private reloadChildViews(): void {
-    this.updateComplete.then(() => {
+    void this.updateComplete.then(() => {
       const updates = this.shadowRoot?.querySelector("updates-view") as UpdatesView | null;
       const consolidate = this.shadowRoot?.querySelector("consolidate-view") as ConsolidateView | null;
       const vulnerabilities = this.shadowRoot?.querySelector("vulnerabilities-view") as VulnerabilitiesView | null;
@@ -602,8 +602,7 @@ export class PackagesView extends LitElement {
       const promises = this.projectsPackages.map(async (pkg) => {
         await this.UpdatePackage(pkg, forceReload);
         completed++;
-        this.projectsPackages = [...this.projectsPackages];
-        hostApi.updateStatusBar({
+        void hostApi.updateStatusBar({
           Percentage: (completed / total) * 100,
           Message: "Loading installed packages...",
         });
@@ -612,7 +611,7 @@ export class PackagesView extends LitElement {
     } finally {
       this.projectsPackages = [...this.projectsPackages];
       if (total > 0) {
-        hostApi.updateStatusBar({ Percentage: null });
+        void hostApi.updateStatusBar({ Percentage: null });
       }
     }
   }
@@ -658,7 +657,7 @@ export class PackagesView extends LitElement {
     await this.LoadPackages(false, forceReload || sourceChanged);
     await this.LoadProjectsPackages(forceReload || sourceChanged);
 
-    if (sourceChanged) {
+    if (sourceChanged || forceReload) {
       this.updatesCount = null;
       this.consolidateCount = null;
       this.vulnerabilitiesCount = null;

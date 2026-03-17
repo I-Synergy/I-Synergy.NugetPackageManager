@@ -70,6 +70,17 @@ export type UpdateProjectRequest = {
   Version?: string;
   Type: "INSTALL" | "UNINSTALL" | "UPDATE";
   SourceUrl?: string;
+  OperationId?: string;
+};
+
+export type GetOperationProgressRequest = {
+  OperationId: string;
+};
+
+export type GetOperationProgressResponse = {
+  Stage: string;
+  Percent: number;
+  Active: boolean;
 };
 
 export type BatchUpdateRequest = {
@@ -197,6 +208,7 @@ export interface HostAPI {
   consolidatePackages(req: ConsolidateRequest): Promise<Result<void>>;
   getVulnerablePackages(req: GetVulnerablePackagesRequest): Promise<Result<GetVulnerablePackagesResponse>>;
   showConfirmation(req: ShowConfirmationRequest): Promise<Result<ShowConfirmationResponse>>;
+  getOperationProgress(req: GetOperationProgressRequest): Promise<Result<GetOperationProgressResponse>>;
 }
 
 // ============================================================

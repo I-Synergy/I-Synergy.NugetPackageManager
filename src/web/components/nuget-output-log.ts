@@ -123,7 +123,7 @@ export class NugetOutputLog extends LitElement {
     if (level === "error") {
       this.isExpanded = true;
     }
-    this.updateComplete.then(() => {
+    void this.updateComplete.then(() => {
       const content = this.shadowRoot?.querySelector(".log-content");
       if (content) {
         content.scrollTop = content.scrollHeight;
