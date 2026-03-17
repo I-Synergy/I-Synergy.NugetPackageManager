@@ -42,10 +42,13 @@ if (!validBumps.includes(bumpArg) && !isExplicitVersion) {
 const isWindows = process.platform === "win32";
 
 function run(cmd, args, opts = {}) {
+  // On Windows, npm is a .cmd script and requires shell:true to execute.
+  // git handles its own quoting and must NOT use shell:true (it splits args on spaces).
+  const shell = isWindows && cmd === "npm";
   return execFileSync(cmd, args, {
     cwd: ROOT,
     encoding: "utf-8",
-    shell: isWindows,
+    shell,
     ...opts,
   }).trim();
 }
