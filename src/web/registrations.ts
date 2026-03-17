@@ -1,11 +1,12 @@
 import { createRpcClient } from "@/common/rpc/rpc-client";
 import type { HostAPI } from "@/common/rpc/types";
+import { RPC_TIMEOUT_MS } from "@/common/rpc/types";
 import RouterType from "./router";
 import ConfigurationService from "./configuration";
 
 // Create RPC client (sets up its own window message listener)
 const vscode = acquireVsCodeApi();
-export const hostApi: HostAPI = createRpcClient((msg) => vscode.postMessage(msg));
+export const hostApi: HostAPI = createRpcClient((msg) => vscode.postMessage(msg), RPC_TIMEOUT_MS);
 
 // Singletons
 export const router = new RouterType();
