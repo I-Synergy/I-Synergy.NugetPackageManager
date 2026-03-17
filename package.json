@@ -1,0 +1,215 @@
+{
+  "name": "nuget-workbench",
+  "publisher": "nuget-workbench",
+  "displayName": "NuGet Workbench",
+  "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
+  "version": "1.0.3",
+  "license": "MIT",
+  "icon": "docs/images/icon.png",
+  "galleryBanner": {
+    "color": "#6366f1",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.87.0"
+  },
+  "keywords": [
+    "nuget",
+    "dotnet",
+    "package manager",
+    "csharp",
+    "dependency management"
+  ],
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "homepage": "https://github.com/nuget-workbench/nuget-workbench-vscode",
+  "bugs": {
+    "url": "https://github.com/nuget-workbench/nuget-workbench-vscode/issues",
+    "email": "daniel-rck@proton.me"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nuget-workbench/nuget-workbench-vscode.git"
+  },
+  "activationEvents": [
+    "workspaceContains:**/*.csproj",
+    "workspaceContains:**/*.fsproj",
+    "workspaceContains:**/*.sln"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "nugetWorkbench.open",
+        "title": "NuGet Workbench: Open Packages"
+      },
+      {
+        "command": "nugetWorkbench.install",
+        "title": "NuGet Workbench: Add Package"
+      },
+      {
+        "command": "nugetWorkbench.update",
+        "title": "NuGet Workbench: Update Package"
+      },
+      {
+        "command": "nugetWorkbench.remove",
+        "title": "NuGet Workbench: Remove Package"
+      },
+      {
+        "command": "nugetWorkbench.openSettings",
+        "title": "Settings",
+        "icon": "$(extensions-manage)"
+      },
+      {
+        "command": "nugetWorkbench.reportProblem",
+        "title": "Report Problem",
+        "icon": "$(report)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "nugetWorkbench.reportProblem",
+          "when": "view == nugetWorkbench.packageView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "nugetWorkbench.openSettings",
+          "when": "view == nugetWorkbench.packageView",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "nugetWorkbenchView",
+          "title": "NuGet",
+          "icon": "resources/nuget.svg"
+        }
+      ]
+    },
+    "views": {
+      "nugetWorkbenchView": [
+        {
+          "type": "webview",
+          "id": "nugetWorkbench.packageView",
+          "name": "NuGet Packages"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "NuGet Workbench",
+      "properties": {
+        "NugetWorkbench.defaultSource": {
+          "type": "string",
+          "default": "",
+          "description": "Default package source URL. If empty, uses the default from nuget.config."
+        },
+        "NugetWorkbench.pageSize": {
+          "type": "number",
+          "default": 20,
+          "description": "Number of packages per search page."
+        },
+        "NugetWorkbench.showOutputOnError": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically expand the output log when an operation fails."
+        },
+        "NugetWorkbench.skipRestore": {
+          "type": "boolean",
+          "default": false,
+          "description": "Skip performing a restore preview and compatibility check"
+        },
+        "NugetWorkbench.sources": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true,
+          "minItems": 1,
+          "default": [
+            "{\"name\": \"nuget.org\",\"url\": \"https://api.nuget.org/v3/index.json\"}"
+          ],
+          "description": "NuGet sources"
+        },
+        "NugetWorkbench.logLevel": {
+          "type": "string",
+          "default": "INFO",
+          "enum": [
+            "DEBUG",
+            "INFO",
+            "WARN",
+            "ERROR"
+          ],
+          "description": "Minimum logging level"
+        },
+        "NugetWorkbench.enablePackageVersionInlineInfo": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show inline information about newer package versions in project files"
+        },
+        "NugetWorkbench.prerelease": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include prerelease versions when checking for package updates"
+        },
+        "NugetWorkbench.statusBarLoadingIndicator": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show a loading indicator in the status bar when loading packages"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "node ./esbuild.js",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "test": "vscode-test",
+    "esbuild": "node ./esbuild.js",
+    "test-compile": "tsc -p ./tsconfig.test.json",
+    "package": "vsce package --no-dependencies --out releases/",
+    "release": "node tools/release.mjs",
+    "screenshot": "node tools/take-screenshots.mjs"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^27.0.0",
+    "@types/lodash": "^4.17.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "18.x",
+    "@types/object-hash": "^3.0.6",
+    "@types/sinon": "^21.0.0",
+    "@types/vscode": "^1.87.0",
+    "@types/vscode-webview": "^1.57.5",
+    "@vscode/codicons": "^0.0.35",
+    "@vscode/test-cli": "^0.0.6",
+    "@vscode/test-electron": "^2.3.9",
+    "esbuild": "^0.20.1",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "jsdom": "^27.4.0",
+    "sinon": "^21.0.1",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.56.0",
+    "playwright": "^1.49.0",
+    "pngjs": "^7.0.0",
+    "gif-encoder-2": "^1.0.5"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.8.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.51.1",
+    "@xmldom/xmldom": "^0.8.10",
+    "async-mutex": "^0.5.0",
+    "axios": "^1.7.4",
+    "lit": "^3.3.2",
+    "lodash": "^4.17.21",
+    "object-hash": "^3.0.0",
+    "split.js": "^1.6.5",
+    "xpath": "^0.0.34"
+  }
+}
