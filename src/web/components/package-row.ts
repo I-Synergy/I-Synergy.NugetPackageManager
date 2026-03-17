@@ -27,7 +27,7 @@ const styles = css`
     padding: 4px 3px;
     display: flex;
     gap: 6px;
-    align-items: flex-start;
+    align-items: center;
     cursor: default;
 
     &.package-row-selected {

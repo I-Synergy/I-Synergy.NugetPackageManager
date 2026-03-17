@@ -35,10 +35,6 @@ export class UpdatesView extends LitElement {
           padding: 0 4px 0 2px;
           border-bottom: 1px solid var(--vscode-panelSection-border);
 
-          &.updating {
-            opacity: 0.6;
-          }
-
           .row-checkbox {
             flex-shrink: 0;
           }
@@ -156,6 +152,8 @@ export class UpdatesView extends LitElement {
     if (!confirm.ok || !confirm.value.Confirmed) return;
 
     this.isUpdating = true;
+    selected.forEach((p) => { p.IsUpdating = true; });
+    this.requestUpdate();
     try {
       await hostApi.batchUpdatePackages({
         Updates: selected.map((p) => ({
@@ -167,6 +165,8 @@ export class UpdatesView extends LitElement {
       await this.LoadOutdatedPackages();
     } finally {
       this.isUpdating = false;
+      selected.forEach((p) => { p.IsUpdating = false; });
+      this.requestUpdate();
     }
   }
 
@@ -191,18 +191,21 @@ export class UpdatesView extends LitElement {
 
   private renderPackageRow(pkg: OutdatedPackageViewModel): unknown {
     return html`
-      <div class="outdated-row ${pkg.IsUpdating ? "updating" : ""}">
-        <input
-          class="row-checkbox"
-          type="checkbox"
-          aria-label="Select ${pkg.Id} for update"
-          .checked=${pkg.Selected}
-          ?disabled=${pkg.IsUpdating}
-          @change=${(e: Event) => {
-            pkg.Selected = (e.target as HTMLInputElement).checked;
-            this.requestUpdate();
-          }}
-        />
+      <div class="outdated-row">
+        ${pkg.IsUpdating
+          ? html`<span class="spinner medium row-checkbox" role="status" aria-label="Updating ${pkg.Id}"></span>`
+          : html`
+              <input
+                class="row-checkbox"
+                type="checkbox"
+                aria-label="Select ${pkg.Id} for update"
+                .checked=${pkg.Selected}
+                @change=${(e: Event) => {
+                  pkg.Selected = (e.target as HTMLInputElement).checked;
+                  this.requestUpdate();
+                }}
+              />
+            `}
         <package-row
           .package=${this.toPackageViewModel(pkg)}
           .updateVersion=${pkg.LatestVersion}
@@ -213,13 +216,9 @@ export class UpdatesView extends LitElement {
           }))}
         ></package-row>
         <div class="row-actions">
-          ${pkg.IsUpdating
-            ? html`<span class="spinner medium" role="status" aria-label="Loading"></span>`
-            : html`
-                <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" @click=${() => this.updateSingle(pkg)}>
-                  <span class="codicon codicon-arrow-circle-up"></span>
-                </button>
-              `}
+          <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" ?disabled=${pkg.IsUpdating} @click=${() => this.updateSingle(pkg)}>
+            <span class="codicon codicon-arrow-circle-up"></span>
+          </button>
         </div>
       </div>
     `;

@@ -143,7 +143,7 @@
     },
   ];
 
-  const OUTDATED_PACKAGES = [
+  let OUTDATED_PACKAGES = [
     {
       Id: 'Newtonsoft.Json', InstalledVersion: '12.0.3', LatestVersion: '13.0.3',
       Projects: [
@@ -170,7 +170,7 @@
     },
   ];
 
-  const INCONSISTENT_PACKAGES = [
+  let INCONSISTENT_PACKAGES = [
     {
       Id: 'Microsoft.Extensions.Logging',
       // Latest version first — browser <select> defaults to first <option>
@@ -230,6 +230,10 @@
 
   // ── RPC dispatcher ────────────────────────────────────────────────────────
 
+  function delay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
   function getMockResponse(method, params) {
     switch (method) {
       case 'getConfiguration':
@@ -269,6 +273,20 @@
         return { ok: true, value: { Package: pkg, SourceUrl: 'https://api.nuget.org/v3/index.json' } };
       }
 
+      case 'getPackageDetails': {
+        const found = BROWSE_PACKAGES.find(function (p) { return p.Id === params.Id; });
+        const pkg = found || {
+          Id: params.Id, Name: params.Id,
+          Authors: [], Description: '',
+          IconUrl: '', LicenseUrl: '', ProjectUrl: '', Registration: '',
+          TotalDownloads: 0, Verified: false,
+          InstalledVersion: '', Version: '1.0.0',
+          Versions: [{ Id: '', Version: '1.0.0' }],
+          Tags: [],
+        };
+        return { ok: true, value: { Package: pkg } };
+      }
+
       case 'getOutdatedPackages':
         window.__mockState.outdatedDone = true;
         return { ok: true, value: { Packages: OUTDATED_PACKAGES } };
@@ -281,10 +299,60 @@
         window.__mockState.vulnerableDone = true;
         return { ok: true, value: { Packages: VULNERABLE_PACKAGES } };
 
+      case 'updateProject':
+        return delay(1500).then(function () {
+          var project = PROJECTS.find(function (p) { return p.Path === params.ProjectPath; });
+          if (!project) return { ok: false, error: 'Project not found' };
+          if (params.Type === 'INSTALL') {
+            project.Packages.push({ Id: params.PackageId, Version: params.Version, IsPinned: false, VersionSource: 'project' });
+          } else if (params.Type === 'UPDATE') {
+            var pkg = project.Packages.find(function (p) { return p.Id === params.PackageId; });
+            if (pkg) pkg.Version = params.Version;
+          } else if (params.Type === 'UNINSTALL') {
+            project.Packages = project.Packages.filter(function (p) { return p.Id !== params.PackageId; });
+          }
+          return { ok: true, value: { Project: project, IsCpmEnabled: false } };
+        });
+
+      case 'batchUpdatePackages':
+        return delay(2000).then(function () {
+          var updatedIds = [];
+          (params.Updates || []).forEach(function (update) {
+            updatedIds.push(update.PackageId);
+            (update.ProjectPaths || []).forEach(function (path) {
+              var project = PROJECTS.find(function (p) { return p.Path === path; });
+              if (project) {
+                var pkg = project.Packages.find(function (p) { return p.Id === update.PackageId; });
+                if (pkg) pkg.Version = update.Version;
+              }
+            });
+          });
+          OUTDATED_PACKAGES = OUTDATED_PACKAGES.filter(function (p) {
+            return updatedIds.indexOf(p.Id) === -1;
+          });
+          return { ok: true, value: {} };
+        });
+
+      case 'consolidatePackages':
+        return delay(1500).then(function () {
+          INCONSISTENT_PACKAGES = INCONSISTENT_PACKAGES.filter(function (p) {
+            return p.Id !== params.PackageId;
+          });
+          return { ok: true, value: undefined };
+        });
+
+      case 'updateConfiguration':
+        return { ok: true, value: undefined };
+
       case 'updateStatusBar':
       case 'openUrl':
-      case 'showConfirmation':
         return { ok: true, value: undefined };
+
+      case 'showConfirmation':
+        return { ok: true, value: { Confirmed: true } };
+
+      case 'getOperationProgress':
+        return { ok: true, value: { Stage: 'Installing...', Percent: 50, Active: false } };
 
       default:
         console.warn('[mock-api] Unhandled RPC method:', method);
@@ -298,15 +366,14 @@
     return {
       postMessage: function (msg) {
         if (!msg || msg.type !== 'rpc-request') return;
-        // Dispatch response asynchronously to mirror real async behavior
-        setTimeout(function () {
-          var result = getMockResponse(msg.method, msg.params);
+        // Support both sync values and Promises from getMockResponse
+        Promise.resolve(getMockResponse(msg.method, msg.params)).then(function (result) {
           window.dispatchEvent(
             new MessageEvent('message', {
               data: { type: 'rpc-response', id: msg.id, result: result },
             })
           );
-        }, 30);
+        });
       },
       getState: function () { return {}; },
       setState: function () {},
