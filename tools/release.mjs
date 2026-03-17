@@ -168,9 +168,13 @@ if (dryRun) {
 
 console.log(`Releasing ${currentVersion} -> ${newVersion}\n`);
 
-// 1. Bump version in package.json + package-lock.json
-console.log("Bumping version...");
-run("npm", ["version", isExplicitVersion ? newVersion : bumpArg, "--no-git-tag-version"]);
+// 1. Bump version in package.json + package-lock.json (skip if already at target)
+if (currentVersion !== newVersion) {
+  console.log("Bumping version...");
+  run("npm", ["version", isExplicitVersion ? newVersion : bumpArg, "--no-git-tag-version"]);
+} else {
+  console.log(`Version already at ${newVersion}, skipping bump.`);
+}
 
 // 2. Update CHANGELOG.md
 if (existsSync(changelogPath)) {
