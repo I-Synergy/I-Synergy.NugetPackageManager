@@ -8,6 +8,12 @@
 - fix: Prerelease toggle now immediately refreshes all tabs (Updates, Consolidate, Vulnerabilities), not just Browse
 - fix: Changing the prerelease setting emits the filter event immediately without waiting for the config save round-trip
 - fix: `project-row` poll timer is now cleaned up via `disconnectedCallback` — no more timer leak when the row is removed from the DOM
+- security: Nonce generation replaced with `globalThis.crypto.randomUUID()` — cryptographically secure and works in both Node.js and browser contexts
+- security: `updateProject` now validates that the project path is inside a workspace folder and that the source URL is a valid URL — prevents path traversal and command injection
+- security: Password script executor now rejects unsupported script extensions; only `.ps1`, `.bat`, `.cmd`, `.sh` are allowed
+- security: `ExecuteTask` mutex acquisition is now properly awaited; added 120 s timeout with settled guard to prevent deadlocks on task hang
+- security: `search-bar` sort option is validated against an explicit allowlist before use
+- security: Event listeners in `main.ts` are stored as class fields and removed in `disconnectedCallback` — prevents ghost listeners on webview reload
 - fix: Switching to an already-active tab no longer fires a redundant reload request
 - fix: `selectedProjectPaths` is validated after project reload — stale paths that no longer exist are removed
 - fix: `consolidateAll` now surfaces a per-package failure count instead of silently swallowing errors
