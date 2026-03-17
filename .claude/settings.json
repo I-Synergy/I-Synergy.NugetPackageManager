@@ -1,0 +1,41 @@
+{
+  "plansDirectory": "./.claude/plans",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npm run esbuild 2>&1 | tail -3"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Edit",
+      "Write",
+      "Read",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)"
+    ],
+    "additionalDirectories": [
+      "./.claude",
+      "./.claude/analysis",
+      "./.claude/checklists",
+      "./.claude/completed",
+      "./.claude/patterns",
+      "./.claude/plans",
+      "./.claude/progress",
+      "./.claude/project",
+      "./.claude/reference",
+      "./.claude/skills"
+    ]
+  }
+}
