@@ -251,9 +251,6 @@ export class ConsolidateView extends LitElement {
     return html`
       <div class="consolidate-container" aria-busy=${this.isLoading}>
         <div class="toolbar">
-          <button class="icon-btn" aria-label="Refresh inconsistencies" title="Refresh" @click=${() => this.LoadInconsistentPackages()}>
-            <span class="codicon codicon-refresh"></span>
-          </button>
           <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
           <div class="toolbar-right">
             ${this.packages.length > 0

@@ -229,9 +229,6 @@ export class UpdatesView extends LitElement {
     return html`
       <div class="updates-container" aria-busy=${this.isLoading}>
         <div class="toolbar">
-          <button class="icon-btn" aria-label="Refresh updates" title="Refresh" @click=${() => this.LoadOutdatedPackages()}>
-            <span class="codicon codicon-refresh"></span>
-          </button>
           <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
           <div class="toolbar-right">
             ${this.packages.length > 0

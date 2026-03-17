@@ -221,9 +221,6 @@ export class VulnerabilitiesView extends LitElement {
     return html`
       <div class="vuln-container" aria-busy=${this.isLoading}>
         <div class="toolbar">
-          <button class="icon-btn" aria-label="Refresh vulnerabilities" title="Refresh" @click=${() => this.LoadVulnerablePackages()}>
-            <span class="codicon codicon-refresh"></span>
-          </button>
           <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
         </div>
 
