@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.1 (2026-03-17)
+
 ## 1.0.0 (2026-03-17)
 
 - feat: Animated spinner during package install/update — shows which package is being processed; spinner replaces the action button/checkbox for the duration of the operation
