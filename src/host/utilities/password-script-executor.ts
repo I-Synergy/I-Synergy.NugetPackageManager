@@ -36,9 +36,13 @@ class PasswordScriptTerminal implements vscode.Pseudoterminal {
     } else if (scriptPath_lower.endsWith('.bat') || scriptPath_lower.endsWith('.cmd')) {
       command = 'cmd.exe';
       args = ['/c', this.scriptPath, this.encodedPassword];
+    } else if (scriptPath_lower.endsWith('.sh')) {
+      command = 'sh';
+      args = [this.scriptPath, this.encodedPassword];
     } else {
-      command = this.scriptPath;
-      args = [this.encodedPassword];
+      this.writeEmitter.fire(`\x1b[31mUnsupported script type. Allowed: .ps1, .bat, .cmd, .sh\x1b[0m\r\n`);
+      this.closeEmitter.fire(1);
+      return;
     }
 
     const proc = this.spawnFn(command, args, {

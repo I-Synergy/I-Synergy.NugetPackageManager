@@ -261,6 +261,20 @@ export function createHostAPI(): HostAPI {
 
     async updateProject(request: UpdateProjectRequest): Promise<Result<UpdateProjectResponse>> {
       Logger.info(`updateProject: ${request.Type} ${request.PackageId} in ${request.ProjectPath}`);
+
+      const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
+      const normalizedProject = request.ProjectPath.replace(/\//g, "\\");
+      const inWorkspace = workspacePaths.some((root) => normalizedProject.startsWith(root));
+      if (!inWorkspace) {
+        return fail(`Project path is outside the workspace: ${request.ProjectPath}`);
+      }
+
+      if (request.SourceUrl) {
+        try { new URL(request.SourceUrl); } catch {
+          return fail(`Invalid source URL: ${request.SourceUrl}`);
+        }
+      }
+
       const skipRestoreConfig = vscode.workspace.getConfiguration("NugetPackageManager").get<string>("skipRestore") ?? "";
       const isCpmEnabled = await CpmResolver.GetPackageVersions(request.ProjectPath) !== null;
       const skipRestore = !!skipRestoreConfig && !isCpmEnabled;

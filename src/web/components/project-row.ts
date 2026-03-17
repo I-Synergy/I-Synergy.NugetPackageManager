@@ -97,8 +97,12 @@ export class ProjectRow extends LitElement {
   private startPolling(operationId: string): void {
     this.pollTimer = setInterval(() => {
       void hostApi.getOperationProgress({ OperationId: operationId }).then((result) => {
-        if (result.ok && result.value.Active) {
-          this.progress = { stage: result.value.Stage, percent: result.value.Percent };
+        if (result.ok) {
+          if (result.value.Active) {
+            this.progress = { stage: result.value.Stage, percent: result.value.Percent };
+          } else if (this.pollTimer !== null) {
+            this.stopPolling();
+          }
         }
       });
     }, 300);

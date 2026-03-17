@@ -29,21 +29,27 @@ export class NuGetPackageManager extends LitElement {
   @state() private configLoaded = false;
   @state() private currentRoute = router.CurrentRoute;
 
+  private readonly onConfigChanged = () => { this.configLoaded = configuration.Configuration != null; };
+  private readonly onRouteChanged = () => { this.currentRoute = router.CurrentRoute; };
+  private readonly onMessage = (event: MessageEvent) => {
+    const data = event.data as HostCommand;
+    if (data?.type !== "command") return;
+    this.handleHostCommand(data);
+  };
+
   connectedCallback() {
     super.connectedCallback();
-    configuration.addEventListener("configuration-changed", () => {
-      this.configLoaded = configuration.Configuration != null;
-    });
-    router.addEventListener("route-changed", () => {
-      this.currentRoute = router.CurrentRoute;
-    });
+    configuration.addEventListener("configuration-changed", this.onConfigChanged);
+    router.addEventListener("route-changed", this.onRouteChanged);
+    window.addEventListener("message", this.onMessage);
     configuration.Reload();
+  }
 
-    window.addEventListener("message", (event: MessageEvent) => {
-      const data = event.data as HostCommand;
-      if (data?.type !== "command") return;
-      this.handleHostCommand(data);
-    });
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    configuration.removeEventListener("configuration-changed", this.onConfigChanged);
+    router.removeEventListener("route-changed", this.onRouteChanged);
+    window.removeEventListener("message", this.onMessage);
   }
 
   private handleHostCommand(cmd: HostCommand): void {
