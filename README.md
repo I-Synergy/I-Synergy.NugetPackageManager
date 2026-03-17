@@ -43,6 +43,7 @@
 | | Feature | Description |
 |---|---|---|
 | 📦 | **Browse & Install** | Search nuget.org and private feeds, install into one or multiple projects at once |
+| 📊 | **Real-time Progress** | Animated progress bar with live stage updates (Resolving → Updating → Restoring) during install/update |
 | 🔄 | **One-click Updates** | See all outdated packages with version diffs, update individually or all at once |
 | 🛡️ | **Vulnerability Scanning** | Color-coded CVE severity badges (Critical / High / Medium / Low) with advisory links |
 | 🔀 | **Version Consolidation** | Find and fix version inconsistencies across projects in a single click |
@@ -115,6 +116,8 @@ Search nuget.org (or any configured feed) and install packages into your project
 - **Package list** (left pane) — click any row to load full details
 - **Detail panel** (right pane) — description, authors, download count, license, tags, version picker, and per-project install/uninstall buttons
 - **Project rows** — show the currently installed version per project; install, update to a specific version, or uninstall individually
+- **Progress bar** — while an install or update runs, the spinner is replaced with a live progress bar showing the current dotnet stage and completion percentage
+- **Error recovery** — if the package feed fails to load, a retry button appears inline
 
 ### Installed
 
@@ -130,6 +133,7 @@ Lists all packages where a newer version is available on the configured sources.
 - **Select individual packages** with checkboxes, then click **Update All** to apply in one go
 - Per-row **update button** for single-package updates
 - Counts on the tab badge update in real time
+- Tab data refreshes automatically every time you switch to it
 
 ### Vulnerabilities
 
@@ -141,6 +145,7 @@ Scans installed packages against the NuGet vulnerability database.
 - Affected version range shown for each entry
 - **Advisory** link opens the GitHub Security Advisory in your browser
 - Affected projects listed below each vulnerable package
+- Tab data refreshes automatically every time you switch to it
 
 ### Consolidate
 
@@ -152,6 +157,7 @@ Detects packages that are installed at different versions across your projects.
 - **Version dropdown** per package — pick the target version to consolidate to
 - **Consolidate** button applies to a single package; **Consolidate All** fixes all at once
 - Respects Central Package Management — CPM-managed packages are labelled accordingly
+- Tab data refreshes automatically every time you switch to it
 
 ---
 
