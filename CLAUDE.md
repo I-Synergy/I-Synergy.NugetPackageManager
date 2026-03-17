@@ -88,7 +88,7 @@ UI uses **Lit** (LitElement) with native HTML elements styled via VS Code CSS va
 
 ## Testing
 
-Tests use **VSCode Test CLI** with Mocha + Sinon + Node.js assert:
+Tests use **VSCode Test CLI** with Mocha (bundled in `@vscode/test-cli`) + Sinon + Node.js assert:
 
 - Test files: `src/**/*.test.ts`
 - Mocking: Sinon sandboxes for VSCode API, Axios, file system
@@ -125,7 +125,7 @@ These apply to this project specifically:
 
 - **UI Framework**: Lit 3.x (LitElement)
 - **HTTP**: axios (NuGet API, proxy/auth support)
-- **XML Parsing**: xmldom + xpath (.csproj/.sln files)
+- **XML Parsing**: @xmldom/xmldom + xpath (.csproj/.sln files)
 - **Layout**: Split.js (resizable panes)
 - **Concurrency**: async-mutex (task serialization)
 - **Telemetry**: OpenTelemetry (OTLP exporter, opt-in, no PII)

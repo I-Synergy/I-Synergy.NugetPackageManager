@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.0 (2026-03-17)
+
 - feat: Real-time progress bar during package install/update — replaces static spinner with stage label ("Resolving…", "Updating project…", "Restoring…") and animated fill bar driven by live dotnet stdout parsing
 - feat: Tabs (Updates, Consolidate, Vulnerabilities) auto-refresh when switched to — no manual reload needed
 - feat: Retry button on Browse tab when the package feed fails to load
@@ -43,7 +45,7 @@
 - feat: Tab badges showing result counts on Updates, Consolidate, and Vulnerabilities tabs
 - fix: Selected package row now uses the active selection highlight color instead of the inactive one
 - ux: Search bar is now hidden on the Updates, Consolidate, and Vulnerabilities tabs where it is not relevant
-- breaking: Renamed commands `nuget-package-manager.openSettings` and `nuget-package-manager.reportProblem`
+- breaking: Renamed commands `nuget-packages-manager.openSettings` and `nuget-packages-manager.reportProblem`
   to `nugetPackageManager.openSettings` and `nugetPackageManager.reportProblem` for consistency with other command IDs
 - chore: Moved screenshot tooling from `screenshot-harness/` to `tools/`
 

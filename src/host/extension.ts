@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("nugetPackageManager.reportProblem", async () => {
       vscode.env.openExternal(
-        vscode.Uri.parse("https://github.com/nuget-workbench/nuget-package-manager/issues/new")
+        vscode.Uri.parse("https://github.com/I-Synergy/nuget-packages-manager/issues/new")
       );
     })
   );
@@ -138,7 +138,7 @@ class NugetViewProvider implements vscode.WebviewViewProvider {
 		  <title>NuGet Package Manager</title>
 		</head>
 		<body>
-		  <nuget-package-manager></nuget-package-manager>
+		  <nuget-packages-manager></nuget-packages-manager>
 		  <script type="module" nonce="${nonceValue}" src="${webJsSrc}"></script>
 		</body>
 	  </html>

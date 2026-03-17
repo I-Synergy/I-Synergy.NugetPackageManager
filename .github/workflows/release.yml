@@ -17,6 +17,8 @@ jobs:
   release:
     name: Build, Test & Publish
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       contents: write
     steps:
@@ -64,12 +66,12 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Package .vsix
-        run: npx @vscode/vsce package --no-dependencies --out nuget-package-manager.vsix
+        run: npx @vscode/vsce package --no-dependencies --out nuget-packages-manager.vsix
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          files: nuget-package-manager.vsix
+          files: nuget-packages-manager.vsix
           body_path: RELEASE_NOTES.md
           generate_release_notes: false

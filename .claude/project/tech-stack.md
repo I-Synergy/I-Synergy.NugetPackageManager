@@ -1,101 +1,56 @@
-# Technology Stack (CUSTOMIZE THIS)
-
-**Instructions:** Replace placeholders with your actual technology choices.
-
-**Purpose:** This file defines WHAT technologies you use - concrete versions, frameworks, and libraries.
+# Technology Stack
 
 ## Runtime & Language
 
-- **.NET SDK:** [Version - e.g., 10.0.101]
-- **Language:** [C# version - e.g., C# 14]
-- **Nullable Reference Types:** [Enabled / Disabled]
-- **Implicit Usings:** [Enabled / Disabled]
+- **Runtime**: Node.js v19+ (host), Browser (webview)
+- **Language**: TypeScript 5.x (`strict: true`)
+- **Node.js requirement**: v19+ for `globalThis.crypto.randomUUID()`
 
-## Frameworks & Libraries
+## Core Dependencies
 
-| Category | Technology | Version | Notes |
-|----------|-----------|---------|-------|
-| **Orchestration** | [e.g., .NET Aspire / Docker Compose] | [Version] | [Purpose/notes] |
-| **Database** | [e.g., PostgreSQL / SQL Server] | [Version] | [Cloud/local details] |
-| **ORM** | [e.g., EF Core / Dapper] | [Version] | [Migration approach] |
-| **Caching** | [e.g., Redis / Memory Cache] | [Version] | [Distributed/local] |
-| **CQRS** | [e.g., I-Synergy.Framework.CQRS / MediatR] | [Version] | [Why chosen] |
-| **Mapping** | [e.g., Mapster / AutoMapper] | [Version] | [Configuration approach] |
-| **Logging** | [e.g., ILogger / Serilog] | [Version] | [Sink configuration] |
-| **Testing** | [e.g., MSTest / xUnit] | [Version] | [Framework choice] |
-| **Mocking** | [e.g., Moq / NSubstitute] | [Version] | [Mocking approach] |
-| **BDD** | [e.g., Reqnroll / SpecFlow] | [Version] | [Gherkin usage] |
-| **API Docs** | [e.g., Microsoft.AspNetCore.OpenApi / Swashbuckle] | [Version] | [Documentation approach] |
-| **Resilience** | [e.g., Microsoft.Extensions.Resilience / Polly] | [Version] | [Retry/circuit breaker] |
-| **Auth** | [e.g., OpenIddict / IdentityServer] | [Version] | [OAuth2/OpenID] |
-| **Validation** | [e.g., Data Annotations / FluentValidation] | [Version] | [Validation approach] |
+| Category | Package | Version | Notes |
+|----------|---------|---------|-------|
+| **UI Framework** | `lit` | ^3.3.2 | LitElement web components |
+| **HTTP Client** | `axios` | ^1.7.4 | NuGet API calls, proxy/auth support |
+| **XML Parsing** | `@xmldom/xmldom` | ^0.8.10 | Parse `.csproj` / `.sln` files |
+| **XML Queries** | `xpath` | ^0.0.34 | XPath queries over parsed XML |
+| **Layout** | `split.js` | ^1.6.5 | Resizable panes in main 3-panel view |
+| **Concurrency** | `async-mutex` | ^0.5.0 | Serialize dotnet task execution |
+| **Telemetry** | `@opentelemetry/*` | various | Opt-in anonymous usage telemetry, OTLP |
+| **Hashing** | `object-hash` | latest | Change detection for project lists |
+| **Deep utils** | `lodash` | latest | Utility functions |
 
-## UI Layer (if applicable)
+## Dev Dependencies
 
-- **Web UI:** [e.g., Blazor Server / Blazor WebAssembly / React]
-- **Desktop/Mobile:** [e.g., MAUI / WPF / None]
-- **MVVM Framework:** [e.g., I-Synergy.Framework.Mvvm / CommunityToolkit.Mvvm]
-- **Component Library:** [e.g., Microsoft FluentUI / MudBlazor / Custom]
+| Category | Package | Notes |
+|----------|---------|-------|
+| **Build** | `esbuild` ^0.27.4 | Dual bundle (host CJS + web ESM) |
+| **TypeScript** | `typescript` ^5.3.3 | Compiler |
+| **Linting** | `eslint` ^9.39.2 | Flat config (ESLint 9) |
+| **Lint plugins** | `typescript-eslint`, `eslint-config-prettier` | TypeScript rules + prettier compat |
+| **Testing** | `@vscode/test-cli` ^0.0.12 | Runs tests in VS Code extension host context |
+| **Mocking** | `sinon` ^21.0.1 | Stubs, spies, sandboxes |
+| **Packaging** | `@vscode/vsce` | Produces `.vsix` extension package |
 
-## Data Layer
+## Frozen / Pinned Versions
 
-- **Primary Database:** [e.g., PostgreSQL 15+ / SQL Server 2022]
-- **ORM:** [e.g., Entity Framework Core 10 with Npgsql]
-- **Caching:** [e.g., Azure Managed Redis / Local Redis]
-- **Secrets:** [e.g., Azure Key Vault / AWS Secrets Manager / Environment Variables]
-- **Data Sync:** [e.g., Dotmim.Sync / Custom] (if applicable)
-- **Offline Storage:** [e.g., SQLite / None] (if applicable)
+- **ESLint**: Staying on 9.x — ESLint 10 has breaking config changes not yet migrated
+- **OpenTelemetry**: Version-pinned to avoid peer dependency conflicts
 
-## Authentication & Authorization
+## Technology Decisions
 
-- **OAuth2/OpenID:** [e.g., OpenIddict 7.x / Auth0 / Okta]
-- **JWT:** [e.g., Microsoft.AspNetCore.Authentication.JwtBearer]
-- **Token Management:** [e.g., Microsoft.IdentityModel.JsonWebTokens]
-- **User Store:** [e.g., EF Core Identity / Custom / External]
+| Decision | Choice | Reason |
+|----------|--------|--------|
+| IPC | typed RPC over `postMessage` | Only reliable cross-process channel in VS Code |
+| UI | Lit (LitElement) | Lightweight, no virtual DOM, native web components |
+| HTTP | axios (not `fetch`) | Proxy/auth support needed for private NuGet feeds |
+| XML | `@xmldom/xmldom` + `xpath` | Robust `.csproj` parsing with namespace-aware XPath |
+| Dotnet integration | `child_process.spawn` | Real-time stdout streaming for progress bars |
+| Testing | `@vscode/test-cli` + Mocha | Required to test VS Code API interactions |
 
-## Observability
+## VS Code Extension Manifest
 
-- **Monitoring:** [e.g., Application Insights / Prometheus / Datadog]
-- **Distributed Tracing:** [e.g., OpenTelemetry / Jaeger]
-- **Logging:** [e.g., I-Synergy.Framework.OpenTelemetry / Serilog + Seq]
-- **Health Checks:** [e.g., Microsoft.Extensions.Diagnostics.HealthChecks]
-
-## Package Management
-
-- **Version Control:** [Central Package Management / Individual project versions]
-- **Package Source:** [nuget.org / Private feed / Both]
-- **Version Strategy:** [Pinned versions / Latest stable / Floating]
-
-## Forbidden Technologies (Customize for Your Project)
-
-| ❌ DO NOT USE | ✅ USE INSTEAD | Reason |
-|---------------|---------------|---------|
-| [Technology] | [Replacement] | [Why forbidden] |
-| [Technology] | [Replacement] | [Why forbidden] |
-
-**Example:**
-| ❌ DO NOT USE | ✅ USE INSTEAD | Reason |
-|---------------|---------------|---------|
-| MediatR | I-Synergy.Framework.CQRS | Project standard, better performance |
-| xUnit | MSTest | Project standard, team familiarity |
-| AutoMapper | Mapster | Better performance, explicit mapping |
-
-## Cloud Services (if applicable)
-
-- **Cloud Provider:** [Azure / AWS / GCP / On-premises]
-- **Hosting:** [Azure App Service / AWS ECS / Kubernetes]
-- **Database:** [Azure Flexible Server / AWS RDS / Self-hosted]
-- **Storage:** [Azure Blob Storage / AWS S3 / File System]
-- **Key Vault:** [Azure Key Vault / AWS Secrets Manager / HashiCorp Vault]
-
-## Development Tools
-
-- **IDE:** [Visual Studio / Rider / VS Code]
-- **Version Control:** [Git / Other]
-- **CI/CD:** [Azure DevOps / GitHub Actions / GitLab CI]
-- **Container Runtime:** [Docker / Podman]
-- **Local Development:** [.NET Aspire / Docker Compose / None]
-
----
-
-**Remember:** This file documents your actual technology stack. Update it when technologies change. For architectural patterns, see [architecture.md](architecture.md). For workflow preferences, see [preferences.md](preferences.md).
+- **Extension ID**: `nuget-packages-manager.nuget-packages-manager`
+- **Activation**: On command or workspace with `.csproj`/`.sln` files
+- **Webview**: Single persistent webview panel
+- **Outputs**: `releases/*.vsix`

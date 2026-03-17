@@ -1,14 +1,14 @@
 # NuGet Package Manager — Session Context
 
 **Last Updated:** 2026-03-17
-**Project Version:** 1.0.3 (next: Unreleased)
-**Branch:** developent/main
+**Project Version:** 1.0.0
+**Branch:** main
 
 ---
 
 ## Project Overview
 
-**Extension ID:** `nuget-package-manager.nuget-package-manager`
+**Extension ID:** `nuget-packages-manager.nuget-packages-manager`
 **Purpose:** VS Code extension for browsing, installing, updating, and auditing NuGet packages across .NET projects without leaving the editor.
 **Stack:** TypeScript, Node.js (host), Lit (webview), dotnet CLI, typed RPC over postMessage
 **Phase:** Active development — post-fork hardening
