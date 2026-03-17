@@ -171,7 +171,7 @@ const severityLabels: Record<VulnerableSeverity, string> = {
 };
 
 export class SourceViewModel {
-  Id: number = 0;
+  Id: string = "";
   Name: string = "";
   Url: string = "";
   PasswordScriptPath: string = "";

@@ -88,7 +88,7 @@ async function startServer() {
  */
 async function switchTab(page, tabId) {
   await page.evaluate((id) => {
-    const app = document.querySelector('nuget-package-manager');
+    const app = document.querySelector('nuget-packages-manager');
     if (!app?.shadowRoot) return;
     const pv = app.shadowRoot.querySelector('packages-view');
     if (pv && typeof pv.setTab === 'function') {
@@ -114,7 +114,7 @@ async function triggerTabLoad(page, tabId) {
   await page.waitForTimeout(300);
 
   await page.evaluate((tab) => {
-    const app = document.querySelector('nuget-package-manager');
+    const app = document.querySelector('nuget-packages-manager');
     if (!app?.shadowRoot) return;
     const pv = app.shadowRoot.querySelector('packages-view');
     if (!pv?.shadowRoot) return;
@@ -197,7 +197,7 @@ async function main() {
 
   // Click the first package row to show the details panel on the right
   await page.evaluate(() => {
-    const app = document.querySelector('nuget-package-manager');
+    const app = document.querySelector('nuget-packages-manager');
     if (!app?.shadowRoot) return;
     const pv = app.shadowRoot.querySelector('packages-view');
     if (!pv?.shadowRoot) return;

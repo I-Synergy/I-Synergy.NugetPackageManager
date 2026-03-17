@@ -1,392 +1,109 @@
-# Project Architecture (CUSTOMIZE THIS)
+# Project Architecture
 
-**Instructions:** Document your project's architecture decisions and patterns.
+## Overview
 
-**Purpose:** This file defines HOW your system is structured - layers, patterns, data flow, and architectural decisions.
+**NuGet Package Manager** is a VS Code extension with a **dual-process architecture** — an Extension Host (Node.js) and a Webview (browser), communicating over a typed RPC layer via `postMessage`.
 
-## Architecture Style
-
-**Primary Architecture:** [Clean Architecture / Hexagonal / Onion / Layered / Custom]
-
-**Why Chosen:** [Reasoning for this architecture choice]
-
-## Architectural Patterns
-
-| Pattern | Used? | Notes |
-|---------|-------|-------|
-| **Clean Architecture** | [Yes / No / Partial] | [How applied] |
-| **CQRS** | [Yes / No / Partial] | [Command/Query separation level] |
-| **DDD** | [Yes / No / Partial] | [Aggregates, entities, value objects] |
-| **Vertical Slices** | [Yes / No / Partial] | [Feature folders organization] |
-| **Event Sourcing** | [Yes / No] | [If yes, which domain] |
-| **Microservices** | [Yes / No] | [If yes, service boundaries] |
-
-## Clean Architecture Layers
-
-**Layer definitions and dependencies:**
+## Dual-Process Model
 
 ```
-[Document your actual layer dependencies]
-
-Example:
-Presentation Layer (UI, API Controllers)
-    ↓ depends on
-Application Layer (Use Cases, CQRS Handlers)
-    ↓ depends on
-Domain Layer (Entities, Business Rules, Interfaces)
-    ↑ implements
-Infrastructure Layer (Database, External Services)
+VSCode Extension Host (Node.js)            VSCode Webview (Browser)
+  src/host/extension.ts                      src/web/main.ts
+  src/host/host-api.ts                       src/web/registrations.ts
+  RpcHost (postMessage)  <── typed RPC ──>   RpcClient (ES Proxy)
+  TaskExecutor (child_process.spawn)         Lit components
+  NuGet API (axios)                          Split.js layout
+  dotnet CLI                                 VS Code CSS variables
 ```
 
-**Layer mapping to projects:**
+### Why Dual-Process?
 
-- **Domain:** `{ApplicationName}.Domain.*` - Entities, value objects, domain events, CQRS definitions
-- **Application:** `{ApplicationName}.Services.*` - API endpoints, orchestration, DTOs
-- **Infrastructure:** `{ApplicationName}.Data.*` - Persistence, external integrations
-- **Presentation:** `{ApplicationName}.UI.*` - Blazor/MAUI apps, ViewModels
+VS Code extensions run host-side code in Node.js and UI in a sandboxed browser context (webview). They cannot share memory — all communication must be via message passing.
 
-## Project Structure
+## Typed RPC Layer
 
-```
-[Document your actual project structure]
+All host ↔ webview communication uses a typed RPC contract:
 
-Example:
-solution/
-├── src/
-│   ├── {ApplicationName}.Contracts.{Domain}/      # Interfaces, service contracts
-│   ├── {ApplicationName}.Entities.{Domain}/       # EF Core entity classes
-│   ├── {ApplicationName}.Models.{Domain}/         # DTOs, view models
-│   ├── {ApplicationName}.Domain.{Domain}/         # CQRS handlers, domain logic
-│   └── {ApplicationName}.Services.{Domain}/       # API endpoints
-├── tests/
-│   └── {ApplicationName}.{Domain}.Tests/          # Unit and integration tests
-└── docs/
-```
+- **Contract**: `HostAPI` interface in `src/common/rpc/types.ts`
+- **Wire format**: `{ type: 'rpc-request', id, method, params }` / `{ type: 'rpc-response', id, result }`
+- **Result type**: `{ ok: true, value: T } | { ok: false, error: string }` — every method returns `Result<T>`
+- **RpcHost**: Dispatches incoming requests to `HostAPI` implementations (`src/common/rpc/rpc-host.ts`)
+- **RpcClient**: ES Proxy that intercepts property access and turns it into RPC calls (`src/common/rpc/rpc-client.ts`)
+- **Timeout**: 120 seconds (`RPC_TIMEOUT_MS`) — intentionally long to handle large solution restores
 
-## CQRS Implementation Pattern
+### Adding a New RPC Method
 
-**Command/Query structure:**
+1. Add request/response types to `src/common/rpc/types.ts`
+2. Add method signature to `HostAPI` interface in `types.ts`
+3. Implement in `src/host/host-api.ts` (return `Result<T>`)
+4. Call from webview: `await hostApi.methodName(request)`
 
-```csharp
-// Commands use individual parameters (NOT model objects)
-public sealed record Create{Entity}Command(
-    string Property1,
-    decimal Property2
-) : ICommand<Create{Entity}Response>;
+## src/common/ — Isomorphic Module Zone
 
-// Queries use named parameters
-public sealed record Get{Entity}ByIdQuery(Guid {Entity}Id)
-    : IQuery<{Entity}Response>;
+`src/common/` is bundled into **both** bundles (host + web). These files must:
+- Use `globalThis.crypto` instead of `import ... from "crypto"`
+- Not import `vscode` or any Node.js built-in
+- Not import any file from `src/host/` or `src/web/`
 
-// Handlers inject DataContext directly
-public sealed class Create{Entity}Handler(DataContext dataContext)
-    : ICommandHandler<Create{Entity}Command, Create{Entity}Response>
-{
-    public async Task<Create{Entity}Response> HandleAsync(
-        Create{Entity}Command command,
-        CancellationToken cancellationToken)
-    {
-        // Implementation
-    }
-}
-```
+## Real-time Progress
 
-## Data Access Pattern
+Long-running operations (install/update/uninstall) stream progress to the UI:
 
-**NO explicit Repository interfaces** - Use EF Core extension methods:
+1. Webview generates `operationId = \`${type}-${packageId}-${Date.now()}\``
+2. Passes `operationId` to `updateProject` RPC call
+3. `TaskExecutor.ExecuteCommand` spawns dotnet, parses stdout stages, stores in `Map<operationId, OperationProgress>`
+4. Webview polls `getOperationProgress` every 300ms
+5. `project-row` shows animated progress bar; stops polling when `Active=false` or on `disconnectedCallback`
 
-```csharp
-// From I-Synergy.Framework.EntityFramework (or your ORM extensions)
-await dataContext.AddItemAsync<TEntity, TModel>(model, cancellationToken);
-await dataContext.GetItemByIdAsync<TEntity, TModel, TKey>(id, cancellationToken);
-await dataContext.UpdateItemAsync<TEntity, TModel>(model, cancellationToken);
-await dataContext.RemoveItemAsync<TEntity, TKey>(id, cancellationToken);
-```
+## Web Components (Lit)
 
-## Vertical Slice Organization
+UI uses LitElement with VS Code CSS variable theming:
 
-```
-Domain/Features/{Entity}/
-  Commands/
-    Create{Entity}Command.cs
-    Create{Entity}Handler.cs
-    Update{Entity}Command.cs
-    Update{Entity}Handler.cs
-    Delete{Entity}Command.cs
-    Delete{Entity}Handler.cs
-  Queries/
-    Get{Entity}ByIdQuery.cs
-    Get{Entity}ByIdHandler.cs
-    Get{Entity}ListQuery.cs
-    Get{Entity}ListHandler.cs
-  Events/
-    {Entity}CreatedEvent.cs
-    {Entity}UpdatedEvent.cs
-    {Entity}DeletedEvent.cs
-Mappers/{Entity}MappingConfig.cs
-Extensions/ServiceCollectionExtensions.cs
-```
+- `@customElement("tag-name")` registers the element
+- `@state()` for internal reactive state
+- `@property()` for reflected attributes
+- CSS-in-JS via `css` tagged templates using `--vscode-*` variables
+- Module-level singletons in `registrations.ts`: `hostApi`, `router`, `configuration`
+
+### View Routing
+
+Single-page navigation managed by `RouterType` in `src/web/router.ts`. The root `nuget-packages-manager` element renders different views based on `router.CurrentRoute`.
+
+### Tab Auto-Refresh
+
+Updates, Consolidate, and Vulnerabilities tabs auto-refresh on tab switch. Guard: `if (tab === this.activeTab) return` prevents redundant reloads.
 
 ## Data Flow
 
-### Request Flow
-
 ```
-[Document your request/response flow]
-
-Example:
-HTTP Request
-  → API Endpoint
-  → Command/Query
-  → Handler
-  → DataContext
-  → Database
-  ← Response
+User action (click install)
+  → Lit component event handler
+  → hostApi.updateProject(req)           [RPC call over postMessage]
+  → RpcHost dispatches to host-api.ts
+  → TaskExecutor.ExecuteCommand(dotnet)  [child_process.spawn]
+  → dotnet stdout parsed for progress stages
+  → Component polls getOperationProgress every 300ms
+  → Progress bar updates in UI
+  → Active=false → polling stops
 ```
-
-### Event Flow (if using domain events)
-
-```
-[Document event flow]
-
-Example:
-Command
-  → Handler
-  → Entity State Change
-  → Domain Event Raised
-  → Event Handler(s)
-  → Side Effects
-```
-
-## Mapping Strategy
-
-**Mapping library:** [Mapster / AutoMapper / Manual]
-
-**Configuration approach:**
-
-```csharp
-// Example: Mapster configuration
-public class {Entity}MappingConfig : IRegister
-{
-    public void Register(TypeAdapterConfig config)
-    {
-        config.NewConfig<Create{Entity}Command, {Entity}>()
-            .Map(dest => dest.Property1, src => src.Property1);
-
-        config.NewConfig<{Entity}, {Entity}Model>()
-            .Map(dest => dest.{Entity}Id, src => src.{Entity}Id);
-    }
-}
-```
-
-**Registration:**
-
-```csharp
-// Domain Extensions/ServiceCollectionExtensions.cs
-public static IServiceCollection With{Domain}DomainHandlers(
-    this IServiceCollection services)
-{
-    var assembly = typeof(ServiceCollectionExtensions).Assembly;
-
-    // Register mappings
-    var mappingConfigs = TypeAdapterConfig.GlobalSettings.Scan(assembly);
-    TypeAdapterConfig.GlobalSettings.Apply(mappingConfigs);
-
-    // Register CQRS handlers
-    services.AddCQRS().AddHandlers(assembly);
-
-    return services;
-}
-```
-
-## Domain Events
-
-**Event definitions:**
-
-```csharp
-// Domain/Features/{Entity}/Events/
-public sealed record {Entity}CreatedEvent(
-    Guid {Entity}Id,
-    string Property1,
-    DateTimeOffset CreatedDate
-) : IDomainEvent;
-```
-
-**Event handling approach:**
-- Raise only meaningful state changes
-- Dispatch via [your event infrastructure]
-- Handlers must be idempotent
-- Handlers must be resilient (retry transient failures)
-
-## Integration Patterns
-
-### External Service Integration
-
-**Integration approach:**
-- **Pattern:** [Adapter / Gateway / Direct]
-- **Error Handling:** [Retry / Circuit Breaker / Fallback]
-- **Authentication:** [API Key / OAuth2 / Certificate]
-
-### Inter-Domain Communication
-
-**How domains communicate:**
-- **Same Service:** [Direct references / Domain events / Messaging]
-- **Different Services:** [HTTP / gRPC / Messaging]
-
-## Persistence Strategy
-
-**How data is persisted:**
-
-- **Primary Store:** [Database technology and ORM approach]
-- **Caching:** [When to cache, what to cache, cache invalidation]
-- **File Storage:** [Where and how files are stored] (if applicable)
-- **Message Queue:** [Technology and usage] (if applicable)
-
-**Example:**
-- **Primary Store:** PostgreSQL via EF Core, code-first migrations
-- **Caching:** Redis for reference data (countries, categories), 15-minute TTL
-- **File Storage:** Azure Blob Storage for documents, private containers
-- **Message Queue:** Azure Service Bus for cross-domain events
 
 ## Security Architecture
 
-**Authentication & Authorization:**
+| Concern | Mitigation |
+|---------|-----------|
+| Path traversal | Validate paths against `vscode.workspace.getWorkspaceFolder()` before dotnet |
+| URL injection | Validate with `new URL()` before passing to dotnet CLI |
+| Script execution | Explicit allowlist: `.ps1`, `.bat`, `.cmd`, `.sh` only |
+| Nonce generation | `globalThis.crypto.randomUUID()` — works in both host and browser |
+| Sort/filter injection | Validate user input against explicit allowlist before use |
 
-- **Authentication:** [Where implemented - API Gateway / Each service / Middleware]
-- **Authorization:** [Policy-based / Role-based / Claims-based]
-- **Token handling:** [JWT validation, refresh token strategy]
+## Build Architecture
 
-**API Security:**
+Two separate esbuild bundles:
 
-- **CORS:** [Configuration approach]
-- **Rate Limiting:** [Strategy and limits]
-- **Input Validation:** [Where validated - endpoints / commands / both]
+| Bundle | Entry | Output | Platform | Format |
+|--------|-------|--------|----------|--------|
+| Host | `src/host/extension.ts` | `dist/extension.js` | Node.js | CommonJS |
+| Web | `src/web/main.ts` | `dist/web.js` | Browser | ESM |
 
-**Secrets Management:**
-
-- **Development:** [Local secrets, Key Vault emulator]
-- **Production:** [Azure Key Vault / AWS Secrets Manager]
-
-## Scalability Strategy
-
-**How the system scales:**
-
-- **Horizontal Scaling:** [Stateless design / Session handling approach]
-- **Database Scaling:** [Read replicas / Sharding / Partitioning]
-- **Caching Strategy:** [Distributed cache for shared data]
-- **Async Processing:** [Background jobs / Message queue for long operations]
-
-## Monitoring & Observability
-
-**How the system is monitored:**
-
-- **Logging:** [Structured logging with correlation IDs]
-- **Metrics:** [What is measured - response times, error rates, etc.]
-- **Tracing:** [Distributed tracing across services]
-- **Health Checks:** [What is monitored - database, cache, external APIs]
-
-## Deployment Architecture
-
-**Deployment strategy:**
-
-- **Environment Strategy:** [Dev / Staging / Production]
-- **Deployment Method:** [Blue-Green / Rolling / Canary]
-- **Infrastructure:** [Cloud / On-premises / Hybrid]
-- **CI/CD:** [Pipeline approach and stages]
-
-## Architectural Decision Records (ADRs)
-
-### ADR Template
-
-```markdown
-## ADR-XXX: [Decision Title]
-
-**Status:** [Proposed / Accepted / Deprecated / Superseded]
-**Date:** [YYYY-MM-DD]
-**Deciders:** [Who decided]
-
-### Context
-[What is the issue that we're seeing that is motivating this decision]
-
-### Decision
-[What is the change that we're proposing/have agreed to]
-
-### Consequences
-**Positive:**
-- [e.g., easier to understand, better performance]
-
-**Negative:**
-- [e.g., increased complexity, more boilerplate]
-
-### Alternatives Considered
-- [Alternative 1] - [Why rejected]
-- [Alternative 2] - [Why rejected]
-```
-
-### Example ADR
-
-```markdown
-## ADR-001: Use Mapster Instead of AutoMapper
-
-**Status:** Accepted
-**Date:** 2025-02-01
-**Deciders:** Architecture Team
-
-### Context
-Need object-to-object mapping between DTOs and entities. AutoMapper is widely used but relies on runtime reflection.
-
-### Decision
-Use Mapster for all object mapping throughout the application.
-
-### Consequences
-**Positive:**
-- Better performance through compile-time code generation
-- Explicit mapping configuration improves maintainability
-- Easier debugging with generated code
-
-**Negative:**
-- Less community adoption than AutoMapper
-- Team needs to learn new library
-- Fewer online resources and examples
-
-### Alternatives Considered
-- AutoMapper - Rejected due to runtime reflection overhead
-- Manual mapping - Rejected due to maintenance burden and boilerplate
-```
-
-## Reference Implementations
-
-**Which implementations serve as patterns:**
-
-- **Primary Reference:** [{Domain}.{Entity}] - [Why it's the reference]
-- **Alternative Patterns:** [{Domain}.{Entity}] - [What pattern it demonstrates]
-
-**Example:**
-- **Primary Reference:** [Budgets.Budget] - Complete CRUD implementation with all operations, comprehensive testing, full documentation
-- **Alternative Patterns:** [Customers.Customer] - Demonstrates soft-delete pattern with audit fields
-
-## Known Limitations
-
-**Document known architectural limitations:**
-
-1. [Limitation 1] - [Why it exists, when to address]
-2. [Limitation 2] - [Impact and planned mitigation]
-
-**Example:**
-1. Single database instance - Acceptable for current scale (<100k users), plan to implement read replicas when load increases
-2. Synchronous inter-domain communication - Acceptable for low latency requirements, consider event-driven architecture for high volume operations
-
-## Future Architectural Considerations
-
-**What might evolve:**
-
-- [Consideration 1] - [Trigger for this change]
-- [Consideration 2] - [Benefits and costs]
-
-**Example:**
-- Event sourcing for audit-heavy domains - Consider when audit requirements become more stringent
-- Microservices architecture - Evaluate when team size exceeds 10 developers or domains become truly independent
-
----
-
-**Remember:** This file documents your system's architecture. Update it when patterns evolve. For technology choices, see [tech-stack.md](tech-stack.md). For business domains, see [domains.md](domains.md).
+Build is triggered by `npm run esbuild` (or automatically via PostToolUse hook on Edit/Write).

@@ -9,7 +9,7 @@ suite('ProjectParser Tests', () => {
     let tmpDir: string;
 
     setup(() => {
-        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nuget-package-manager-test-'));
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nuget-packages-manager-test-'));
     });
 
     teardown(() => {

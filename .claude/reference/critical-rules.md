@@ -1,312 +1,143 @@
 # Critical Rules (Read First)
 
-These are non-negotiable patterns that cause bugs if violated.
+These are non-negotiable patterns for this TypeScript VS Code extension. Violating them causes bugs or security issues.
 
-## 1. Commands: Individual Parameters Only
+## 1. src/common/ Must Be Isomorphic
 
-**NEVER pass model objects to commands.**
+Files in `src/common/` are bundled into **both** the host (Node.js) and web (browser) bundles. They must never import Node.js-only modules.
 
-```csharp
-// CORRECT - Individual parameters
-public sealed record CreateDebtCommand(
-    Guid BudgetId,
-    string Description,
-    decimal Amount
-) : ICommand<CreateDebtResponse>;
+```ts
+// CORRECT — works in both Node.js 19+ and browser
+globalThis.crypto.randomUUID()
 
-// WRONG - Passing model object
-public sealed record CreateDebtCommand(
-    Debt Debt
-) : ICommand<CreateDebtResponse>;
+// WRONG — Node.js only, will break the web bundle
+import { randomBytes } from "crypto";
+import { randomUUID } from "crypto";
 ```
 
-### Endpoint Construction
+## 2. RPC Methods Always Return Result<T>
 
-```csharp
-// CORRECT - Extract properties from model
-app.MapPost("/debts", async (Debt model, ICommandHandler handler) =>
-{
-    var command = new CreateDebtCommand(model.BudgetId, model.Description, model.Amount);
-    return await handler.HandleAsync(command);
-});
+Never throw from a host-side RPC handler. Always return `ok(value)` or `fail(message)`.
 
-// WRONG - Passing model directly
-var command = new CreateDebtCommand(model);
-```
-
-## 2. Delete Operations: Use FirstOrDefaultAsync + Remove + SaveChangesAsync
-
-```csharp
+```ts
 // CORRECT
-var entity = await dataContext.Debts.FirstOrDefaultAsync(e => e.DebtId == command.DebtId, cancellationToken);
+async function getProjects(req: GetProjectsRequest): Promise<Result<GetProjectsResponse>> {
+  try {
+    const projects = await loadProjects();
+    return ok({ Projects: projects });
+  } catch (e) {
+    return fail(`Failed to load projects: ${e}`);
+  }
+}
 
-if (entity is null)
-    throw new InvalidOperationException($"Debt {command.DebtId} not found");
-
-dataContext.Debts.Remove(entity);
-var rowsAffected = await dataContext.SaveChangesAsync(cancellationToken);
-
-if (rowsAffected == 0)
-    throw new InvalidOperationException($"Failed to delete Debt {command.DebtId}");
-
-// WRONG - These extension methods are NOT used
-await dataContext.DeleteItemByIdAsync<Debt, Guid>(id, cancellationToken);
-await dataContext.RemoveItemAsync<Debt, Guid>(id, cancellationToken);
+// WRONG — throws propagate as unhandled rejections
+async function getProjects(req: GetProjectsRequest) {
+  const projects = await loadProjects(); // throws on error
+  return { Projects: projects };
+}
 ```
 
-## 3. Query Parameters: Use Named Parameters
+## 3. Add New RPC Methods in All Three Places
 
-For optional filters, always use named parameters to avoid ambiguity.
+Adding a method to `HostAPI` requires changes in exactly three files — missing any breaks the contract:
 
-```csharp
-// CORRECT - Named parameters prevent ambiguity
-var query = new GetDepositsTotalAmountQuery(GoalId: id);
-var query = new GetDepositsTotalAmountQuery(BudgetId: id);
+1. `src/common/rpc/types.ts` — request/response types + `HostAPI` interface method
+2. `src/host/host-api.ts` — implementation function
+3. Webview caller — `hostApi.methodName(request)` call site
 
-// WRONG - Positional parameters are ambiguous
-var query = new GetDepositsTotalAmountQuery(id, true);
+## 4. Path and URL Validation Before dotnet CLI
+
+All host-side code that passes paths or URLs to the dotnet CLI must validate first.
+
+```ts
+// CORRECT — validate path is inside a workspace folder
+const wsFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(projectPath));
+if (!wsFolder) return fail("Project path is outside workspace");
+
+// CORRECT — validate URL before passing to dotnet
+try { new URL(sourceUrl); } catch { return fail("Invalid source URL"); }
+
+// WRONG — passing untrusted input directly
+spawn("dotnet", ["add", projectPath, "package", id, "--source", sourceUrl]);
 ```
 
-## 4. Data Access: Use EF Core Primitives on DataContext
+## 5. Event Listeners Must Be Stored and Cleaned Up
 
-**NO explicit Repository interfaces. NO extension methods like AddItemAsync/GetItemByIdAsync.** Use EF Core directly.
+Store event listeners as class fields (arrow functions or bound references) so they can be removed in `disconnectedCallback`.
 
-```csharp
-// CORRECT — Use named DbSet properties from DataContext for all operations
-// Create
-var entity = new Entities.Budgets.Budget { BudgetId = Guid.NewGuid(), ... };
-dataContext.Budgets.Add(entity);
-await dataContext.SaveChangesAsync(cancellationToken);
-
-// Read single
-var entity = await dataContext.Budgets.FirstOrDefaultAsync(e => e.BudgetId == id, cancellationToken);
-var model = entity?.Adapt<Budget>();
-
-// Read list (using named DbSet + ProjectToType)
-var models = await dataContext.Budgets
-    .OrderBy(b => b.Description)
-    .ProjectToType<Budget>()
-    .ToListAsync(cancellationToken);
-
-// Update — no .Update() call needed; change tracker detects property mutations on tracked entities
-var entity = await dataContext.Budgets.FirstOrDefaultAsync(e => e.BudgetId == command.BudgetId, cancellationToken);
-entity.Description = command.Description;
-await dataContext.SaveChangesAsync(cancellationToken);
-
-// Delete
-var entity = await dataContext.Budgets.FirstOrDefaultAsync(e => e.BudgetId == command.BudgetId, cancellationToken);
-dataContext.Budgets.Remove(entity);
-await dataContext.SaveChangesAsync(cancellationToken);
-
-// WRONG - We don't use repositories
-await _repository.Add(model);
-
-// WRONG - We don't use these extension methods
-await dataContext.AddItemAsync<Budget, BudgetModel>(model, ct);
-await dataContext.GetItemByIdAsync<Budget, BudgetModel, Guid>(id, ct);
-```
-
-## 5. Mapping: Mapster Only
-
-Configure mappings in `Mappers/Configuration.cs` (implements `IRegister`).
-
-```csharp
-// CORRECT - Mapster with configuration
-var model = entity.Adapt<Budget>();
-
-// CORRECT - ProjectToType for list queries (server-side projection)
-var models = await dataContext.Budgets
-    .ProjectToType<Budget>()
-    .ToListAsync(cancellationToken);
-
-// CORRECT - Direct entity construction in Create handlers
-var entity = new Entities.Budgets.Budget
-{
-    BudgetId = Guid.NewGuid(),
-    Description = command.Description,
-};
-
-// WRONG - AutoMapper
-var model = _mapper.Map<Budget>(entity);
-
-// WRONG - Manual mapping for reads (use Mapster instead)
-var model = new Budget { BudgetId = entity.BudgetId, ... };
-
-// WRONG - Mapping command to entity via Mapster
-var entity = command.Adapt<Budget>(); // Don't do this
-```
-
-## 6. Async: Always Include CancellationToken
-
-```csharp
+```ts
 // CORRECT
-public async Task<GetBudgetByIdResponse> HandleAsync(
-    GetBudgetByIdQuery query,
-    CancellationToken cancellationToken = default)
-{
-    var entity = await dataContext.Budgets.FirstOrDefaultAsync(e => e.BudgetId == query.BudgetId, cancellationToken);
-    var budget = entity?.Adapt<Budget>();
-    return new GetBudgetByIdResponse(budget);
+private readonly onMessage = (e: MessageEvent) => { ... };
+
+connectedCallback() {
+  super.connectedCallback();
+  window.addEventListener("message", this.onMessage);
 }
 
-// WRONG - Blocking on async
-public GetBudgetByIdResponse Handle(GetBudgetByIdQuery query)
-{
-    var entity = dataContext.Budgets.FirstOrDefaultAsync(
-        e => e.BudgetId == query.BudgetId,
-        CancellationToken.None).Result; // DEADLOCK RISK!
+disconnectedCallback() {
+  window.removeEventListener("message", this.onMessage);
+  super.disconnectedCallback();
 }
 
-// WRONG - No CancellationToken
-public async Task<GetBudgetByIdResponse> HandleAsync(GetBudgetByIdQuery query)
-{
-    // Missing cancellation support
+// WRONG — anonymous listener cannot be removed
+connectedCallback() {
+  window.addEventListener("message", (e) => { ... });
 }
 ```
 
-## 7. Entity Exposure: NEVER Expose Domain Entities
+## 6. Progress Polling Must Stop
 
-Always map to Models before returning from handlers. Responses wrap Models.
+When a component starts polling `getOperationProgress`, it must stop on:
+- `Active === false` in the response
+- `disconnectedCallback()`
 
-```csharp
-// CORRECT - Response wraps Model
-public async Task<GetBudgetByIdResponse> HandleAsync(...)
-{
-    var entity = await dataContext.Budgets.FirstOrDefaultAsync(e => e.BudgetId == query.BudgetId, ct);
-    var budget = entity?.Adapt<Budget>();
-    return new GetBudgetByIdResponse(budget);
+Failing to stop polling leaks timers and keeps the RPC connection busy.
+
+## 7. Script Execution: Explicit Extension Allowlist
+
+Password credential scripts are restricted to `.ps1`, `.bat`, `.cmd`, `.sh`. Any other extension must be rejected.
+
+```ts
+// CORRECT
+const ALLOWED_SCRIPT_EXTENSIONS = [".ps1", ".bat", ".cmd", ".sh"];
+if (!ALLOWED_SCRIPT_EXTENSIONS.includes(ext)) {
+  return fail(`Unsupported script extension: ${ext}`);
 }
-
-// WRONG - Return domain entity directly
-public async Task<Entities.Budgets.Budget> HandleAsync(...)
-{
-    return await dataContext.Budgets.FirstOrDefaultAsync(e => e.BudgetId == id, ct);
-}
 ```
 
-## 8. Progress Files: Current Solution Only
+## 8. Progress Files: Current Project Only
 
-Progress files MUST be in the current solution's `.claude/` folder.
+Progress files MUST be in this project's `.claude/` folder.
 
 ```
-CORRECT:   .claude/progress/task-progress.md
-WRONG:     ~/.claude/progress/task-progress.md
-WRONG:     /other/solution/.claude/progress/task-progress.md
+CORRECT:   .claude/progress/task-slug.md
+WRONG:     ~/.claude/progress/task-slug.md
 ```
 
-## 9. Session Context: Read First, Update Last
+## 9. Plan Files: .claude/plans/
+
+```
+CORRECT:   .claude/plans/2026-03-17-feature-name.md
+WRONG:     docs/plans/feature-name.md
+```
+
+## 10. Session Context: Read First, Update Last
 
 Every session MUST:
 1. Read `.claude/session-context.md` FIRST
-2. Build on established patterns
-3. Update session-context.md with learnings before ending
-
-## 10. Handler Naming: Always Include Command/Query Suffix
-
-```csharp
-// CORRECT
-public sealed class CreateBudgetCommandHandler : ICommandHandler<...>
-public sealed class GetBudgetByIdQueryHandler : IQueryHandler<...>
-
-// WRONG - Missing suffix
-public sealed class CreateBudgetHandler : ICommandHandler<...>
-public sealed class GetBudgetByIdHandler : IQueryHandler<...>
-```
-
-## 11. File Organization: One Type Per File, Subfolder Per Operation
-
-```
-// CORRECT - Each operation gets its own subfolder with separate files
-Features/Budgets/
-  Commands/CreateBudget/
-    CreateBudgetCommand.cs
-    CreateBudgetCommandHandler.cs
-    CreateBudgetResponse.cs
-  Commands/UpdateBudget/
-    UpdateBudgetCommand.cs
-    UpdateBudgetCommandHandler.cs
-    UpdateBudgetResponse.cs
-  Queries/GetBudgetById/
-    GetBudgetByIdQuery.cs
-    GetBudgetByIdQueryHandler.cs
-    GetBudgetByIdResponse.cs
-
-// WRONG - Flat folders or combined files
-Features/Budgets/Commands/
-  CreateBudgetCommand.cs      (command + response combined)
-  CreateBudgetHandler.cs
-```
-
-## 12. Enum Naming: Always Plural (except *Status)
-
-All enum type names must be plural. Only enums with a `Status` suffix are exempt.
-
-```csharp
-// CORRECT — plural names
-public enum PaymentProviders { Stripe, PayNl, Mollie }
-public enum SubscriptionHistoryEvents { Created, Activated, Cancelled }
-public enum SecurityEventTypes { AuthenticationSuccess, AuthenticationFailed }
-public enum AlertSeverities { Low, Medium, High }
-public enum OrderTypes { Buy, Sell }
-
-// CORRECT — Status suffix is exempt (kept singular)
-public enum PaymentStatus { Pending, Succeeded, Failed }
-public enum SubscriptionStatus { Active, Paused, Cancelled }
-public enum EmailOutboxStatus { Pending, Processing, Sent, Failed }
-
-// WRONG — singular non-Status enum names
-public enum PaymentProvider { Stripe, PayNl, Mollie }
-public enum SecurityEventType { AuthenticationSuccess, AuthenticationFailed }
-public enum AlertSeverity { Low, Medium, High }
-public enum OrderType { Buy, Sell }
-```
-
-## 13. Entity Properties: Use Enum Type, Not int
-
-EF Core automatically converts enum types to/from int in the database. Always use the enum type on entity properties — never raw `int`.
-
-```csharp
-// CORRECT — EF Core converts enum to int automatically
-public PaymentStatus Status { get; set; }
-public PaymentProviders Provider { get; set; }
-public SubscriptionStatus SubscriptionStatus { get; set; }
-public InvoiceStates StatusId { get; set; }
-
-// WRONG — Never store enum values as raw int on entities
-public int Status { get; set; }
-public int Provider { get; set; }
-public int SubscriptionStatus { get; set; }
-public int StatusId { get; set; }
-```
-
-## 14. Plan Files: Always in `.claude/plans/`
-
-Plans and design docs MUST be saved in the project-local `.claude/plans/` folder. The `writing-plans` and `brainstorming` skills default to `docs/plans/` — always override that to `.claude/plans/`.
-
-```
-CORRECT:   .claude/plans/2026-02-28-feature-name.md
-WRONG:     docs/plans/2026-02-28-feature-name.md
-WRONG:     ~/.claude/plans/2026-02-28-feature-name.md
-```
-
-This is configured via `plansDirectory` in `.claude/settings.json` and must not be bypassed by skill defaults.
+2. Update it with learnings before ending
 
 ## Quick Violation Checklist
 
-Before submitting code, verify you haven't violated these:
+Before committing, verify:
 
-- [ ] Commands use individual parameters (not model objects)
-- [ ] Delete operations use `FirstOrDefaultAsync` + `Remove` + `SaveChangesAsync`
-- [ ] Queries use named parameters for optional filters
-- [ ] Data access uses named DbSet properties on DataContext with `FirstOrDefaultAsync` for single lookups (no `.Set<T>()`, no `FindAsync`, no extension methods, no repositories)
-- [ ] Mapping uses Mapster (not AutoMapper or manual for reads)
-- [ ] Create handlers construct entities directly (not via `command.Adapt<Entity>()`)
-- [ ] All async methods include CancellationToken
-- [ ] Domain entities never exposed directly (responses wrap Models)
-- [ ] Handlers named with `CommandHandler` / `QueryHandler` suffix
-- [ ] Each type in its own file, each operation in its own subfolder
-- [ ] Progress files in current solution's `.claude/` folder
-- [ ] Plan files saved to `.claude/plans/` (not `docs/plans/`)
-- [ ] Session context read first and updated last
-- [ ] Enum names are plural (except *Status suffix enums)
-- [ ] EF Core entity properties use enum types, not raw int
+- [ ] `src/common/` files use `globalThis.crypto`, not `import ... from "crypto"`
+- [ ] RPC handlers return `Result<T>` (never throw)
+- [ ] New RPC methods added in `types.ts` + `host-api.ts` + call site
+- [ ] Project paths validated against workspace folders before dotnet CLI
+- [ ] Source URLs validated with `new URL()` before dotnet CLI
+- [ ] Event listeners stored as class fields; removed in `disconnectedCallback`
+- [ ] Progress polling stopped on `Active=false` and `disconnectedCallback`
+- [ ] Script extensions validated against allowlist
+- [ ] `npm run esbuild` passes (0 errors)
+- [ ] `npm run lint` passes (0 errors)

@@ -1,49 +1,23 @@
-# Template Tokens Reference
-
-Throughout this template, the following placeholders are used. Replace them when implementing:
-
-| Token | Replace With | Example |
-|-------|--------------|---------|
-| `{ApplicationName}` | Your application name | `BudgetTracker` |
-| `{Domain}` | Domain/bounded context name | `Budgets`, `Goals`, `Debts` |
-| `{Entity}` | Entity name (PascalCase) | `Budget`, `Goal`, `Debt` |
-| `{Entities}` | Entity plural (PascalCase) — used for DbSet names | `Budgets`, `Goals`, `Debts` |
-| `{entity}` | Entity name (lowercase) | `budget`, `goal`, `debt` |
-| `{entities}` | Entity plural (lowercase) | `budgets`, `goals`, `debts` |
+# Reference Tokens
 
 ## Special Files (Always in .claude/)
 
-- **session-context.md** - Read FIRST at session start, update before session end
-- **progress/[task].md** - Active task progress files
-- **completed/[task].md** - Completed task archives for future reference
+| File | Purpose |
+|------|---------|
+| `session-context.md` | Read FIRST at session start; update before session end |
+| `progress/{task}.md` | Active task progress (`- [ ]` / `- [x]`) |
+| `completed/{task}.md` | Completed task archives |
+| `plans/{slug}.md` | Design plans and proposals |
 
-## Example Transformation
+## Key Source Paths
 
-- **Template:** `{ApplicationName}.Domain.{Domain}`
-- **Actual:** `BudgetTracker.Domain.Budgets`
-
-## Namespace Examples
-
-```csharp
-// Template format
-namespace {ApplicationName}.Domain.{Domain}.Features.{Entity}.Commands;
-namespace {ApplicationName}.Services.{Domain}.Endpoints;
-namespace {ApplicationName}.Entities.{Domain};
-
-// Actual implementation
-namespace BudgetTracker.Domain.Budgets.Features.Budget.Commands;
-namespace BudgetTracker.Services.Budgets.Endpoints;
-namespace BudgetTracker.Entities.Budgets;
-```
-
-## File Path Examples
-
-```
-// Template paths
-src/{ApplicationName}.Domain.{Domain}/Features/{Entity}/Commands/Create{Entity}Command.cs
-src/{ApplicationName}.Services.{Domain}/Endpoints/{Entity}Endpoints.cs
-
-// Actual paths
-src/BudgetTracker.Domain.Budgets/Features/Budget/Commands/CreateBudgetCommand.cs
-src/BudgetTracker.Services.Budgets/Endpoints/BudgetEndpoints.cs
-```
+| Path | Purpose |
+|------|---------|
+| `src/common/rpc/types.ts` | HostAPI interface + all request/response types |
+| `src/host/host-api.ts` | Host-side implementation of all RPC methods |
+| `src/host/utilities/task-executor.ts` | dotnet CLI execution + progress tracking |
+| `src/web/registrations.ts` | Module-level singletons: `hostApi`, `router`, `configuration` |
+| `src/web/main.ts` | Webview entry point + root `nuget-packages-manager` component |
+| `src/host/extension.ts` | Extension activation, RpcHost setup |
+| `esbuild.js` | Dual bundle build config |
+| `.vscode-test.mjs` | Test runner configuration |

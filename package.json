@@ -1,7 +1,7 @@
 {
-  "name": "nuget-package-manager",
-  "publisher": "nuget-package-manager",
-  "displayName": "NuGet Package Manager",
+  "name": "nuget-packages-manager",
+  "publisher": "I-Synergy",
+  "displayName": "I-Synergy NuGet Package Manager",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
   "version": "1.0.0",
   "license": "MIT",
@@ -11,7 +11,7 @@
     "theme": "dark"
   },
   "engines": {
-    "vscode": "^1.87.0"
+    "vscode": "^1.110.0"
   },
   "keywords": [
     "nuget",
@@ -24,14 +24,14 @@
     "Programming Languages",
     "Other"
   ],
-  "homepage": "https://github.com/nuget-workbench/nuget-package-manager",
+  "homepage": "https://github.com/I-Synergy/nuget-packages-manager",
   "bugs": {
-    "url": "https://github.com/nuget-workbench/nuget-package-manager/issues",
+    "url": "https://github.com/I-Synergy/nuget-packages-manager/issues",
     "email": "daniel-rck@proton.me"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/nuget-workbench/nuget-package-manager.git"
+    "url": "https://github.com/I-Synergy/nuget-packages-manager.git"
   },
   "activationEvents": [
     "workspaceContains:**/*.csproj",

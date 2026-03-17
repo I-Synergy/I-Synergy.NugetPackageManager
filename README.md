@@ -2,8 +2,8 @@
 
 **A full-featured NuGet package manager for Visual Studio Code** — browse, install, update, and audit packages across all your .NET projects without leaving the editor.
 
-[![Release](https://img.shields.io/github/v/release/nuget-workbench/nuget-package-manager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=nuget-package-manager.nuget-package-manager)
-[![CI](https://img.shields.io/github/actions/workflow/status/nuget-workbench/nuget-package-manager/ci.yml?label=CI)](https://github.com/nuget-workbench/nuget-package-manager/actions)
+[![Release](https://img.shields.io/github/v/release/nuget-workbench/nuget-packages-manager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=nuget-packages-manager.nuget-packages-manager)
+[![CI](https://img.shields.io/github/actions/workflow/status/nuget-workbench/nuget-packages-manager/ci.yml?label=CI)](https://github.com/I-Synergy/nuget-packages-manager/actions)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.87%2B-grey)](https://code.visualstudio.com/)
 
@@ -75,15 +75,15 @@
 Or install directly from the command line:
 
 ```bash
-code --install-extension nuget-package-manager.nuget-package-manager
+code --install-extension nuget-packages-manager.nuget-packages-manager
 ```
 
 ### From a .vsix file
 
-Download the latest `.vsix` from the [Releases page](https://github.com/nuget-workbench/nuget-package-manager/releases), then:
+Download the latest `.vsix` from the [Releases page](https://github.com/I-Synergy/nuget-packages-manager/releases), then:
 
 ```bash
-code --install-extension nuget-package-manager-x.x.x.vsix
+code --install-extension nuget-packages-manager-x.x.x.vsix
 ```
 
 Or via the Extensions panel: click **···** → **Install from VSIX…**
@@ -281,7 +281,7 @@ Contributions are welcome — bug reports, feature requests, documentation impro
 
 ### Reporting Issues
 
-Please use the [GitHub Issues](https://github.com/nuget-workbench/nuget-package-manager/issues) tracker. Include:
+Please use the [GitHub Issues](https://github.com/I-Synergy/nuget-packages-manager/issues) tracker. Include:
 - VS Code version
 - Extension version
 - Steps to reproduce
@@ -293,8 +293,8 @@ Please use the [GitHub Issues](https://github.com/nuget-workbench/nuget-package-
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/nuget-workbench/nuget-package-manager.git
-cd nuget-package-manager
+git clone https://github.com/I-Synergy/nuget-packages-manager.git
+cd nuget-packages-manager
 
 # 2. Install dependencies
 npm install
@@ -343,7 +343,7 @@ The script (`tools/take-screenshots.mjs`) starts a local HTTP server, loads the 
 
 ```bash
 npm run package
-# → releases/nuget-package-manager-x.x.x.vsix
+# → releases/nuget-packages-manager-x.x.x.vsix
 ```
 
 ### Pull Request Guidelines
@@ -368,7 +368,7 @@ The extension runs in two isolated processes that communicate via a typed RPC la
 ┌─────────────────────────────────────────────┐   ┌──────────────────────────────────────────────┐
 │  VS Code Extension Host  (Node.js)           │   │  Webview  (Browser / Lit)                    │
 │                                             │   │                                              │
-│  extension.ts                               │   │  main.ts  →  nuget-package-manager (root element) │
+│  extension.ts                               │   │  main.ts  →  nuget-packages-manager (root element) │
 │  host-api.ts  ──  RpcHost                  │◄──►│  RpcClient  →  packages-view                │
 │  nuget/api.ts  (axios → NuGet API)         │   │  components/*  (@state, @property)           │
 │  utilities/  (csproj parser, decorator)    │   │  registrations.ts  (singletons)              │
