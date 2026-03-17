@@ -4,7 +4,7 @@
 
 ## 1.0.0 (2026-03-17)
 
-- feat: Real-time progress bar during package install/update — replaces static spinner with stage label ("Resolving…", "Updating project…", "Restoring…") and animated fill bar driven by live dotnet stdout parsing
+- feat: Animated spinner during package install/update — shows which package is being processed; spinner replaces the action button/checkbox for the duration of the operation
 - feat: Tabs (Updates, Consolidate, Vulnerabilities) auto-refresh when switched to — no manual reload needed
 - feat: Retry button on Browse tab when the package feed fails to load
 - fix: Prerelease toggle now immediately refreshes all tabs (Updates, Consolidate, Vulnerabilities), not just Browse

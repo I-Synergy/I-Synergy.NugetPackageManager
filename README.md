@@ -2,10 +2,10 @@
 
 **A full-featured NuGet package manager for Visual Studio Code** — browse, install, update, and audit packages across all your .NET projects without leaving the editor.
 
-[![Release](https://img.shields.io/github/v/release/nuget-workbench/nuget-packages-manager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=nuget-packages-manager.nuget-packages-manager)
-[![CI](https://img.shields.io/github/actions/workflow/status/nuget-workbench/nuget-packages-manager/ci.yml?label=CI)](https://github.com/I-Synergy/nuget-packages-manager/actions)
+[![Release](https://img.shields.io/github/v/release/I-Synergy/nuget-packages-manager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nuget-packages-manager)
+[![CI](https://img.shields.io/github/actions/workflow/status/I-Synergy/nuget-packages-manager/ci.yml?label=CI)](https://github.com/I-Synergy/nuget-packages-manager/actions)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.87%2B-grey)](https://code.visualstudio.com/)
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.110%2B-blue)](https://code.visualstudio.com/)
 
 ---
 
@@ -43,7 +43,7 @@
 | | Feature | Description |
 |---|---|---|
 | 📦 | **Browse & Install** | Search nuget.org and private feeds, install into one or multiple projects at once |
-| 📊 | **Real-time Progress** | Animated progress bar with live stage updates (Resolving → Updating → Restoring) during install/update |
+| 📊 | **Real-time Progress** | Animated spinner during install/update operations, showing which package is being processed |
 | 🔄 | **One-click Updates** | See all outdated packages with version diffs, update individually or all at once |
 | 🛡️ | **Vulnerability Scanning** | Color-coded CVE severity badges (Critical / High / Medium / Low) with advisory links |
 | 🔀 | **Version Consolidation** | Find and fix version inconsistencies across projects in a single click |
@@ -57,7 +57,7 @@
 
 ## Requirements
 
-- Visual Studio Code **1.87** or later
+- Visual Studio Code **1.110** or later
 - A workspace containing `.csproj`, `.fsproj`, or `.sln` files
 - **.NET SDK** installed and on `PATH` (for install / update / restore operations)
 
@@ -116,7 +116,7 @@ Search nuget.org (or any configured feed) and install packages into your project
 - **Package list** (left pane) — click any row to load full details
 - **Detail panel** (right pane) — description, authors, download count, license, tags, version picker, and per-project install/uninstall buttons
 - **Project rows** — show the currently installed version per project; install, update to a specific version, or uninstall individually
-- **Progress bar** — while an install or update runs, the spinner is replaced with a live progress bar showing the current dotnet stage and completion percentage
+- **Spinner** — while an install or update runs, an animated spinner replaces the action button, making it clear which package is being processed
 - **Error recovery** — if the package feed fails to load, a retry button appears inline
 
 ### Installed
@@ -289,7 +289,7 @@ Please use the [GitHub Issues](https://github.com/I-Synergy/nuget-packages-manag
 
 ### Development Setup
 
-**Prerequisites:** Node.js 18+, npm
+**Prerequisites:** Node.js 19+, npm
 
 ```bash
 # 1. Clone the repository
@@ -301,6 +301,9 @@ npm install
 
 # 3. Build the extension
 npm run esbuild
+
+# 4. Start the UI dev server (browser, no VS Code needed)
+npm run dev
 ```
 
 ### Running & Debugging
