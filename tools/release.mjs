@@ -42,10 +42,10 @@ if (!validBumps.includes(bumpArg) && !isExplicitVersion) {
 const isWindows = process.platform === "win32";
 
 function run(cmd, args, opts = {}) {
-  const resolvedCmd = isWindows && cmd === "npm" ? "npm.cmd" : cmd;
-  return execFileSync(resolvedCmd, args, {
+  return execFileSync(cmd, args, {
     cwd: ROOT,
     encoding: "utf-8",
+    shell: isWindows,
     ...opts,
   }).trim();
 }
