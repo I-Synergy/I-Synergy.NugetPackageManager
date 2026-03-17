@@ -215,4 +215,4 @@ export interface HostAPI {
 // RPC Timeout
 // ============================================================
 
-export const RPC_TIMEOUT_MS = 30_000;
+export const RPC_TIMEOUT_MS = 120_000;
