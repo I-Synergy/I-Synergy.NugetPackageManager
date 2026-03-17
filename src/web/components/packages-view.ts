@@ -443,6 +443,15 @@ export class PackagesView extends LitElement {
 
   setTab(tab: TabId): void {
     this.activeTab = tab;
+    void this.updateComplete.then(() => {
+      if (tab === "updates") {
+        (this.shadowRoot?.querySelector("updates-view") as UpdatesView | null)?.LoadOutdatedPackages();
+      } else if (tab === "consolidate") {
+        (this.shadowRoot?.querySelector("consolidate-view") as ConsolidateView | null)?.LoadInconsistentPackages();
+      } else if (tab === "vulnerabilities") {
+        (this.shadowRoot?.querySelector("vulnerabilities-view") as VulnerabilitiesView | null)?.LoadVulnerablePackages();
+      }
+    });
   }
 
   private async onChildPackageSelected(e: CustomEvent<{ packageId: string; sourceUrl?: string }>): Promise<void> {
