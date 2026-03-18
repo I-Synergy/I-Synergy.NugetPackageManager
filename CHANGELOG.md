@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.2 (2026-03-18)
+
 ## 1.0.1 (2026-03-17)
 
 ## 1.0.0 (2026-03-17)
@@ -31,7 +33,7 @@
 - chore: RPC timeout increased from 30 s to 120 s to handle large solution restores reliably
 - refactor: `executeAddPackage` and `executeRemovePackage` migrated from `vscode.Task` to `child_process.spawn` for stdout capture and real-time progress reporting
 
-## 1.0.3 (2026-02-20)
+## 1.0.2 (2026-02-20)
 
 - feat: Release script with dry-run mode and changelog automation (`tools/release.mjs`)
 - feat: GitHub Actions `workflow_dispatch` trigger for one-click releases via GitHub UI
