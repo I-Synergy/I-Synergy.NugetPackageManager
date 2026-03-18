@@ -107,8 +107,8 @@ export class PackageVersionDecorator implements vscode.Disposable {
             const versionMatch = /Version="([^"]+)"/.exec(tag);
 
             if (includeMatch && versionMatch) {
-                const packageId = includeMatch[1];
-                const currentVersion = versionMatch[1];
+                const packageId = includeMatch[1] ?? "";
+                const currentVersion = versionMatch[1] ?? "";
 
                 // Skip pinned versions (exact version match using [x.x.x] notation - no comma)
                 // Ranges like [1.0,2.0], (1.0,), [1.0,) etc. are NOT pinned and should show updates

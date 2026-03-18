@@ -8,7 +8,7 @@ import { SourceViewModel } from "../types";
 
 @customElement("settings-view")
 export class SettingsView extends LitElement {
-  static styles = [
+  static override styles = [
     codicon,
     scrollableBase,
     css`
@@ -127,7 +127,7 @@ export class SettingsView extends LitElement {
   @state() private newSource: SourceViewModel | null = null;
   @state() private sources: SourceViewModel[] = [];
 
-  connectedCallback(): void {
+  override connectedCallback(): void {
     super.connectedCallback();
     const config = configuration.Configuration;
     this.skipRestore = config?.SkipRestore ?? false;
@@ -252,7 +252,7 @@ export class SettingsView extends LitElement {
     `;
   }
 
-  render(): unknown {
+  override render(): unknown {
     return html`
       <div class="container">
         <div class="header">

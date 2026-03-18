@@ -42,7 +42,7 @@ const styles = css`
 
 @customElement("project-row")
 export class ProjectRow extends LitElement {
-  static styles = [codicon, sharedStyles, styles];
+  static override styles = [codicon, sharedStyles, styles];
 
   @property({ type: Object }) project!: ProjectViewModel;
   @property() packageId!: string;
@@ -133,7 +133,7 @@ export class ProjectRow extends LitElement {
     `;
   }
 
-  render() {
+  override render() {
     return html`
       <div class="project-row">
         <div class="project-title">

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as util from 'util';
 import * as os from 'os';
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { Resource } from "@opentelemetry/resources";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BasicTracerProvider, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import {
     SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
@@ -41,8 +41,12 @@ export class Logger {
         const telemetryAddress = process.env.TELEMETRY_ADDRESS;
         if (telemetryAddress && vscode.env.isTelemetryEnabled) {
             this._isEnabled = true;
+            const traceExporter = new OTLPTraceExporter({
+                url: telemetryAddress,
+            });
+
             this._provider = new BasicTracerProvider({
-                resource: new Resource({
+                resource: resourceFromAttributes({
                     [SEMRESATTRS_SERVICE_NAME]: "i-synergy-nugetpackagemanager",
                     [SEMRESATTRS_SERVICE_VERSION]: context.extension.packageJSON.version,
                     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT ?? "",
@@ -58,13 +62,8 @@ export class Logger {
                     "vscode.shell": vscode.env.shell,
                     "vscode.uiKind": vscode.env.uiKind,
                 }),
+                spanProcessors: [new SimpleSpanProcessor(traceExporter)],
             });
-
-            const traceExporter = new OTLPTraceExporter({
-                url: telemetryAddress,
-            });
-
-            this._provider.addSpanProcessor(new SimpleSpanProcessor(traceExporter));
             this._tracer = this._provider.getTracer(context.extension.id);
 
             context.subscriptions.push(new vscode.Disposable(() => {

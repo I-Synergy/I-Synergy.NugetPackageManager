@@ -36,12 +36,12 @@ class NuGetApiFactory {
       Logger.debug(`NuGetApiFactory.GetSourceApi: Returning cached API instance for ${url}`);
     }
 
-    return this._sourceApiCollection[url];
+    return this._sourceApiCollection[url] as NuGetApi;
   }
 
   public ClearCache() {
     for (const key in this._sourceApiCollection) {
-      this._sourceApiCollection[key].ClearPackageCache();
+      this._sourceApiCollection[key]?.ClearPackageCache();
       delete this._sourceApiCollection[key];
     }
     PasswordScriptExecutor.ClearCache();

@@ -188,11 +188,11 @@ suite('SearchBar Component', () => {
         // Expected: 1 (All) + 2 (Sources) = 3
         assert.strictEqual(options.length, 3);
 
-        assert.strictEqual(options[0].value, "");
-        assert.strictEqual(options[0].label, "All");
-        assert.strictEqual(options[1].value, "https://api.nuget.org/v3/index.json");
-        assert.strictEqual(options[1].label, "NuGet.org");
-        assert.strictEqual(options[2].value, "C:/LocalSource");
-        assert.strictEqual(options[2].label, "Local");
+        assert.strictEqual(options[0]!.value, "");
+        assert.strictEqual(options[0]!.label, "All");
+        assert.strictEqual(options[1]!.value, "https://api.nuget.org/v3/index.json");
+        assert.strictEqual(options[1]!.label, "NuGet.org");
+        assert.strictEqual(options[2]!.value, "C:/LocalSource");
+        assert.strictEqual(options[2]!.label, "Local");
     });
 });

@@ -64,7 +64,7 @@ export type FilterEvent = {
 
 @customElement("search-bar")
 export class SearchBar extends LitElement {
-  static styles = [codicon, sharedStyles, styles];
+  static override styles = [codicon, sharedStyles, styles];
 
   private delayedPackagesLoader = lodash.debounce(() => this.emitFilterChangedEvent(), 500);
   @state() prerelease: boolean = false;
@@ -72,7 +72,7 @@ export class SearchBar extends LitElement {
   @state() selectedSourceUrl: string = "";
   @state() sortBy: SortOption = "relevance";
 
-  connectedCallback(): void {
+  override connectedCallback(): void {
     super.connectedCallback();
     this.selectedSourceUrl = "";
     this.prerelease = configuration.Configuration?.Prerelease ?? false;
@@ -169,7 +169,7 @@ export class SearchBar extends LitElement {
     );
   }
 
-  render() {
+  override render() {
     return html`
       <div class="search-bar">
         <div class="search-bar-left">

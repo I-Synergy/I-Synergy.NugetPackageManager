@@ -61,14 +61,14 @@ const styles = css`
 
 @customElement("project-tree")
 export class ProjectTree extends LitElement {
-  static styles = [codicon, scrollableBase, styles];
+  static override styles = [codicon, scrollableBase, styles];
 
   @property({ type: Array }) projects: ProjectViewModel[] = [];
   @state() selectedPaths: string[] = [];
   @state() allChecked: boolean = true;
   @state() isIndeterminate: boolean = false;
 
-  updated(changedProperties: Map<string, unknown>): void {
+  override updated(changedProperties: Map<string, unknown>): void {
     if (changedProperties.has("projects")) {
       this.selectedPaths = this.projects.map((p) => p.Path);
       this.syncCheckboxState();
@@ -113,7 +113,7 @@ export class ProjectTree extends LitElement {
     );
   }
 
-  render() {
+  override render() {
     return html`
       <div class="tree-container" role="group" aria-label="Project selection">
         <div class="tree-header">

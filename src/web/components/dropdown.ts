@@ -9,7 +9,7 @@ export interface DropdownOption {
 
 @customElement("custom-dropdown")
 export class CustomDropdown extends LitElement {
-  static styles = [
+  static override styles = [
     codicon,
     css`
       :host {
@@ -90,7 +90,7 @@ export class CustomDropdown extends LitElement {
 
   @property({ attribute: false }) options: DropdownOption[] = [];
   @property() value: string = "";
-  @property() ariaLabel: string = "";
+  @property() override ariaLabel: string = "";
 
   @state() private open: boolean = false;
 
@@ -151,12 +151,12 @@ export class CustomDropdown extends LitElement {
     document.removeEventListener("click", this.outsideClickHandler, true);
   }
 
-  disconnectedCallback(): void {
+  override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.removeOutsideClickListener();
   }
 
-  render(): unknown {
+  override render(): unknown {
     return html`
       <button
         class="dropdown-trigger"

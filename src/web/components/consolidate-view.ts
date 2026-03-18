@@ -11,7 +11,7 @@ import { InconsistentPackageViewModel } from "../types";
 
 @customElement("consolidate-view")
 export class ConsolidateView extends LitElement {
-  static styles = [
+  static override styles = [
     codicon,
     scrollableBase,
     sharedStyles,
@@ -113,7 +113,7 @@ export class ConsolidateView extends LitElement {
 
   private loaded = false;
 
-  connectedCallback(): void {
+  override connectedCallback(): void {
     super.connectedCallback();
     if (!this.loaded) {
       this.loaded = true;
@@ -127,10 +127,10 @@ export class ConsolidateView extends LitElement {
     this.packages = [];
 
     try {
-      const result = await hostApi.getInconsistentPackages({
-        ProjectPaths: this.projectPaths.length > 0 ? this.projectPaths : undefined,
-        ForceReload: forceReload || undefined,
-      });
+      const req: Parameters<typeof hostApi.getInconsistentPackages>[0] = {};
+      if (this.projectPaths.length > 0) req.ProjectPaths = this.projectPaths;
+      if (forceReload) req.ForceReload = true;
+      const result = await hostApi.getInconsistentPackages(req);
 
       if (!result.ok) {
         this.hasError = true;
@@ -253,7 +253,7 @@ export class ConsolidateView extends LitElement {
     `;
   }
 
-  render(): unknown {
+  override render(): unknown {
     return html`
       <div class="consolidate-container" aria-busy=${this.isLoading}>
         <div class="toolbar">

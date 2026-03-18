@@ -78,8 +78,9 @@ export default class NuGetApi {
     private readonly _username?: string,
     private readonly _password?: string
   ) {
+    const proxy = this.getProxy();
     this.http = axios.create({
-      proxy: this.getProxy(),
+      ...(proxy !== undefined && { proxy }),
     });
     // Add Basic Auth if credentials are provided
     if (this._username && this._password) {
@@ -191,7 +192,7 @@ export default class NuGetApi {
     }
     
     const itemsToUse = filteredItems.length > 0 ? filteredItems : items;
-    const item = itemsToUse[itemsToUse.length - 1];
+    const item = itemsToUse[itemsToUse.length - 1]!;
     const catalogEntry = item.catalogEntry as RawCatalogEntry;
     const packageObject: Package = {
       Id: item["@id"] || "",
@@ -288,7 +289,7 @@ export default class NuGetApi {
         const targetFramework = dependencyGroup.targetFramework;
         packageDetails.dependencies.frameworks[targetFramework] = [];
         dependencyGroup.dependencies?.forEach((dependency) => {
-          packageDetails.dependencies.frameworks[targetFramework].push({
+          (packageDetails.dependencies.frameworks[targetFramework] as Array<{ package: string; versionRange: string }>).push({
             package: dependency.id,
             versionRange: dependency.range,
           });
@@ -376,8 +377,8 @@ export default class NuGetApi {
       .sort((a, b) => b["@type"].localeCompare(a["@type"]));
 
     if (matches.length > 0) {
-      Logger.debug(`NuGetApi.GetRegistrationsBaseUrl: Resolved via ${matches[0]["@type"]} -> ${matches[0]["@id"]}`);
-      return matches[0]["@id"];
+      Logger.debug(`NuGetApi.GetRegistrationsBaseUrl: Resolved via ${matches[0]?.["@type"]} -> ${matches[0]?.["@id"]}`);
+      return matches[0]?.["@id"] ?? "";
     }
 
     Logger.error("NuGetApi.GetRegistrationsBaseUrl: No RegistrationsBaseUrl found in service index");
