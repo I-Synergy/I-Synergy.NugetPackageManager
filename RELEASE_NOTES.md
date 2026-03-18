@@ -1,10 +1,3 @@
-- security: Patched 2 high-severity vulnerabilities via npm overrides (`serialize-javascript 7.0.3`, `diff 8.0.3`)
-- security: Credentials cache now expires entries after 5 minutes (TTL) to limit credential exposure window
-- refactor: Removed dead `ExecuteTask()` method — all operations go through `ExecuteCommand` with real-time stdout progress
-- chore: Updated `@opentelemetry/api` → 1.9, `@opentelemetry/exporter-trace-otlp-http` → 0.213, `jsdom` → 29
-- chore: Enabled stricter TypeScript options (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`) and fixed all resulting errors
-- ci: Build and type-check now run on every branch push and PR; publish to Marketplace runs only on push to `main`, followed by automatic git tag
-- refactor: Renamed VS Code command IDs from `i-synergy-nugetpackagemanager.*` to `nugetpackage.*`
-- docs: Corrected command IDs, setting keys, marketplace install command, and `.vsix` filename in README
-- test: Added `host-api.test.ts` covering `getProjects`, `getConfiguration`, `getOperationProgress`, `showConfirmation`, and `getPackages`
-- fix: Registered `@/` path alias for the CommonJS test runner so host-side tests resolve correctly
+- fix: Toggling prerelease no longer causes a ~15 s delay — switching prerelease no longer clears the NuGet API factory cache (only source changes do); the package cache key already includes the prerelease flag so a new state is a natural cache miss
+- fix: ClearPackageCache(id) now correctly removes all cache variants (id::true, id::false) instead of silently failing due to a key format mismatch
+- docs: Remove three settings (defaultSource, pageSize, showOutputOnError) from README that are defined in package.json but never read by the extension

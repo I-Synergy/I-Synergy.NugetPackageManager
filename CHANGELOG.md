@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.0.5 (2026-03-18)
+
+- fix: Toggling prerelease no longer causes a ~15 s delay — switching prerelease no longer clears the NuGet API factory cache (only source changes do); the package cache key already includes the prerelease flag so a new state is a natural cache miss
+- fix: `ClearPackageCache(id)` now correctly removes all cache variants (`id::true`, `id::false`) instead of silently failing due to a key format mismatch
+- docs: Remove three settings (`defaultSource`, `pageSize`, `showOutputOnError`) from README that are defined in package.json but never read by the extension
+
 ## 1.0.4 (2026-03-18)
 
 - security: Patched 2 high-severity vulnerabilities via npm overrides (`serialize-javascript 7.0.3`, `diff 8.0.3`)

@@ -662,14 +662,20 @@ export class PackagesView extends LitElement {
   }
 
   async UpdatePackagesFilters(filters: FilterEvent): Promise<void> {
-    const forceReload = this.filters.Prerelease !== filters.Prerelease;
+    const prereleaseChanged = this.filters.Prerelease !== filters.Prerelease;
     const sourceChanged = this.filters.SourceUrl !== filters.SourceUrl;
     this.filters = filters;
-    await this.LoadPackages(false, forceReload || sourceChanged);
-    await this.LoadProjectsPackages(forceReload || sourceChanged);
+    // Only clear the NuGet API factory cache when the source changes.
+    // Prerelease changes don't need it: the package cache key is "${id}::${prerelease}",
+    // so a new prerelease state already results in a natural cache miss.
+    // Clearing the factory on every prerelease toggle destroyed all NuGetApi instances,
+    // forcing expensive re-creation (config file reads, source index HTTP calls) for every
+    // installed package — causing ~15 s delays.
+    await this.LoadPackages(false, sourceChanged);
+    await this.LoadProjectsPackages(sourceChanged);
 
-    if (sourceChanged || forceReload) {
-      this.reloadChildViews(forceReload);
+    if (sourceChanged || prereleaseChanged) {
+      this.reloadChildViews(sourceChanged);
     }
   }
 
