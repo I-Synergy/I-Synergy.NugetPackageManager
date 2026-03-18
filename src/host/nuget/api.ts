@@ -120,6 +120,7 @@ export default class NuGetApi {
       TotalDownloads: item.totalDownloads || 0,
       Verified: item.verified || false,
       Version: item.version || "",
+      InstalledVersion: "",
       Versions:
         item.versions.map((v) => ({
           Version: v.version,
@@ -161,7 +162,7 @@ export default class NuGetApi {
         const page: RawRegistrationPage = result.data.items[i];
         if (page.items) items.push(...page.items);
         else {
-          const pageData = await this.http.get(page["@id"]);
+          const pageData = await this.http.get(page["@id"] as string);
           if (pageData instanceof AxiosError) {
             Logger.error("NuGetApi.GetPackageAsync: Axios Error while loading page data:", pageData.message);
           } else {
@@ -191,7 +192,7 @@ export default class NuGetApi {
     
     const itemsToUse = filteredItems.length > 0 ? filteredItems : items;
     const item = itemsToUse[itemsToUse.length - 1];
-    const catalogEntry = item.catalogEntry;
+    const catalogEntry = item.catalogEntry as RawCatalogEntry;
     const packageObject: Package = {
       Id: item["@id"] || "",
       Name: catalogEntry?.id || "",
