@@ -125,7 +125,7 @@ export class VulnerabilitiesView extends LitElement {
     }
   }
 
-  async LoadVulnerablePackages(): Promise<void> {
+  async LoadVulnerablePackages(forceReload: boolean = false): Promise<void> {
     this.isLoading = true;
     this.hasError = false;
     this.packages = [];
@@ -133,6 +133,7 @@ export class VulnerabilitiesView extends LitElement {
     try {
       const result = await hostApi.getVulnerablePackages({
         ProjectPaths: this.projectPaths.length > 0 ? this.projectPaths : undefined,
+        ForceReload: forceReload || undefined,
       });
 
       if (!result.ok) {

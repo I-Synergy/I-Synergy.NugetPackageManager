@@ -8,7 +8,7 @@
 
 ## Project Overview
 
-**Extension ID:** `nuget-packages-manager.nuget-packages-manager`
+**Extension ID:** `I-Synergy.NugetPackageManager.I-Synergy.NugetPackageManager`
 **Purpose:** VS Code extension for browsing, installing, updating, and auditing NuGet packages across .NET projects without leaving the editor.
 **Stack:** TypeScript, Node.js (host), Lit (webview), dotnet CLI, typed RPC over postMessage
 **Phase:** Active development — post-fork hardening

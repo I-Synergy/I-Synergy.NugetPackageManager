@@ -33,7 +33,7 @@ export class Logger {
 
         this.updateLogLevel();
         context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('NugetPackageManager.logLevel')) {
+            if (e.affectsConfiguration('i-synergy-nugetpackagemanager.logLevel')) {
                 this.updateLogLevel();
             }
         }));
@@ -43,7 +43,7 @@ export class Logger {
             this._isEnabled = true;
             this._provider = new BasicTracerProvider({
                 resource: new Resource({
-                    [SEMRESATTRS_SERVICE_NAME]: "nuget-packages-manager",
+                    [SEMRESATTRS_SERVICE_NAME]: "i-synergy-nugetpackagemanager",
                     [SEMRESATTRS_SERVICE_VERSION]: context.extension.packageJSON.version,
                     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT,
                     [SEMRESATTRS_DEVICE_ID]: vscode.env.machineId,
@@ -88,7 +88,7 @@ export class Logger {
     }
 
     private static updateLogLevel(): void {
-        const logLevel = vscode.workspace.getConfiguration('NugetPackageManager').get<string>('logLevel', 'INFO');
+        const logLevel = vscode.workspace.getConfiguration('i-synergy-nugetpackagemanager').get<string>('logLevel', 'INFO');
         this._logLevel = this._logLevels[logLevel] ?? 1;
     }
 

@@ -507,14 +507,14 @@ export class PackagesView extends LitElement {
     this.debouncedLoadProjectsPackages();
   }
 
-  private reloadChildViews(): void {
+  private reloadChildViews(forceReload: boolean = false): void {
     void this.updateComplete.then(() => {
       const updates = this.shadowRoot?.querySelector("updates-view") as UpdatesView | null;
       const consolidate = this.shadowRoot?.querySelector("consolidate-view") as ConsolidateView | null;
       const vulnerabilities = this.shadowRoot?.querySelector("vulnerabilities-view") as VulnerabilitiesView | null;
-      updates?.LoadOutdatedPackages();
-      consolidate?.LoadInconsistentPackages();
-      vulnerabilities?.LoadVulnerablePackages();
+      updates?.LoadOutdatedPackages(forceReload);
+      consolidate?.LoadInconsistentPackages(forceReload);
+      vulnerabilities?.LoadVulnerablePackages(forceReload);
     });
   }
 
@@ -668,7 +668,7 @@ export class PackagesView extends LitElement {
     await this.LoadProjectsPackages(forceReload || sourceChanged);
 
     if (sourceChanged || forceReload) {
-      this.reloadChildViews();
+      this.reloadChildViews(forceReload);
     }
   }
 
@@ -727,7 +727,7 @@ export class PackagesView extends LitElement {
   ): Promise<void> {
     await this.LoadPackages(false, forceReload);
     await this.LoadProjects(forceReload);
-    this.reloadChildViews();
+    this.reloadChildViews(forceReload);
   }
 
   async LoadPackages(

@@ -136,17 +136,22 @@ export class SettingsView extends LitElement {
   }
 
   private async updateConfiguration(): Promise<void> {
+    const sources = this.sources.map((x) => x.GetModel());
+    configuration.UpdateLocal({
+      SkipRestore: this.skipRestore,
+      EnablePackageVersionInlineInfo: this.enablePackageVersionInlineInfo,
+      Sources: sources,
+    });
     await hostApi.updateConfiguration({
       Configuration: {
         SkipRestore: this.skipRestore,
         EnablePackageVersionInlineInfo: this.enablePackageVersionInlineInfo,
         Prerelease: configuration.Configuration?.Prerelease ?? false,
-        Sources: this.sources.map((x) => x.GetModel()),
+        Sources: sources,
         StatusBarLoadingIndicator:
           configuration.Configuration?.StatusBarLoadingIndicator ?? false,
       },
     });
-    await configuration.Reload();
   }
 
   private addSourceRow(): void {

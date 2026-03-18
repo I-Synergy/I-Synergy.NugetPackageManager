@@ -275,7 +275,7 @@ export function createHostAPI(): HostAPI {
         }
       }
 
-      const skipRestoreConfig = vscode.workspace.getConfiguration("NugetPackageManager").get<string>("skipRestore") ?? "";
+      const skipRestoreConfig = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") ?? "";
       const isCpmEnabled = await CpmResolver.GetPackageVersions(request.ProjectPath) !== null;
       const skipRestore = !!skipRestoreConfig && !isCpmEnabled;
 
@@ -305,12 +305,7 @@ export function createHostAPI(): HostAPI {
 
     async getConfiguration(): Promise<Result<GetConfigurationResponse>> {
       Logger.info("getConfiguration: Retrieving configuration");
-      let config = vscode.workspace.getConfiguration("NugetPackageManager");
-      try {
-        await config.update("sources", undefined, vscode.ConfigurationTarget.Workspace);
-        await config.update("skipRestore", undefined, vscode.ConfigurationTarget.Workspace);
-      } catch { /* workspace config cleanup */ }
-      config = vscode.workspace.getConfiguration("NugetPackageManager");
+      const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
 
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       const sourcesWithCreds = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
@@ -351,7 +346,7 @@ export function createHostAPI(): HostAPI {
 
     async updateConfiguration(request: UpdateConfigurationRequest): Promise<Result<void>> {
       Logger.info("updateConfiguration: Updating configuration");
-      const config = vscode.workspace.getConfiguration("NugetPackageManager");
+      const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
 
       const sources = request.Configuration.Sources.map((x) =>
         JSON.stringify({
@@ -361,10 +356,20 @@ export function createHostAPI(): HostAPI {
         })
       );
 
-      await config.update("skipRestore", request.Configuration.SkipRestore, vscode.ConfigurationTarget.Global);
-      await config.update("enablePackageVersionInlineInfo", request.Configuration.EnablePackageVersionInlineInfo, vscode.ConfigurationTarget.Global);
-      await config.update("prerelease", request.Configuration.Prerelease, vscode.ConfigurationTarget.Global);
-      await config.update("sources", sources, vscode.ConfigurationTarget.Global);
+      if (config.get("skipRestore") !== request.Configuration.SkipRestore) {
+        await config.update("skipRestore", request.Configuration.SkipRestore, vscode.ConfigurationTarget.Global);
+      }
+      if (config.get("enablePackageVersionInlineInfo") !== request.Configuration.EnablePackageVersionInlineInfo) {
+        await config.update("enablePackageVersionInlineInfo", request.Configuration.EnablePackageVersionInlineInfo, vscode.ConfigurationTarget.Global);
+      }
+      if (config.get("prerelease") !== request.Configuration.Prerelease) {
+        await config.update("prerelease", request.Configuration.Prerelease, vscode.ConfigurationTarget.Global);
+      }
+      const currentSources = config.get<string[]>("sources") ?? [];
+      if (JSON.stringify(currentSources) !== JSON.stringify(sources)) {
+        await config.update("sources", sources, vscode.ConfigurationTarget.Global);
+      }
+
       Logger.info("updateConfiguration: Configuration updated successfully");
       return ok(undefined as void);
     },
@@ -387,6 +392,10 @@ export function createHostAPI(): HostAPI {
     async getOutdatedPackages(request: GetOutdatedPackagesRequest): Promise<Result<GetOutdatedPackagesResponse>> {
       Logger.info("getOutdatedPackages: Checking for outdated packages");
       StatusBarUtils.show(0, "Checking for updates...");
+
+      if (request.ForceReload) {
+        nugetApiFactory.ClearCache();
+      }
 
       try {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -507,7 +516,7 @@ export function createHostAPI(): HostAPI {
           for (const projectPath of update.ProjectPaths) {
             const isCpm = await CpmResolver.GetPackageVersions(projectPath) !== null;
             const skipRestore =
-              !!vscode.workspace.getConfiguration("NugetPackageManager").get<string>("skipRestore") && !isCpm;
+              !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") && !isCpm;
 
             await executeAddPackage(update.PackageId, projectPath, update.Version, skipRestore);
           }
@@ -610,6 +619,13 @@ export function createHostAPI(): HostAPI {
       try {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
+
+        if (request.ForceReload) {
+          for (const source of sources) {
+            const api = await nugetApiFactory.GetSourceApi(source.Url);
+            api.ClearVulnerabilityCache();
+          }
+        }
 
         if (sources.length === 0) {
           return ok({ Packages: [] });
@@ -761,7 +777,7 @@ export function createHostAPI(): HostAPI {
 
           const isCpm = await CpmResolver.GetPackageVersions(projectPath) !== null;
           const skipRestore =
-            !!vscode.workspace.getConfiguration("NugetPackageManager").get<string>("skipRestore") && !isCpm;
+            !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") && !isCpm;
 
           await executeAddPackage(request.PackageId, projectPath, request.TargetVersion, skipRestore);
         }

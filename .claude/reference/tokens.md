@@ -17,7 +17,7 @@
 | `src/host/host-api.ts` | Host-side implementation of all RPC methods |
 | `src/host/utilities/task-executor.ts` | dotnet CLI execution + progress tracking |
 | `src/web/registrations.ts` | Module-level singletons: `hostApi`, `router`, `configuration` |
-| `src/web/main.ts` | Webview entry point + root `nuget-packages-manager` component |
+| `src/web/main.ts` | Webview entry point + root `I-Synergy.NugetPackageManager` component |
 | `src/host/extension.ts` | Extension activation, RpcHost setup |
 | `esbuild.js` | Dual bundle build config |
 | `.vscode-test.mjs` | Test runner configuration |

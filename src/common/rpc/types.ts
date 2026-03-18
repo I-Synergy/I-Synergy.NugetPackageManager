@@ -56,11 +56,11 @@ export type GetOutdatedPackagesRequest = CacheControl & {
   SourceUrl?: string;
 };
 
-export type GetInconsistentPackagesRequest = {
+export type GetInconsistentPackagesRequest = CacheControl & {
   ProjectPaths?: string[];
 };
 
-export type GetVulnerablePackagesRequest = {
+export type GetVulnerablePackagesRequest = CacheControl & {
   ProjectPaths?: string[];
 };
 
