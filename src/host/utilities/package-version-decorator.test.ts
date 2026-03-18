@@ -2,7 +2,6 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { PackageVersionDecorator } from './package-version-decorator';
 import nugetApiFactory from '../nuget/api-factory';
 import NuGetConfigResolver from './nuget-config-resolver';
@@ -12,8 +11,8 @@ suite('PackageVersionDecorator Tests', () => {
     let sandbox: sinon.SinonSandbox;
     let createTextEditorDecorationTypeStub: sinon.SinonStub;
     let getConfigurationStub: sinon.SinonStub;
-    let loggerDebugStub: sinon.SinonStub;
-    let loggerWarnStub: sinon.SinonStub;
+    let _loggerDebugStub: sinon.SinonStub;
+    let _loggerWarnStub: sinon.SinonStub;
     let loggerErrorStub: sinon.SinonStub;
     let getSourcesStub: sinon.SinonStub;
     let getSourceApiStub: sinon.SinonStub;
@@ -28,8 +27,8 @@ suite('PackageVersionDecorator Tests', () => {
         decorator = undefined;
         
         // Mock Logger
-        loggerDebugStub = sandbox.stub(Logger, 'debug');
-        loggerWarnStub = sandbox.stub(Logger, 'warn');
+        _loggerDebugStub = sandbox.stub(Logger, 'debug');
+        _loggerWarnStub = sandbox.stub(Logger, 'warn');
         loggerErrorStub = sandbox.stub(Logger, 'error');
 
         // Mock vscode.window.createTextEditorDecorationType

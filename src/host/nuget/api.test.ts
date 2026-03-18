@@ -1,16 +1,15 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
-import axios, { AxiosError, AxiosResponse } from 'axios';
 import NuGetApi from './api';
 import { Logger } from '../../common/logger';
 
 suite('NuGetApi Tests', () => {
     let sandbox: sinon.SinonSandbox;
-    let axiosGetStub: sinon.SinonStub;
+    let _axiosGetStub: sinon.SinonStub;
     let loggerDebugStub: sinon.SinonStub;
     let loggerErrorStub: sinon.SinonStub;
-    let loggerInfoStub: sinon.SinonStub;
+    let _loggerInfoStub: sinon.SinonStub;
 
     // Mock NuGet service index response
     const mockServiceIndex = {
@@ -82,7 +81,7 @@ suite('NuGetApi Tests', () => {
         // Mock Logger
         loggerDebugStub = sandbox.stub(Logger, 'debug');
         loggerErrorStub = sandbox.stub(Logger, 'error');
-        loggerInfoStub = sandbox.stub(Logger, 'info');
+        _loggerInfoStub = sandbox.stub(Logger, 'info');
         
         // Mock vscode workspace configuration
         sandbox.stub(vscode.workspace, 'getConfiguration').returns({

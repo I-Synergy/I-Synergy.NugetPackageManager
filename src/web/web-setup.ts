@@ -3,11 +3,13 @@ import * as path from 'path';
 import * as tsConfigPaths from 'tsconfig-paths';
 import * as Module from 'module';
 
+type RequireFunction = (id: string) => unknown;
+
 // Hook require to ignore pure CSS files but allow .css.ts/.css.js modules through.
 // Components import styles like `@/web/styles/codicon.css` which resolve to `.css.js`
 // files after compilation. We must let those through so Lit gets CSSResult objects.
-const originalRequire = (Module as any).prototype.require;
-(Module as any).prototype.require = function(id: string) {
+const originalRequire = (Module as unknown as { prototype: { require: RequireFunction } }).prototype.require;
+(Module as unknown as { prototype: { require: RequireFunction } }).prototype.require = function(id: string) {
     if (typeof id === 'string' && id.endsWith('.css')) {
         // Try loading the module normally first (handles .css.js compiled from .css.ts)
         try {
@@ -35,21 +37,23 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     pretendToBeVisual: true
 });
 
-(global as any).window = dom.window;
-(global as any).document = dom.window.document;
-(global as any).HTMLElement = dom.window.HTMLElement;
-(global as any).customElements = dom.window.customElements;
-(global as any).Node = dom.window.Node;
-(global as any).Event = dom.window.Event;
-(global as any).InputEvent = dom.window.InputEvent;
-(global as any).KeyboardEvent = dom.window.KeyboardEvent;
-(global as any).MouseEvent = dom.window.MouseEvent;
-(global as any).CustomEvent = dom.window.CustomEvent;
-(global as any).MutationObserver = dom.window.MutationObserver;
-(global as any).HTMLStyleElement = dom.window.HTMLStyleElement; // Required for Lit element styles
+const g = global as unknown as Record<string, unknown>;
+g.window = dom.window;
+g.document = dom.window.document;
+g.HTMLElement = dom.window.HTMLElement;
+g.customElements = dom.window.customElements;
+g.Node = dom.window.Node;
+g.Event = dom.window.Event;
+g.InputEvent = dom.window.InputEvent;
+g.KeyboardEvent = dom.window.KeyboardEvent;
+g.MouseEvent = dom.window.MouseEvent;
+g.CustomEvent = dom.window.CustomEvent;
+g.MutationObserver = dom.window.MutationObserver;
+g.HTMLStyleElement = dom.window.HTMLStyleElement; // Required for Lit element styles
 
 // Polyfill window.matchMedia
-(global as any).window.matchMedia = (global as any).window.matchMedia || function() {
+const gWindow = dom.window as unknown as Record<string, unknown>;
+gWindow.matchMedia = gWindow.matchMedia || function() {
     return {
         matches: false,
         addListener: function() {},
@@ -58,12 +62,12 @@ const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
 };
 
 // Polyfill acquireVsCodeApi
-(global as any).window.acquireVsCodeApi = () => ({
+gWindow.acquireVsCodeApi = () => ({
     postMessage: () => {},
     setState: () => {},
     getState: () => {}
 });
-(global as any).acquireVsCodeApi = (global as any).window.acquireVsCodeApi;
+g.acquireVsCodeApi = gWindow.acquireVsCodeApi;
 
 // Polyfill navigator (for Axios)
 Object.defineProperty(global, 'navigator', {
@@ -72,5 +76,5 @@ Object.defineProperty(global, 'navigator', {
 });
 
 // RequestAnimationFrame polyfill (LitElement uses it)
-(global as any).requestAnimationFrame = (callback: any) => setTimeout(callback, 0);
-(global as any).cancelAnimationFrame = (id: any) => clearTimeout(id);
+g.requestAnimationFrame = (callback: FrameRequestCallback) => setTimeout(callback, 0);
+g.cancelAnimationFrame = (id: number) => clearTimeout(id);

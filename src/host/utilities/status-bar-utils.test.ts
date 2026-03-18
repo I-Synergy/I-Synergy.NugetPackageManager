@@ -5,7 +5,7 @@ import StatusBarUtils from './status-bar-utils';
 
 suite('StatusBarUtils Tests', () => {
     let sandbox: sinon.SinonSandbox;
-    let getConfigurationStub: sinon.SinonStub;
+    let _getConfigurationStub: sinon.SinonStub;
     let createStatusBarItemStub: sinon.SinonStub;
     let mockStatusBarItem: {
         text: string;
@@ -36,7 +36,7 @@ suite('StatusBarUtils Tests', () => {
     });
 
     function mockConfig(statusBarLoadingIndicator: boolean) {
-        getConfigurationStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+        _getConfigurationStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns({
             get: sandbox.stub().callsFake((key: string) => {
                 if (key === 'statusBarLoadingIndicator') {
                     return statusBarLoadingIndicator;

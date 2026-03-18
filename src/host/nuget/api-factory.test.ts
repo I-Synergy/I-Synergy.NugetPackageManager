@@ -9,7 +9,7 @@ import { Logger } from '../../common/logger';
 suite('NuGetApiFactory Tests', () => {
     let sandbox: sinon.SinonSandbox;
     let getSourcesStub: sinon.SinonStub;
-    let workspaceFoldersStub: sinon.SinonStub;
+    let _workspaceFoldersStub: sinon.SinonStub;
     let loggerDebugStub: sinon.SinonStub;
     let loggerInfoStub: sinon.SinonStub;
     let loggerWarnStub: sinon.SinonStub;
@@ -25,7 +25,7 @@ suite('NuGetApiFactory Tests', () => {
         getSourcesStub = sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswords');
         getSourcesStub.resolves([]);
 
-        workspaceFoldersStub = sandbox.stub(vscode.workspace, 'workspaceFolders').value([
+        _workspaceFoldersStub = sandbox.stub(vscode.workspace, 'workspaceFolders').value([
             { uri: { fsPath: '/workspace' } }
         ]);
 
@@ -102,7 +102,7 @@ suite('NuGetApiFactory Tests', () => {
         });
 
         test('should use workspace root when available', async () => {
-            workspaceFoldersStub = sandbox.stub(vscode.workspace, 'workspaceFolders').value([
+            _workspaceFoldersStub = sandbox.stub(vscode.workspace, 'workspaceFolders').value([
                 { uri: { fsPath: '/my/workspace' } }
             ]);
 

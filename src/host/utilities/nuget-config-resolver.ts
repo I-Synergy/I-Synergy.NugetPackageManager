@@ -224,9 +224,10 @@ export default class NuGetConfigResolver {
     }
 
     const sourceNodes = xpath.select("//packageSources/add", document) as Node[];
-    sourceNodes.forEach((node: any) => {
-      const name = node.attributes?.getNamedItem("key")?.value;
-      const url = node.attributes?.getNamedItem("value")?.value;
+    sourceNodes.forEach((node) => {
+      const el = node as Element;
+      const name = el.attributes?.getNamedItem("key")?.value;
+      const url = el.attributes?.getNamedItem("value")?.value;
 
       if (name && url) {
         sources.push({
@@ -237,9 +238,10 @@ export default class NuGetConfigResolver {
     });
 
     const disabledNodes = xpath.select("//disabledPackageSources/add", document) as Node[];
-    disabledNodes.forEach((node: any) => {
-      const name = node.attributes?.getNamedItem("key")?.value;
-      const disabled = node.attributes?.getNamedItem("value")?.value;
+    disabledNodes.forEach((node) => {
+      const el = node as Element;
+      const name = el.attributes?.getNamedItem("key")?.value;
+      const disabled = el.attributes?.getNamedItem("value")?.value;
 
       if (name && disabled === "true") {
         disabledSources.push(name);
@@ -247,7 +249,7 @@ export default class NuGetConfigResolver {
     });
 
     const credentialNodes = xpath.select("//packageSourceCredentials/*", document) as Node[];
-    credentialNodes.forEach((sourceNode: any) => {
+    credentialNodes.forEach((sourceNode) => {
       const parsed = this.ParseCredentialNode(sourceNode);
       if (parsed) {
         credentials.set(parsed.name, parsed.cred);

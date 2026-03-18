@@ -2,6 +2,53 @@ import axios, { AxiosError, AxiosInstance, AxiosProxyConfig, AxiosRequestConfig,
 import * as vscode from "vscode";
 import { Logger } from "../../common/logger";
 
+type RawPackageSearchItem = {
+  "@id": string;
+  id: string;
+  authors: string[];
+  description: string;
+  iconUrl: string;
+  registration: string;
+  licenseUrl: string;
+  projectUrl: string;
+  totalDownloads: number;
+  verified: boolean;
+  version: string;
+  versions: Array<{ version: string; "@id": string }>;
+  tags: string[];
+};
+
+type RawCatalogItem = {
+  "@id": string;
+  catalogEntry: RawCatalogEntry | string;
+};
+
+type RawCatalogEntry = {
+  "@id"?: string;
+  id: string;
+  version: string;
+  authors?: string | string[];
+  description?: string;
+  iconUrl?: string;
+  registration?: string;
+  licenseUrl?: string;
+  projectUrl?: string;
+  totalDownloads?: number;
+  verified?: boolean;
+  tags?: string[];
+  dependencyGroups?: RawDependencyGroup[];
+};
+
+type RawDependencyGroup = {
+  targetFramework: string;
+  dependencies?: Array<{ id: string; range: string }>;
+};
+
+type RawRegistrationPage = {
+  "@id"?: string;
+  items?: RawCatalogItem[];
+};
+
 type GetPackagesResponse = {
   data: Array<Package>;
 };
@@ -61,7 +108,7 @@ export default class NuGetApi {
         semVerLevel: "2.0.0",
       },
     });
-    const mappedData: Array<Package> = result.data.data.map((item: any) => ({
+    const mappedData: Array<Package> = (result.data.data as RawPackageSearchItem[]).map((item) => ({
       Id: item["@id"] || "",
       Name: item.id || "",
       Authors: item.authors || [],
@@ -74,7 +121,7 @@ export default class NuGetApi {
       Verified: item.verified || false,
       Version: item.version || "",
       Versions:
-        item.versions.map((v: any) => ({
+        item.versions.map((v) => ({
           Version: v.version,
           Id: v["@id"],
         })) || [],
@@ -97,7 +144,7 @@ export default class NuGetApi {
     Logger.debug(`NuGetApi.GetPackageAsync: Fetching package info for ${id} (prerelease: ${prerelease})`);
     await this.EnsureSearchUrl();
     const url = new URL([id.toLowerCase(), "index.json"].join("/"), this._packageInfoUrl).href;
-    const items: Array<any> = [];
+    const items: RawCatalogItem[] = [];
     try {
       Logger.debug(`NuGetApi.GetPackageAsync: GET ${url}`);
       const result = await this.http.get(url);
@@ -111,14 +158,14 @@ export default class NuGetApi {
       }
 
       for (let i = 0; i < result.data.count; i++) {
-        const page = result.data.items[i];
+        const page: RawRegistrationPage = result.data.items[i];
         if (page.items) items.push(...page.items);
         else {
           const pageData = await this.http.get(page["@id"]);
           if (pageData instanceof AxiosError) {
             Logger.error("NuGetApi.GetPackageAsync: Axios Error while loading page data:", pageData.message);
           } else {
-            items.push(...pageData.data.items);
+            items.push(...(pageData.data.items as RawCatalogItem[]));
           }
         }
       }
@@ -130,9 +177,12 @@ export default class NuGetApi {
     
     // Filter versions based on prerelease flag
     // Prerelease versions contain a hyphen (e.g., 1.0.0-beta)
-    const filteredItems = prerelease 
-      ? items 
-      : items.filter((v: any) => !v.catalogEntry?.version?.includes('-'));
+    const filteredItems = prerelease
+      ? items
+      : items.filter((v) => {
+          const entry = typeof v.catalogEntry === 'object' ? v.catalogEntry as RawCatalogEntry : null;
+          return !entry?.version?.includes('-');
+        });
     
     if (!prerelease && filteredItems.length <= 0) {
       // If no stable versions found, fall back to all versions
@@ -156,8 +206,8 @@ export default class NuGetApi {
       Version: catalogEntry?.version || "",
       InstalledVersion: "",
       Versions:
-        itemsToUse.map((v: any) => ({
-          Version: v.catalogEntry.version,
+        itemsToUse.map((v) => ({
+          Version: (v.catalogEntry as RawCatalogEntry).version,
           Id: v["@id"],
         })) || [],
       Tags: catalogEntry?.tags || [],
@@ -198,7 +248,7 @@ export default class NuGetApi {
       }
       
       const catalogEntry = packageVersion.data.catalogEntry;
-      let catalogData: any;
+      let catalogData: RawCatalogEntry;
       
       // Check if catalogEntry is an embedded object with dependencyGroups (some feeds embed the data)
       // or if it's a URL/object with @id that needs to be fetched
@@ -233,10 +283,10 @@ export default class NuGetApi {
       const dependencyGroupCount = catalogData?.dependencyGroups?.length || 0;
       Logger.debug(`NuGetApi.GetPackageDetailsAsync: Found ${dependencyGroupCount} dependency groups`);
 
-      catalogData?.dependencyGroups?.forEach((dependencyGroup: any) => {
+      catalogData?.dependencyGroups?.forEach((dependencyGroup: RawDependencyGroup) => {
         const targetFramework = dependencyGroup.targetFramework;
         packageDetails.dependencies.frameworks[targetFramework] = [];
-        dependencyGroup.dependencies?.forEach((dependency: any) => {
+        dependencyGroup.dependencies?.forEach((dependency) => {
           packageDetails.dependencies.frameworks[targetFramework].push({
             package: dependency.id,
             versionRange: dependency.range,
@@ -333,16 +383,16 @@ export default class NuGetApi {
     return "";
   }
 
-  private async GetUrlFromNugetDefinition(response: any, type: string): Promise<string> {
-    const resource = response.data.resources.find((x: any) => x["@type"].includes(type));
+  private async GetUrlFromNugetDefinition(response: AxiosResponse, type: string): Promise<string> {
+    const resource = (response.data.resources as Array<{ "@type": string; "@id": string }>).find((x) => x["@type"].includes(type));
     if (resource != null) return resource["@id"];
     else return "";
   }
 
   private async ExecuteGet(
     url: string,
-    config?: AxiosRequestConfig<any> | undefined
-  ): Promise<AxiosResponse<any, any>> {
+    config?: AxiosRequestConfig | undefined
+  ): Promise<AxiosResponse> {
     Logger.debug(`NuGetApi.ExecuteGet: Requesting ${url}`);
     const response = await this.http.get(url, config);
     if (response instanceof AxiosError) {
