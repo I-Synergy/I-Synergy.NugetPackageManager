@@ -222,7 +222,13 @@ export default class NuGetApi {
 
   public ClearPackageCache(packageId?: string) {
     if (packageId) {
-      this._packageCache.delete(packageId.toLowerCase());
+      // Cache keys are "${id}::${prerelease}" — delete all variants for this id.
+      const prefix = packageId.toLowerCase() + "::";
+      for (const key of this._packageCache.keys()) {
+        if (key.startsWith(prefix)) {
+          this._packageCache.delete(key);
+        }
+      }
     } else {
       this._packageCache.clear();
     }
