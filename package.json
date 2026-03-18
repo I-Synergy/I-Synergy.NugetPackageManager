@@ -186,7 +186,7 @@
     "@types/vscode": "^1.110.0",
     "@types/vscode-webview": "^1.57.5",
     "@vscode/codicons": "^0.0.45",
-    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.3.9",
     "esbuild": "^0.27.4",
     "eslint": "^9.39.2",
@@ -204,7 +204,8 @@
   "overrides": {
     "@tsconfig/node14": "1.0.3",
     "bidi-js": "1.0.3",
-    "core-util-is": "1.0.3"
+    "core-util-is": "1.0.3",
+    "glob": "13.0.6"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.8.0",
