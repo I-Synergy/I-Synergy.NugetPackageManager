@@ -65,7 +65,7 @@ export default class ProjectParser {
            }
       }
 
-      const packageId = el.attributes?.getNamedItem("Include").value;
+      const packageId = el.attributes?.getNamedItem("Include")?.value ?? "";
 
       // Check for VersionOverride attribute (CPM override at project level)
       let versionOverride = el.attributes?.getNamedItem("VersionOverride")?.value;
