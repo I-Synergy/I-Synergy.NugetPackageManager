@@ -11,7 +11,7 @@ type DetailTab = "description" | "dependencies" | "versions";
 
 @customElement("package-details")
 export class PackageDetailsComponent extends LitElement {
-  static styles = [
+  static override styles = [
     codicon,
     sharedStyles,
     css`
@@ -185,14 +185,14 @@ export class PackageDetailsComponent extends LitElement {
   @state() packageDetails?: PackageDetails;
   @state() activeTab: DetailTab = "description";
 
-  protected updated(changedProps: PropertyValues): void {
+  protected override updated(changedProps: PropertyValues): void {
     if (changedProps.has("source") || changedProps.has("packageVersionUrl")) {
       this.reloadDependencies();
     }
   }
 
   private async reloadDependencies(): Promise<void> {
-    this.packageDetails = undefined;
+    this.packageDetails = undefined as unknown as PackageDetails;
 
     if (!this.source) return;
     if (!this.packageVersionUrl) return;
@@ -201,7 +201,7 @@ export class PackageDetailsComponent extends LitElement {
     const request: GetPackageDetailsRequest = {
       PackageVersionUrl: this.packageVersionUrl,
       Url: this.source,
-      PasswordScriptPath: this.passwordScriptPath,
+      ...(this.passwordScriptPath !== undefined && { PasswordScriptPath: this.passwordScriptPath }),
     };
 
     const result = await hostApi.getPackageDetails(request);
@@ -343,7 +343,7 @@ export class PackageDetailsComponent extends LitElement {
     }
   }
 
-  render(): unknown {
+  override render(): unknown {
     return html`
       <div class="detail-tabs" role="tablist">
         <button

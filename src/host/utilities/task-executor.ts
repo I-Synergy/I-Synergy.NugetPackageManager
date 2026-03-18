@@ -1,6 +1,5 @@
 import { Mutex } from "async-mutex";
 import { spawn } from "child_process";
-import * as vscode from "vscode";
 import { Logger } from "../../common/logger";
 
 export interface OperationProgress {
@@ -84,46 +83,6 @@ export class TaskExecutor {
 
   GetProgress(operationId: string): OperationProgress | null {
     return this.progress.get(operationId) ?? null;
-  }
-
-  async ExecuteTask(task: vscode.Task): Promise<void> {
-    Logger.info(`TaskExecutor.ExecuteTask: Executing task ${task.name}`);
-
-    if (task.execution instanceof vscode.ShellExecution) {
-      const shellExec = task.execution as vscode.ShellExecution;
-      const args = typeof shellExec.args === 'string' ? shellExec.args : (shellExec.args || []).map(a => typeof a === 'string' ? a : a.value).join(' ');
-      Logger.debug(`TaskExecutor.ExecuteTask: Shell command: ${shellExec.commandLine || shellExec.command} ${args}`);
-    } else if (task.execution instanceof vscode.ProcessExecution) {
-      const procExec = task.execution as vscode.ProcessExecution;
-      Logger.debug(`TaskExecutor.ExecuteTask: Process: ${procExec.process} ${(procExec.args || []).join(' ')}`);
-    }
-
-    const releaser = await this.globalMutex.acquire();
-    const mutex = new Mutex();
-    const release = await mutex.acquire();
-    const execution = await vscode.tasks.executeTask(task);
-
-    let settled = false;
-    const timeoutHandle = setTimeout(() => {
-      if (!settled) {
-        settled = true;
-        Logger.error(`TaskExecutor.ExecuteTask: Task ${task.name} timed out after 120s`);
-        release();
-      }
-    }, 120_000);
-
-    const callback = vscode.tasks.onDidEndTask((x) => {
-      if (x.execution.task == execution.task && !settled) {
-        settled = true;
-        Logger.info(`TaskExecutor.ExecuteTask: Task ${task.name} completed`);
-        clearTimeout(timeoutHandle);
-        release();
-      }
-    });
-
-    await mutex.waitForUnlock();
-    releaser();
-    callback.dispose();
   }
 }
 

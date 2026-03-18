@@ -158,7 +158,7 @@ const styles = css`
 
 @customElement("package-row")
 export class PackageRow extends LitElement {
-  static styles = [codicon, sharedStyles, styles];
+  static override styles = [codicon, sharedStyles, styles];
 
   @property({ type: Boolean }) showInstalledVersion!: boolean;
   @property() updateVersion: string = "";
@@ -220,7 +220,7 @@ export class PackageRow extends LitElement {
     `;
   }
 
-  render() {
+  override render() {
     if (!this.package) {
       return nothing;
     }

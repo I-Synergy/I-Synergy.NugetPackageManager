@@ -159,8 +159,8 @@ if (dryRun) {
   console.log("  2. Update CHANGELOG.md");
   console.log("  3. Write RELEASE_NOTES.md");
   console.log(`  4. git commit -m "chore: release ${tag}"`);
-  console.log(`  5. git tag ${tag}`);
-  console.log("  6. git push origin main --follow-tags");
+  console.log("  5. git push origin main");
+  console.log(`  (CI will tag ${tag} and publish after build/test passes)`);
   process.exit(0);
 }
 
@@ -192,13 +192,9 @@ console.log("Committing...");
 git("add", "package.json", "package-lock.json", "CHANGELOG.md", "RELEASE_NOTES.md");
 git("commit", "-m", `chore: release ${tag}`);
 
-// 5. Tag
-console.log(`Tagging ${tag}...`);
-git("tag", tag);
-
-// 6. Push
+// 5. Push
 console.log("Pushing to origin...");
-git("push", "origin", "main", "--follow-tags");
+git("push", "origin", "main");
 
-console.log(`\nDone! ${tag} released and pushed.`);
-console.log("GitHub Actions will publish to the Marketplace automatically.");
+console.log(`\nDone! ${tag} pushed to main.`);
+console.log(`CI will build, test, publish to the Marketplace, and tag ${tag} on success.`);

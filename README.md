@@ -2,7 +2,7 @@
 
 **A full-featured NuGet package manager for Visual Studio Code** — browse, install, update, and audit packages across all your .NET projects without leaving the editor.
 
-[![Release](https://img.shields.io/github/v/release/I-Synergy/I-Synergy.NugetPackageManager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.I-Synergy.NugetPackageManager)
+[![Release](https://img.shields.io/github/v/release/I-Synergy/I-Synergy.NugetPackageManager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.i-synergy-nugetpackagemanager)
 [![CI](https://img.shields.io/github/actions/workflow/status/I-Synergy/I-Synergy.NugetPackageManager/ci.yml?label=CI)](https://github.com/I-Synergy/I-Synergy.NugetPackageManager/actions)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.110%2B-blue)](https://code.visualstudio.com/)
@@ -75,7 +75,7 @@
 Or install directly from the command line:
 
 ```bash
-code --install-extension I-Synergy.NugetPackageManager.I-Synergy.NugetPackageManager
+code --install-extension I-Synergy.i-synergy-nugetpackagemanager
 ```
 
 ### From a .vsix file
@@ -83,7 +83,7 @@ code --install-extension I-Synergy.NugetPackageManager.I-Synergy.NugetPackageMan
 Download the latest `.vsix` from the [Releases page](https://github.com/I-Synergy/I-Synergy.NugetPackageManager/releases), then:
 
 ```bash
-code --install-extension I-Synergy.NugetPackageManager-x.x.x.vsix
+code --install-extension i-synergy-nugetpackagemanager-x.x.x.vsix
 ```
 
 Or via the Extensions panel: click **···** → **Install from VSIX…**
@@ -178,12 +178,12 @@ Access these from the Command Palette (`Ctrl+Shift+P`):
 
 | Command | ID | Description |
 |---|---|---|
-| **NuGet Package Manager: Open Packages** | `nugetPackageManager.open` | Focus the NuGet panel |
-| **NuGet Package Manager: Add Package** | `nugetPackageManager.install` | Prompt for a package ID and open Browse with it pre-searched |
-| **NuGet Package Manager: Update Package** | `nugetPackageManager.update` | Focus the NuGet panel and switch to the Updates tab |
-| **NuGet Package Manager: Remove Package** | `nugetPackageManager.remove` | Focus the NuGet panel and switch to the Installed tab |
-| **Settings** | `nugetPackageManager.openSettings` | Open the NuGet Package Manager settings view |
-| **Report Problem** | `nugetPackageManager.reportProblem` | Open a new GitHub issue |
+| **NuGet Package Manager: Open Packages** | `nugetpackage.open` | Focus the NuGet panel |
+| **NuGet Package Manager: Add Package** | `nugetpackage.install` | Prompt for a package ID and open Browse with it pre-searched |
+| **NuGet Package Manager: Update Package** | `nugetpackage.update` | Focus the NuGet panel and switch to the Updates tab |
+| **NuGet Package Manager: Remove Package** | `nugetpackage.remove` | Focus the NuGet panel and switch to the Installed tab |
+| **Settings** | `nugetpackage.openSettings` | Open the NuGet Package Manager settings view |
+| **Report Problem** | `nugetpackage.reportProblem` | Open a new GitHub issue |
 
 ---
 
@@ -193,27 +193,27 @@ Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or ed
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `NugetPackageManager.sources` | `string[]` | `[nuget.org]` | List of NuGet feed URLs to search and update from. Each entry is a JSON string `{"name":"...","url":"..."}`. |
-| `NugetPackageManager.defaultSource` | `string` | `""` | Default source URL pre-selected in the source dropdown. Empty = use the first configured source. |
-| `NugetPackageManager.prerelease` | `boolean` | `false` | Include pre-release versions when checking for updates. |
-| `NugetPackageManager.skipRestore` | `boolean` | `false` | Skip the restore preview and compatibility check when installing/updating packages. |
-| `NugetPackageManager.enablePackageVersionInlineInfo` | `boolean` | `false` | Show inline gutter decorations in `.csproj` files with available update versions. |
-| `NugetPackageManager.statusBarLoadingIndicator` | `boolean` | `false` | Show a loading progress indicator in the VS Code status bar. |
-| `NugetPackageManager.pageSize` | `number` | `20` | Number of packages returned per search page. |
-| `NugetPackageManager.showOutputOnError` | `boolean` | `true` | Automatically reveal the NuGet output log when an operation fails. |
-| `NugetPackageManager.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Package Manager output channel. |
+| `i-synergy-nugetpackagemanager.sources` | `string[]` | `[nuget.org]` | List of NuGet feed URLs to search and update from. Each entry is a JSON string `{"name":"...","url":"..."}`. |
+| `i-synergy-nugetpackagemanager.defaultSource` | `string` | `""` | Default source URL pre-selected in the source dropdown. Empty = use the first configured source. |
+| `i-synergy-nugetpackagemanager.prerelease` | `boolean` | `false` | Include pre-release versions when checking for updates. |
+| `i-synergy-nugetpackagemanager.skipRestore` | `boolean` | `false` | Skip the restore preview and compatibility check when installing/updating packages. |
+| `i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo` | `boolean` | `false` | Show inline gutter decorations in `.csproj` files with available update versions. |
+| `i-synergy-nugetpackagemanager.statusBarLoadingIndicator` | `boolean` | `false` | Show a loading progress indicator in the VS Code status bar. |
+| `i-synergy-nugetpackagemanager.pageSize` | `number` | `20` | Number of packages returned per search page. |
+| `i-synergy-nugetpackagemanager.showOutputOnError` | `boolean` | `true` | Automatically reveal the NuGet output log when an operation fails. |
+| `i-synergy-nugetpackagemanager.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Package Manager output channel. |
 
 ### Example `settings.json`
 
 ```jsonc
 {
-  "NugetPackageManager.sources": [
+  "i-synergy-nugetpackagemanager.sources": [
     "{\"name\": \"nuget.org\", \"url\": \"https://api.nuget.org/v3/index.json\"}",
     "{\"name\": \"My Feed\",   \"url\": \"https://pkgs.dev.azure.com/my-org/_packaging/my-feed/nuget/v3/index.json\"}"
   ],
-  "NugetPackageManager.prerelease": false,
-  "NugetPackageManager.enablePackageVersionInlineInfo": true,
-  "NugetPackageManager.skipRestore": false
+  "i-synergy-nugetpackagemanager.prerelease": false,
+  "i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo": true,
+  "i-synergy-nugetpackagemanager.skipRestore": false
 }
 ```
 
@@ -244,7 +244,7 @@ For non-standard authentication flows, configure a script path per source. The s
 ```jsonc
 // settings.json
 {
-  "NugetPackageManager.sources": [
+  "i-synergy-nugetpackagemanager.sources": [
     "{\"name\": \"Internal\", \"url\": \"https://my.internal.feed/v3/index.json\", \"passwordScriptPath\": \"/path/to/get-token.sh\"}"
   ]
 }
@@ -265,7 +265,7 @@ NuGet Package Manager has first-class support for [Central Package Management](h
 
 ## Inline Version Decorations
 
-Enable `NugetPackageManager.enablePackageVersionInlineInfo` to see available updates directly in your project files:
+Enable `i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo` to see available updates directly in your project files:
 
 ```xml
 <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />  ← 13.0.3 available
@@ -409,6 +409,7 @@ src/
 
 NuGet Package Manager builds on the work of:
 
+- [nuget-workbench](https://github.com/nuget-workbench/nuget-workbench-vscode) - the original vscode extension from which we forked
 - [pcislo/vscode-nuget-gallery](https://github.com/pcislo/vscode-nuget-gallery) by [Patryk Cislo](https://github.com/pcislo) — the original extension this project descends from
 - [shis91/vscode-nuget-gallery](https://github.com/shis91/vscode-nuget-gallery) by [shis91](https://github.com/shis91) — major feature additions including CPM, authentication, and test infrastructure
 

@@ -105,7 +105,7 @@ Run a single test file by modifying `.vscode-test.mjs` config or using the test 
 - **Unused vars**: Prefix with `_` to suppress warnings
 - **Error responses**: RPC methods return `Result<T>` — use `ok(value)` / `fail(error)` helpers
 - **Styling**: CSS-in-JS via Lit `css` tagged template literals, using VS Code CSS variables
-- **Commit messages**: English, conventional commits (`feat:`, `fix:`, `refactor:`, `chore:`, etc.)
+- **Commit messages**: English, conventional commits (`feat:`, `fix:`, `refactor:`, `chore:`, etc.). **Never include `Co-Authored-By:` trailers in commit messages.**
 - **No `.Update()` on EF entities** — this project doesn't use EF Core; ignore C# rules
 
 ## Security Rules

@@ -8,7 +8,8 @@ module.exports = defineConfig([
 		workspaceFolder: '.',
 		mocha: {
 			ui: 'tdd',
-			timeout: 20000
+			timeout: 20000,
+			require: ['./test-path-register.cjs']
 		},
 		launchArgs: [
 			'--disable-gpu',

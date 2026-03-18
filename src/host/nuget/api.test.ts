@@ -117,11 +117,11 @@ suite('NuGetApi Tests', () => {
             const result = await api.GetPackagesAsync('newtonsoft', true, 0, 10);
 
             assert.strictEqual(result.data.length, 1);
-            assert.strictEqual(result.data[0].Name, 'Newtonsoft.Json');
-            assert.strictEqual(result.data[0].Version, '13.0.1');
-            assert.deepStrictEqual(result.data[0].Authors, ['James Newton-King']);
-            assert.strictEqual(result.data[0].TotalDownloads, 1000000000);
-            assert.strictEqual(result.data[0].Verified, true);
+            assert.strictEqual(result.data[0]!.Name, 'Newtonsoft.Json');
+            assert.strictEqual(result.data[0]!.Version, '13.0.1');
+            assert.deepStrictEqual(result.data[0]!.Authors, ['James Newton-King']);
+            assert.strictEqual(result.data[0]!.TotalDownloads, 1000000000);
+            assert.strictEqual(result.data[0]!.Verified, true);
         });
 
         test('should pass correct query parameters', async () => {
@@ -159,7 +159,7 @@ suite('NuGetApi Tests', () => {
             const result = await api.GetPackagesAsync('test', true, 0, 10);
 
             assert.strictEqual(result.data.length, 1);
-            assert.deepStrictEqual(result.data[0].Versions, []);
+            assert.deepStrictEqual(result.data[0]!.Versions, []);
         });
     });
 
@@ -487,9 +487,9 @@ suite('NuGetApi Tests', () => {
 
             assert.ok(result.data.dependencies);
             assert.strictEqual(Object.keys(result.data.dependencies.frameworks).length, 2);
-            assert.strictEqual(result.data.dependencies.frameworks['net6.0'].length, 2);
-            assert.strictEqual(result.data.dependencies.frameworks['net6.0'][0].package, 'Dep1');
-            assert.strictEqual(result.data.dependencies.frameworks['netstandard2.0'].length, 1);
+            assert.strictEqual(result.data.dependencies.frameworks['net6.0']!.length, 2);
+            assert.strictEqual(result.data.dependencies.frameworks['net6.0']![0]!.package, 'Dep1');
+            assert.strictEqual(result.data.dependencies.frameworks['netstandard2.0']!.length, 1);
         });
 
         test('should return empty dependencies when no catalogEntry', async () => {
@@ -533,7 +533,7 @@ suite('NuGetApi Tests', () => {
 
             // net6.0 should be filtered out because it has no dependencies
             assert.strictEqual(result.data.dependencies.frameworks['net6.0'], undefined);
-            assert.strictEqual(result.data.dependencies.frameworks['net7.0'].length, 1);
+            assert.strictEqual(result.data.dependencies.frameworks['net7.0']!.length, 1);
         });
 
         test('should use embedded catalogEntry when dependencyGroups is present', async () => {
@@ -566,8 +566,8 @@ suite('NuGetApi Tests', () => {
             assert.strictEqual(httpStub.callCount, 2);
             assert.ok(result.data.dependencies);
             assert.strictEqual(Object.keys(result.data.dependencies.frameworks).length, 1);
-            assert.strictEqual(result.data.dependencies.frameworks['net8.0'].length, 1);
-            assert.strictEqual(result.data.dependencies.frameworks['net8.0'][0].package, 'EmbeddedDep');
+            assert.strictEqual(result.data.dependencies.frameworks['net8.0']!.length, 1);
+            assert.strictEqual(result.data.dependencies.frameworks['net8.0']![0]!.package, 'EmbeddedDep');
         });
 
         test('should handle catalogEntry object with @id but no dependencyGroups', async () => {
@@ -600,7 +600,7 @@ suite('NuGetApi Tests', () => {
 
             // Should make 3 calls (service index + package version + catalog)
             assert.strictEqual(httpStub.callCount, 3);
-            assert.strictEqual(result.data.dependencies.frameworks['net6.0'][0].package, 'FetchedDep');
+            assert.strictEqual(result.data.dependencies.frameworks['net6.0']![0]!.package, 'FetchedDep');
         });
 
         test('should return empty dependencies when catalogEntry object has no @id and no dependencyGroups', async () => {

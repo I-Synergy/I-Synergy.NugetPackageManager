@@ -3,7 +3,7 @@
   "publisher": "I-Synergy",
   "displayName": "I-Synergy NuGet Package Manager",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "license": "MIT",
   "icon": "docs/images/icon.png",
   "galleryBanner": {
@@ -42,28 +42,28 @@
   "contributes": {
     "commands": [
       {
-        "command": "i-synergy-nugetpackagemanager.open",
+        "command": "nugetpackage.open",
         "title": "NuGet Package Manager: Open Packages"
       },
       {
-        "command": "i-synergy-nugetpackagemanager.install",
+        "command": "nugetpackage.install",
         "title": "NuGet Package Manager: Add Package"
       },
       {
-        "command": "i-synergy-nugetpackagemanager.update",
+        "command": "nugetpackage.update",
         "title": "NuGet Package Manager: Update Package"
       },
       {
-        "command": "i-synergy-nugetpackagemanager.remove",
+        "command": "nugetpackage.remove",
         "title": "NuGet Package Manager: Remove Package"
       },
       {
-        "command": "i-synergy-nugetpackagemanager.openSettings",
+        "command": "nugetpackage.openSettings",
         "title": "Settings",
         "icon": "$(extensions-manage)"
       },
       {
-        "command": "i-synergy-nugetpackagemanager.reportProblem",
+        "command": "nugetpackage.reportProblem",
         "title": "Report Problem",
         "icon": "$(report)"
       }
@@ -71,12 +71,12 @@
     "menus": {
       "view/title": [
         {
-          "command": "i-synergy-nugetpackagemanager.reportProblem",
+          "command": "nugetpackage.reportProblem",
           "when": "view == i-synergy-nugetpackagemanager.packageView",
           "group": "navigation@1"
         },
         {
-          "command": "i-synergy-nugetpackagemanager.openSettings",
+          "command": "nugetpackage.openSettings",
           "when": "view == i-synergy-nugetpackagemanager.packageView",
           "group": "navigation@2"
         }
@@ -192,7 +192,7 @@
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "gif-encoder-2": "^1.0.5",
-    "jsdom": "^28.1.0",
+    "jsdom": "^29.0.0",
     "playwright": "^1.49.0",
     "pngjs": "^7.0.0",
     "sinon": "^21.0.3",
@@ -205,11 +205,13 @@
     "@tsconfig/node14": "1.0.3",
     "bidi-js": "1.0.3",
     "core-util-is": "1.0.3",
-    "glob": "13.0.6"
+    "glob": "13.0.6",
+    "serialize-javascript": "7.0.3",
+    "diff": "8.0.3"
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.8.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.51.1",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
     "@xmldom/xmldom": "^0.8.10",
     "async-mutex": "^0.5.0",
     "axios": "^1.7.4",

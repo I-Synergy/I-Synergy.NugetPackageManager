@@ -16,7 +16,7 @@ const severityColors: Record<number, string> = {
 
 @customElement("vulnerabilities-view")
 export class VulnerabilitiesView extends LitElement {
-  static styles = [
+  static override styles = [
     codicon,
     scrollableBase,
     sharedStyles,
@@ -117,7 +117,7 @@ export class VulnerabilitiesView extends LitElement {
 
   private loaded = false;
 
-  connectedCallback(): void {
+  override connectedCallback(): void {
     super.connectedCallback();
     if (!this.loaded) {
       this.loaded = true;
@@ -131,10 +131,10 @@ export class VulnerabilitiesView extends LitElement {
     this.packages = [];
 
     try {
-      const result = await hostApi.getVulnerablePackages({
-        ProjectPaths: this.projectPaths.length > 0 ? this.projectPaths : undefined,
-        ForceReload: forceReload || undefined,
-      });
+      const req: Parameters<typeof hostApi.getVulnerablePackages>[0] = {};
+      if (this.projectPaths.length > 0) req.ProjectPaths = this.projectPaths;
+      if (forceReload) req.ForceReload = true;
+      const result = await hostApi.getVulnerablePackages(req);
 
       if (!result.ok) {
         this.hasError = true;
@@ -161,7 +161,7 @@ export class VulnerabilitiesView extends LitElement {
   }
 
   private getSeverityColor(severity: number): string {
-    return severityColors[severity] ?? severityColors[0];
+    return severityColors[severity] ?? severityColors[0] ?? "var(--vscode-descriptionForeground)";
   }
 
   private selectPackage(packageId: string): void {
@@ -218,7 +218,7 @@ export class VulnerabilitiesView extends LitElement {
     `;
   }
 
-  render(): unknown {
+  override render(): unknown {
     return html`
       <div class="vuln-container" aria-busy=${this.isLoading}>
         <div class="toolbar">

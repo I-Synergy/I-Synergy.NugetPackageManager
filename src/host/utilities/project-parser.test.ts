@@ -30,10 +30,10 @@ suite('ProjectParser Tests', () => {
         const project = await ProjectParser.Parse(projectPath);
 
         assert.strictEqual(project.Packages.length, 2);
-        assert.strictEqual(project.Packages[0].Id, 'Newtonsoft.Json');
-        assert.strictEqual(project.Packages[0].Version, '13.0.1');
-        assert.strictEqual(project.Packages[1].Id, 'Serilog');
-        assert.strictEqual(project.Packages[1].Version, '2.10.0');
+        assert.strictEqual(project.Packages[0]!.Id, 'Newtonsoft.Json');
+        assert.strictEqual(project.Packages[0]!.Version, '13.0.1');
+        assert.strictEqual(project.Packages[1]!.Id, 'Serilog');
+        assert.strictEqual(project.Packages[1]!.Version, '2.10.0');
     });
 
     test('Parse handles CPM versions correctly', async () => {
@@ -53,11 +53,11 @@ suite('ProjectParser Tests', () => {
         const project = await ProjectParser.Parse(projectPath, cpmVersions);
 
         assert.strictEqual(project.Packages.length, 2);
-        assert.strictEqual(project.Packages[0].Id, 'Newtonsoft.Json');
-        assert.strictEqual(project.Packages[0].Version, '13.0.3');
+        assert.strictEqual(project.Packages[0]!.Id, 'Newtonsoft.Json');
+        assert.strictEqual(project.Packages[0]!.Version, '13.0.3');
 
-        assert.strictEqual(project.Packages[1].Id, 'Serilog');
-        assert.strictEqual(project.Packages[1].Version, '1.0.0');
+        assert.strictEqual(project.Packages[1]!.Id, 'Serilog');
+        assert.strictEqual(project.Packages[1]!.Version, '1.0.0');
     });
 
     test('Parse logs warning for missing CPM version', async () => {

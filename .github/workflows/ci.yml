@@ -3,9 +3,7 @@ name: CI
 on:
   push:
     branches:
-      - main
-    tags:
-      - "v*"
+      - '**'
   pull_request:
     branches:
       - main
@@ -34,6 +32,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+
       - name: Run Tests
         run: |
           rm -rf out
@@ -44,7 +48,7 @@ jobs:
     name: Publish to Marketplace
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
@@ -69,12 +73,24 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
+      - name: Read version
+        id: version
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Tag release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}
+
       - name: Package .vsix
         run: npx @vscode/vsce package --no-dependencies --out I-Synergy.NugetPackageManager.vsix
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
           files: I-Synergy.NugetPackageManager.vsix
           body_path: RELEASE_NOTES.md
           generate_release_notes: false
