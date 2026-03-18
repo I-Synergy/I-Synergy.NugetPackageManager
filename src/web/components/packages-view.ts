@@ -672,7 +672,7 @@ export class PackagesView extends LitElement {
     // forcing expensive re-creation (config file reads, source index HTTP calls) for every
     // installed package — causing ~15 s delays.
     await this.LoadPackages(false, sourceChanged);
-    await this.LoadProjectsPackages(prereleaseChanged || sourceChanged);
+    await this.LoadProjectsPackages(sourceChanged);
 
     if (sourceChanged || prereleaseChanged) {
       this.reloadChildViews(sourceChanged);
