@@ -39,13 +39,13 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.open", () => {
+    vscode.commands.registerCommand("nugetpackage.open", () => {
       vscode.commands.executeCommand("i-synergy-nugetpackagemanager.packageView.focus");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.install", async () => {
+    vscode.commands.registerCommand("nugetpackage.install", async () => {
       const packageId = await vscode.window.showInputBox({
         prompt: "Enter the NuGet package ID to install",
         placeHolder: "e.g. Newtonsoft.Json",
@@ -57,21 +57,21 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.update", () => {
+    vscode.commands.registerCommand("nugetpackage.update", () => {
       vscode.commands.executeCommand("i-synergy-nugetpackagemanager.packageView.focus");
       provider.sendNavigateToTab("updates");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.remove", () => {
+    vscode.commands.registerCommand("nugetpackage.remove", () => {
       vscode.commands.executeCommand("i-synergy-nugetpackagemanager.packageView.focus");
       provider.sendNavigateToTab("installed");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.reportProblem", async () => {
+    vscode.commands.registerCommand("nugetpackage.reportProblem", async () => {
       vscode.env.openExternal(
         vscode.Uri.parse("https://github.com/I-Synergy/I-Synergy.NugetPackageManager/issues/new")
       );
@@ -79,7 +79,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.openSettings", () => {
+    vscode.commands.registerCommand("nugetpackage.openSettings", () => {
       provider.sendNavigateToRoute("SETTINGS");
     })
   );

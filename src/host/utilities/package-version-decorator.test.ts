@@ -145,7 +145,7 @@ suite('PackageVersionDecorator Tests', () => {
         // Serilog matches, so no decoration.
         assert.strictEqual(decorations.length, 1);
         
-        const deco = decorations[0];
+        const deco = decorations[0]!;
         assert.strictEqual(deco.renderOptions?.after?.contentText, ' (Latest: 13.0.1)');
     });
 

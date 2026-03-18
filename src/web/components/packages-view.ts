@@ -25,7 +25,7 @@ const NUGET_ORG_PREFIX = "https://api.nuget.org";
 
 @customElement("packages-view")
 export class PackagesView extends LitElement {
-  static styles = [
+  static override styles = [
     codicon,
     scrollableBase,
     sharedStyles,
@@ -306,7 +306,7 @@ export class PackagesView extends LitElement {
   @state() selectedProjectPaths: string[] = [];
   @state() showProjectTree: boolean = false;
 
-  connectedCallback(): void {
+  override connectedCallback(): void {
     super.connectedCallback();
     this.filters = {
       ...this.filters,
@@ -317,11 +317,11 @@ export class PackagesView extends LitElement {
     this.LoadProjects();
   }
 
-  firstUpdated(): void {
+  override firstUpdated(): void {
     this.initSplitter();
   }
 
-  disconnectedCallback(): void {
+  override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.splitter?.destroy();
   }
@@ -433,7 +433,7 @@ export class PackagesView extends LitElement {
         return;
     }
     e.preventDefault();
-    this.setTab(tabs[newIdx]);
+    this.setTab(tabs[newIdx] as TabId);
     const tabButtons = this.shadowRoot?.querySelectorAll('[role="tab"]');
     (tabButtons?.[newIdx] as HTMLElement)?.focus();
   }
@@ -607,7 +607,7 @@ export class PackagesView extends LitElement {
       let idx = 0;
       const runNext = async (): Promise<void> => {
         while (idx < this.projectsPackages.length) {
-          const pkg = this.projectsPackages[idx++];
+          const pkg = this.projectsPackages[idx++]!;
           await this.UpdatePackage(pkg, forceReload);
           completed++;
           void hostApi.updateStatusBar({
@@ -639,14 +639,15 @@ export class PackagesView extends LitElement {
     projectPackage: PackageViewModel,
     forceReload: boolean = false
   ): Promise<void> {
-    const result = await hostApi.getPackage({
+    const updatePkgReq: Parameters<typeof hostApi.getPackage>[0] = {
       Id: projectPackage.Id,
       Url: this.filters.SourceUrl,
-      SourceName: this.CurrentSource?.Name,
       Prerelease: this.filters.Prerelease,
-      PasswordScriptPath: this.CurrentSource?.PasswordScriptPath,
       ForceReload: forceReload,
-    });
+    };
+    if (this.CurrentSource?.Name !== undefined) updatePkgReq.SourceName = this.CurrentSource.Name;
+    if (this.CurrentSource?.PasswordScriptPath !== undefined) updatePkgReq.PasswordScriptPath = this.CurrentSource.PasswordScriptPath;
+    const result = await hostApi.getPackage(updatePkgReq);
 
     if (!result.ok || !result.value.Package) {
       projectPackage.Status = "Error";
@@ -686,13 +687,14 @@ export class PackagesView extends LitElement {
 
     if (this.selectedPackage.Status === "MissingDetails") {
       const packageToUpdate = this.selectedPackage;
-      const result = await hostApi.getPackage({
+      const selectPkgReq: Parameters<typeof hostApi.getPackage>[0] = {
         Id: packageToUpdate.Id,
         Url: this.filters.SourceUrl,
-        SourceName: this.CurrentSource?.Name,
         Prerelease: this.filters.Prerelease,
-        PasswordScriptPath: this.CurrentSource?.PasswordScriptPath,
-      });
+      };
+      if (this.CurrentSource?.Name !== undefined) selectPkgReq.SourceName = this.CurrentSource.Name;
+      if (this.CurrentSource?.PasswordScriptPath !== undefined) selectPkgReq.PasswordScriptPath = this.CurrentSource.PasswordScriptPath;
+      const result = await hostApi.getPackage(selectPkgReq);
 
       if (!result.ok || !result.value.Package) {
         packageToUpdate.Status = "Error";
@@ -734,16 +736,19 @@ export class PackagesView extends LitElement {
     append: boolean = false,
     forceReload: boolean = false
   ): Promise<void> {
-    const buildRequest = () => ({
-      Url: this.filters.SourceUrl,
-      SourceName: this.CurrentSource?.Name,
-      Filter: this.filters.Query,
-      Prerelease: this.filters.Prerelease,
-      Skip: this.packagesPage * PACKAGE_FETCH_TAKE,
-      Take: PACKAGE_FETCH_TAKE,
-      PasswordScriptPath: this.CurrentSource?.PasswordScriptPath,
-      ForceReload: forceReload,
-    });
+    const buildRequest = (): Parameters<typeof hostApi.getPackages>[0] => {
+      const req: Parameters<typeof hostApi.getPackages>[0] = {
+        Url: this.filters.SourceUrl,
+        Filter: this.filters.Query,
+        Prerelease: this.filters.Prerelease,
+        Skip: this.packagesPage * PACKAGE_FETCH_TAKE,
+        Take: PACKAGE_FETCH_TAKE,
+        ForceReload: forceReload,
+      };
+      if (this.CurrentSource?.Name !== undefined) req.SourceName = this.CurrentSource.Name;
+      if (this.CurrentSource?.PasswordScriptPath !== undefined) req.PasswordScriptPath = this.CurrentSource.PasswordScriptPath;
+      return req;
+    };
 
     this.packagesLoadingError = false;
     this.packagesLoadingInProgress = true;
@@ -967,7 +972,7 @@ export class PackagesView extends LitElement {
     return this.renderMissingDetailsPackage();
   }
 
-  render(): unknown {
+  override render(): unknown {
     return html`
       <div class="container">
         ${this.showProjectTree

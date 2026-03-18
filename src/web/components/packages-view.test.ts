@@ -139,8 +139,8 @@ suite('PackagesView Component', () => {
             await packagesView.LoadPackages();
 
             assert.strictEqual(packagesView.packages.length, 2);
-            assert.strictEqual(packagesView.packages[0].Id, 'Package1');
-            assert.strictEqual(packagesView.packages[1].Id, 'Package2');
+            assert.strictEqual(packagesView.packages[0]!.Id, 'Package1');
+            assert.strictEqual(packagesView.packages[1]!.Id, 'Package2');
         });
 
         test('should set noMorePackages when fewer packages returned than requested', async () => {
@@ -175,8 +175,8 @@ suite('PackagesView Component', () => {
             await packagesView.LoadPackages(true);
 
             assert.strictEqual(packagesView.packages.length, 2);
-            assert.strictEqual(packagesView.packages[0].Id, 'Existing');
-            assert.strictEqual(packagesView.packages[1].Id, 'NewPackage');
+            assert.strictEqual(packagesView.packages[0]!.Id, 'Existing');
+            assert.strictEqual(packagesView.packages[1]!.Id, 'NewPackage');
         });
 
         test('should reset packages when append is false', async () => {
@@ -191,7 +191,7 @@ suite('PackagesView Component', () => {
             await packagesView.LoadPackages(false);
 
             assert.strictEqual(packagesView.packages.length, 1);
-            assert.strictEqual(packagesView.packages[0].Id, 'NewPackage');
+            assert.strictEqual(packagesView.packages[0]!.Id, 'NewPackage');
         });
 
         test('should pass ForceReload flag to mediator', async () => {
@@ -226,8 +226,8 @@ suite('PackagesView Component', () => {
             await packagesView.LoadProjects();
 
             assert.strictEqual(packagesView.projects.length, 2);
-            assert.strictEqual(packagesView.projects[0].Name, 'Project1');
-            assert.strictEqual(packagesView.projects[1].Name, 'Project2');
+            assert.strictEqual(packagesView.projects[0]!.Name, 'Project1');
+            assert.strictEqual(packagesView.projects[1]!.Name, 'Project2');
         });
 
         test('should pass ForceReload flag', async () => {
@@ -596,7 +596,7 @@ suite('PackagesView Component', () => {
 
             // Should only have 1 package matching the query filter
             assert.strictEqual(packagesView.projectsPackages.length, 1);
-            assert.strictEqual(packagesView.projectsPackages[0].Id, 'Newtonsoft.Json');
+            assert.strictEqual(packagesView.projectsPackages[0]!.Id, 'Newtonsoft.Json');
         });
 
         test('should show "Multiple" for packages with different versions', async () => {
@@ -644,7 +644,7 @@ suite('PackagesView Component', () => {
             assert.ok(statusBarCalls.length >= 2);
 
             // Last call should hide the status bar
-            const lastCall = statusBarCalls[statusBarCalls.length - 1];
+            const lastCall = statusBarCalls[statusBarCalls.length - 1]!;
             assert.strictEqual(lastCall.args[0].Percentage, null);
         });
     });

@@ -11,7 +11,7 @@ export type LicenseRequest = {
 
 @customElement("nuget-license-dialog")
 export class NugetLicenseDialog extends LitElement {
-  static styles = [
+  static override styles = [
     codicon,
     css`
       .overlay {
@@ -148,7 +148,7 @@ export class NugetLicenseDialog extends LitElement {
     hostApi.openUrl({ Url: url });
   }
 
-  render() {
+  override render() {
     if (!this.isOpen) return nothing;
 
     return html`
