@@ -14,8 +14,8 @@ on:
           - major
 
 jobs:
-  release:
-    name: Build, Test & Publish
+  bump:
+    name: Bump Version
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -35,48 +35,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run vscode:prepublish
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Type check
-        run: npx tsc --noEmit
-
-      - name: Security audit
-        run: npm audit --audit-level=high
-
-      - name: Run Tests
-        run: |
-          rm -rf out
-          npm run test-compile
-          xvfb-run -a npm test
-
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Run release script
+      - name: Bump version and push
         run: node tools/release.mjs ${{ inputs.version }}
-
-      - name: Read released version
-        id: version
-        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
-      - name: Publish to VS Code Marketplace
-        run: npx @vscode/vsce publish --no-dependencies
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      - name: Package .vsix
-        run: npx @vscode/vsce package --no-dependencies --out I-Synergy.NugetPackageManager.vsix
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          files: I-Synergy.NugetPackageManager.vsix
-          body_path: RELEASE_NOTES.md
-          generate_release_notes: false
