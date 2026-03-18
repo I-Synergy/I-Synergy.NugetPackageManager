@@ -45,7 +45,7 @@ export class Logger {
                 resource: new Resource({
                     [SEMRESATTRS_SERVICE_NAME]: "i-synergy-nugetpackagemanager",
                     [SEMRESATTRS_SERVICE_VERSION]: context.extension.packageJSON.version,
-                    [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT,
+                    [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT ?? "",
                     [SEMRESATTRS_DEVICE_ID]: vscode.env.machineId,
                     [SEMRESATTRS_OS_TYPE]: os.platform(),
                     "extension.id": context.extension.id,
@@ -57,7 +57,7 @@ export class Logger {
                     "vscode.remoteName": vscode.env.remoteName ?? "",
                     "vscode.shell": vscode.env.shell,
                     "vscode.uiKind": vscode.env.uiKind,
-                }) as any,
+                }),
             });
 
             const traceExporter = new OTLPTraceExporter({
@@ -73,7 +73,7 @@ export class Logger {
         }
     }
 
-    public static log(level: string, message: string, ...args: any[]): void {
+    public static log(level: string, message: string, ...args: unknown[]): void {
         const levelValue = this._logLevels[level] ?? 1;
         if (levelValue < this._logLevel) {
             return;
@@ -92,19 +92,19 @@ export class Logger {
         this._logLevel = this._logLevels[logLevel] ?? 1;
     }
 
-    public static info(message: string, ...args: any[]): void {
+    public static info(message: string, ...args: unknown[]): void {
         this.log('INFO', message, ...args);
     }
 
-    public static warn(message: string, ...args: any[]): void {
+    public static warn(message: string, ...args: unknown[]): void {
         this.log('WARN', message, ...args);
     }
 
-    public static error(message: string, ...args: any[]): void {
+    public static error(message: string, ...args: unknown[]): void {
         this.log('ERROR', message, ...args);
     }
 
-    public static debug(message: string, ...args: any[]): void {
+    public static debug(message: string, ...args: unknown[]): void {
         this.log('DEBUG', message, ...args);
     }
 
