@@ -10,7 +10,7 @@ import "./package-row";
 
 @customElement("updates-view")
 export class UpdatesView extends LitElement {
-  static styles = [
+  static override styles = [
     codicon,
     scrollableBase,
     sharedStyles,
@@ -66,7 +66,7 @@ export class UpdatesView extends LitElement {
 
   private loaded = false;
 
-  connectedCallback(): void {
+  override connectedCallback(): void {
     super.connectedCallback();
     if (!this.loaded) {
       this.loaded = true;
@@ -81,12 +81,13 @@ export class UpdatesView extends LitElement {
     this.loadingText = "Checking for updates...";
 
     try {
-      const result = await hostApi.getOutdatedPackages({
+      const req: Parameters<typeof hostApi.getOutdatedPackages>[0] = {
         Prerelease: this.prerelease,
-        ProjectPaths: this.projectPaths.length > 0 ? this.projectPaths : undefined,
-        SourceUrl: this.sourceUrl || undefined,
-        ForceReload: forceReload || undefined,
-      });
+      };
+      if (this.projectPaths.length > 0) req.ProjectPaths = this.projectPaths;
+      if (this.sourceUrl) req.SourceUrl = this.sourceUrl;
+      if (forceReload) req.ForceReload = true;
+      const result = await hostApi.getOutdatedPackages(req);
 
       if (!result.ok) {
         this.hasError = true;
@@ -225,7 +226,7 @@ export class UpdatesView extends LitElement {
     `;
   }
 
-  render(): unknown {
+  override render(): unknown {
     return html`
       <div class="updates-container" aria-busy=${this.isLoading}>
         <div class="toolbar">

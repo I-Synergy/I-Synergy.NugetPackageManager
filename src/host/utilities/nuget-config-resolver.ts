@@ -26,12 +26,10 @@ export default class NuGetConfigResolver {
     const sourcesWithCreds = await this.GetSourcesWithCredentials(workspaceRoot);
 
     sourcesWithCreds.forEach(s => {
-      sourcesMap.set(s.Name, {
-        Name: s.Name,
-        Url: s.Url,
-        Username: s.Username,
-        Password: s.Password,
-      });
+      const entry: SourceWithCredentials = { Name: s.Name, Url: s.Url };
+      if (s.Username !== undefined) entry.Username = s.Username;
+      if (s.Password !== undefined) entry.Password = s.Password;
+      sourcesMap.set(s.Name, entry);
     });
 
     const vscodeSourcesRaw = config.get<Array<string>>("sources") ?? [];
@@ -130,8 +128,8 @@ export default class NuGetConfigResolver {
     credentials.forEach((cred, sourceName) => {
       const source = sources.get(sourceName);
       if (source) {
-        source.Username = cred.Username;
-        source.Password = cred.Password;
+        if (cred.Username !== undefined) source.Username = cred.Username;
+        if (cred.Password !== undefined) source.Password = cred.Password;
       }
     });
 

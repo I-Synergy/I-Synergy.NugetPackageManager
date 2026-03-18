@@ -37,7 +37,7 @@ export class NuGetPackageManager extends LitElement {
     this.handleHostCommand(data);
   };
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     configuration.addEventListener("configuration-changed", this.onConfigChanged);
     router.addEventListener("route-changed", this.onRouteChanged);
@@ -45,7 +45,7 @@ export class NuGetPackageManager extends LitElement {
     configuration.Reload();
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     configuration.removeEventListener("configuration-changed", this.onConfigChanged);
     router.removeEventListener("route-changed", this.onRouteChanged);
@@ -77,7 +77,7 @@ export class NuGetPackageManager extends LitElement {
     }
   }
 
-  render() {
+  override render() {
     if (!this.configLoaded) {
       return html``;
     }

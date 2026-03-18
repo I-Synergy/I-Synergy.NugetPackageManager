@@ -93,8 +93,8 @@ suite('PackageDetails Component', () => {
         // Check tags
         const tags = shadowRoot.querySelectorAll('.tag');
         assert.strictEqual(tags.length, 2);
-        assert.strictEqual(tags[0].textContent?.trim(), 'tag1');
-        assert.strictEqual(tags[1].textContent?.trim(), 'tag2');
+        assert.strictEqual(tags[0]!.textContent?.trim(), 'tag1');
+        assert.strictEqual(tags[1]!.textContent?.trim(), 'tag2');
     });
 
     test('should trigger reloadDependencies when source changes', async () => {

@@ -109,14 +109,13 @@ export function createHostAPI(): HostAPI {
         })
       );
       const projects: Project[] = [];
-      for (let i = 0; i < parseResults.length; i++) {
-        const r = parseResults[i];
+      parseResults.forEach((r, i) => {
         if (r.status === "fulfilled") {
           projects.push(r.value);
         } else {
-          Logger.error(`getProjects: Failed to parse project ${projectFiles[i].fsPath}`, r.reason);
+          Logger.error(`getProjects: Failed to parse project ${projectFiles[i]?.fsPath ?? "?"}`, r.reason);
         }
-      }
+      });
 
       const sorted = projects.sort((a, b) =>
         a.Name?.toLowerCase().localeCompare(b.Name?.toLowerCase())
@@ -139,7 +138,7 @@ export function createHostAPI(): HostAPI {
 
           if (!request.Filter) {
             if (sources.length > 0) {
-              request.Url = sources[0].Url;
+              request.Url = sources[0]?.Url ?? "";
             } else {
               return ok({ Packages: [] });
             }
@@ -427,14 +426,13 @@ export function createHostAPI(): HostAPI {
           })
         );
         const projects: Project[] = [];
-        for (let i = 0; i < parseResults.length; i++) {
-          const r = parseResults[i];
+        parseResults.forEach((r, i) => {
           if (r.status === "fulfilled") {
             projects.push(r.value);
           } else {
-            Logger.error(`getOutdatedPackages: Failed to parse ${projectFiles[i].fsPath}`, r.reason);
+            Logger.error(`getOutdatedPackages: Failed to parse ${projectFiles[i]?.fsPath ?? "?"}`, r.reason);
           }
-        }
+        });
 
         const installedMap = new Map<
           string,
@@ -506,8 +504,7 @@ export function createHostAPI(): HostAPI {
 
       const results: Array<{ PackageId: string; Success: boolean; Error?: string }> = [];
 
-      for (let i = 0; i < request.Updates.length; i++) {
-        const update = request.Updates[i];
+      for (const [i, update] of request.Updates.entries()) {
         StatusBarUtils.ShowText(
           `Updating ${update.PackageId} to ${update.Version} (${i + 1}/${request.Updates.length})...`
         );
@@ -558,15 +555,14 @@ export function createHostAPI(): HostAPI {
         );
         const projects: Project[] = [];
         let anyCpmEnabled = false;
-        for (let i = 0; i < parseResults.length; i++) {
-          const r = parseResults[i];
+        parseResults.forEach((r, i) => {
           if (r.status === "fulfilled") {
             projects.push(r.value);
             if (r.value.CpmEnabled) anyCpmEnabled = true;
           } else {
-            Logger.error(`getInconsistentPackages: Failed to parse ${projectFiles[i].fsPath}`, r.reason);
+            Logger.error(`getInconsistentPackages: Failed to parse ${projectFiles[i]?.fsPath ?? "?"}`, r.reason);
           }
-        }
+        });
 
         const packageMap = new Map<string, Map<string, Array<{ Name: string; Path: string }>>>();
 
@@ -597,7 +593,7 @@ export function createHostAPI(): HostAPI {
           inconsistent.push({
             Id: packageId,
             Versions: versions,
-            LatestInstalledVersion: versions[0].Version,
+            LatestInstalledVersion: versions[0]?.Version ?? "",
             CpmManaged: anyCpmEnabled,
           });
         }
@@ -647,14 +643,13 @@ export function createHostAPI(): HostAPI {
           })
         );
         const projects: Project[] = [];
-        for (let i = 0; i < parseResults.length; i++) {
-          const r = parseResults[i];
+        parseResults.forEach((r, i) => {
           if (r.status === "fulfilled") {
             projects.push(r.value);
           } else {
-            Logger.error(`getVulnerablePackages: Failed to parse ${projectFiles[i].fsPath}`, r.reason);
+            Logger.error(`getVulnerablePackages: Failed to parse ${projectFiles[i]?.fsPath ?? "?"}`, r.reason);
           }
-        }
+        });
 
         // Collect all installed packages with their projects
         const installedMap = new Map<
@@ -705,7 +700,7 @@ export function createHostAPI(): HostAPI {
         const vulnerable: VulnerablePackage[] = [];
 
         for (const [key, installed] of installedMap) {
-          const packageId = key.split("::")[0];
+          const packageId = key.split("::")[0] ?? "";
           const vulnEntries = allVulnerabilities.get(packageId);
           if (!vulnEntries) continue;
 
@@ -747,9 +742,11 @@ export function createHostAPI(): HostAPI {
     },
 
     async showConfirmation(request: ShowConfirmationRequest): Promise<Result<ShowConfirmationResponse>> {
+      const opts: vscode.MessageOptions = { modal: true };
+      if (request.Detail !== undefined) opts.detail = request.Detail;
       const answer = await vscode.window.showWarningMessage(
         request.Message,
-        { modal: true, detail: request.Detail },
+        opts,
         "Yes"
       );
       return ok({ Confirmed: answer === "Yes" });
@@ -769,8 +766,7 @@ export function createHostAPI(): HostAPI {
       );
 
       try {
-        for (let i = 0; i < request.ProjectPaths.length; i++) {
-          const projectPath = request.ProjectPaths[i];
+        for (const [i, projectPath] of request.ProjectPaths.entries()) {
           StatusBarUtils.ShowText(
             `Consolidating ${request.PackageId} (${i + 1}/${request.ProjectPaths.length})...`
           );

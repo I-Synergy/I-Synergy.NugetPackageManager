@@ -373,7 +373,7 @@ suite('NuGetConfigResolver Tests', () => {
 
             const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceDir);
 
-            assert.strictEqual(sources[0].Password, 'Decrypted');
+            assert.strictEqual(sources[0]!.Password, 'Decrypted');
             assert.ok(credentialsCacheSetStub.calledWith('SecureSource', undefined, 'Decrypted'));
         });
 
@@ -397,7 +397,7 @@ suite('NuGetConfigResolver Tests', () => {
             const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceDir);
 
             // Should keep original password
-            assert.strictEqual(sources[0].Password, 'Encrypted');
+            assert.strictEqual(sources[0]!.Password, 'Encrypted');
             assert.ok((Logger.error as sinon.SinonStub).called);
              // Should cache original credential?
             assert.ok(credentialsCacheSetStub.calledWith('SecureSource', undefined, 'Encrypted'));
