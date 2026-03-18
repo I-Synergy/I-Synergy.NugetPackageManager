@@ -47,7 +47,7 @@
 - feat: Tab badges showing result counts on Updates, Consolidate, and Vulnerabilities tabs
 - fix: Selected package row now uses the active selection highlight color instead of the inactive one
 - ux: Search bar is now hidden on the Updates, Consolidate, and Vulnerabilities tabs where it is not relevant
-- breaking: Renamed commands `nuget-packages-manager.openSettings` and `nuget-packages-manager.reportProblem`
+- breaking: Renamed commands `I-Synergy.NugetPackageManager.openSettings` and `I-Synergy.NugetPackageManager.reportProblem`
   to `nugetPackageManager.openSettings` and `nugetPackageManager.reportProblem` for consistency with other command IDs
 - chore: Moved screenshot tooling from `screenshot-harness/` to `tools/`
 

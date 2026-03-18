@@ -8,19 +8,30 @@ import { PackageVersionDecorator } from "./utilities/package-version-decorator";
 export function activate(context: vscode.ExtensionContext) {
   Logger.configure(context);
   Logger.info("Extension.activate: Extension activated");
+
+  // One-time cleanup: remove legacy workspace-level settings that were previously
+  // incorrectly written at the workspace scope instead of global scope.
+  void (async () => {
+    try {
+      const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
+      await config.update("sources", undefined, vscode.ConfigurationTarget.Workspace);
+      await config.update("skipRestore", undefined, vscode.ConfigurationTarget.Workspace);
+    } catch { /* no workspace folder or settings don't exist — safe to ignore */ }
+  })();
+
   const provider = new NugetViewProvider(context.extensionUri);
 
   context.subscriptions.push(new PackageVersionDecorator());
 
-  const previousVersion: string | undefined = context.globalState.get("NugetPackageManager.version");
-  context.globalState.update("NugetPackageManager.version", context.extension.packageJSON.version);
+  const previousVersion: string | undefined = context.globalState.get("i-synergy-nugetpackagemanager.version");
+  context.globalState.update("i-synergy-nugetpackagemanager.version", context.extension.packageJSON.version);
   if (previousVersion == undefined) {
     Logger.info("Extension.activate: Extension installed");
   } else if (previousVersion != context.extension.packageJSON.version)
     Logger.info("Extension.activate: Extension upgraded from version %s", previousVersion);
 
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("nugetPackageManager.packageView", provider, {
+    vscode.window.registerWebviewViewProvider("i-synergy-nugetpackagemanager.packageView", provider, {
       webviewOptions: {
         retainContextWhenHidden: true,
       },
@@ -28,47 +39,47 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetPackageManager.open", () => {
-      vscode.commands.executeCommand("nugetPackageManager.packageView.focus");
+    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.open", () => {
+      vscode.commands.executeCommand("i-synergy-nugetpackagemanager.packageView.focus");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetPackageManager.install", async () => {
+    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.install", async () => {
       const packageId = await vscode.window.showInputBox({
         prompt: "Enter the NuGet package ID to install",
         placeHolder: "e.g. Newtonsoft.Json",
       });
       if (!packageId) return;
-      vscode.commands.executeCommand("nugetPackageManager.packageView.focus");
+      vscode.commands.executeCommand("i-synergy-nugetpackagemanager.packageView.focus");
       provider.sendSearchQuery(packageId);
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetPackageManager.update", () => {
-      vscode.commands.executeCommand("nugetPackageManager.packageView.focus");
+    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.update", () => {
+      vscode.commands.executeCommand("i-synergy-nugetpackagemanager.packageView.focus");
       provider.sendNavigateToTab("updates");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetPackageManager.remove", () => {
-      vscode.commands.executeCommand("nugetPackageManager.packageView.focus");
+    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.remove", () => {
+      vscode.commands.executeCommand("i-synergy-nugetpackagemanager.packageView.focus");
       provider.sendNavigateToTab("installed");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetPackageManager.reportProblem", async () => {
+    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.reportProblem", async () => {
       vscode.env.openExternal(
-        vscode.Uri.parse("https://github.com/I-Synergy/nuget-packages-manager/issues/new")
+        vscode.Uri.parse("https://github.com/I-Synergy/I-Synergy.NugetPackageManager/issues/new")
       );
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetPackageManager.openSettings", () => {
+    vscode.commands.registerCommand("i-synergy-nugetpackagemanager.openSettings", () => {
       provider.sendNavigateToRoute("SETTINGS");
     })
   );
@@ -138,7 +149,7 @@ class NugetViewProvider implements vscode.WebviewViewProvider {
 		  <title>NuGet Package Manager</title>
 		</head>
 		<body>
-		  <nuget-packages-manager></nuget-packages-manager>
+		  <i-synergy-nugetpackagemanager></i-synergy-nugetpackagemanager>
 		  <script type="module" nonce="${nonceValue}" src="${webJsSrc}"></script>
 		</body>
 	  </html>

@@ -43,7 +43,7 @@ The **CI** workflow runs on every push and PR. When a tag `v*` is pushed (via `n
 ## Manual publish
 
 ```bash
-npm run package                           # builds releases/nuget-packages-manager-x.x.x.vsix
+npm run package                           # builds releases/I-Synergy.NugetPackageManager-x.x.x.vsix
 npx @vscode/vsce login I-Synergy          # authenticate with PAT
 npx @vscode/vsce publish --no-dependencies
 ```

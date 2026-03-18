@@ -89,6 +89,7 @@ export class SearchBar extends LitElement {
     const config = configuration.Configuration;
     if (!config) return;
 
+    configuration.UpdateLocalPrerelease(this.prerelease);
     await hostApi.updateConfiguration({
       Configuration: {
         SkipRestore: config.SkipRestore,
@@ -98,7 +99,6 @@ export class SearchBar extends LitElement {
         StatusBarLoadingIndicator: config.StatusBarLoadingIndicator,
       },
     });
-    await configuration.Reload();
   }
 
   private filterInputEvent(target: EventTarget): void {

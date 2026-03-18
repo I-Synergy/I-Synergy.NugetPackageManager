@@ -1,5 +1,5 @@
 {
-  "name": "nuget-packages-manager",
+  "name": "i-synergy_nugetpackagemanager",
   "publisher": "I-Synergy",
   "displayName": "I-Synergy NuGet Package Manager",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
@@ -24,14 +24,14 @@
     "Programming Languages",
     "Other"
   ],
-  "homepage": "https://github.com/I-Synergy/nuget-packages-manager",
+  "homepage": "https://github.com/I-Synergy/I-Synergy.NugetPackageManager",
   "bugs": {
-    "url": "https://github.com/I-Synergy/nuget-packages-manager/issues",
+    "url": "https://github.com/I-Synergy/I-Synergy.NugetPackageManager/issues",
     "email": "daniel-rck@proton.me"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/I-Synergy/nuget-packages-manager.git"
+    "url": "https://github.com/I-Synergy/I-Synergy.NugetPackageManager.git"
   },
   "activationEvents": [
     "workspaceContains:**/*.csproj",
@@ -42,28 +42,28 @@
   "contributes": {
     "commands": [
       {
-        "command": "nugetPackageManager.open",
+        "command": "i-synergy-nugetpackagemanager.open",
         "title": "NuGet Package Manager: Open Packages"
       },
       {
-        "command": "nugetPackageManager.install",
+        "command": "i-synergy-nugetpackagemanager.install",
         "title": "NuGet Package Manager: Add Package"
       },
       {
-        "command": "nugetPackageManager.update",
+        "command": "i-synergy-nugetpackagemanager.update",
         "title": "NuGet Package Manager: Update Package"
       },
       {
-        "command": "nugetPackageManager.remove",
+        "command": "i-synergy-nugetpackagemanager.remove",
         "title": "NuGet Package Manager: Remove Package"
       },
       {
-        "command": "nugetPackageManager.openSettings",
+        "command": "i-synergy-nugetpackagemanager.openSettings",
         "title": "Settings",
         "icon": "$(extensions-manage)"
       },
       {
-        "command": "nugetPackageManager.reportProblem",
+        "command": "i-synergy-nugetpackagemanager.reportProblem",
         "title": "Report Problem",
         "icon": "$(report)"
       }
@@ -71,13 +71,13 @@
     "menus": {
       "view/title": [
         {
-          "command": "nugetPackageManager.reportProblem",
-          "when": "view == nugetPackageManager.packageView",
+          "command": "i-synergy-nugetpackagemanager.reportProblem",
+          "when": "view == i-synergy-nugetpackagemanager.packageView",
           "group": "navigation@1"
         },
         {
-          "command": "nugetPackageManager.openSettings",
-          "when": "view == nugetPackageManager.packageView",
+          "command": "i-synergy-nugetpackagemanager.openSettings",
+          "when": "view == i-synergy-nugetpackagemanager.packageView",
           "group": "navigation@2"
         }
       ]
@@ -85,17 +85,17 @@
     "viewsContainers": {
       "panel": [
         {
-          "id": "nugetPackageManagerView",
+          "id": "i-synergy-nugetpackagemanagerview",
           "title": "NuGet",
           "icon": "resources/nuget.svg"
         }
       ]
     },
     "views": {
-      "nugetPackageManagerView": [
+      "i-synergy-nugetpackagemanagerview": [
         {
           "type": "webview",
-          "id": "nugetPackageManager.packageView",
+          "id": "i-synergy-nugetpackagemanager.packageView",
           "name": "NuGet Packages"
         }
       ]
@@ -103,27 +103,27 @@
     "configuration": {
       "title": "NuGet Package Manager",
       "properties": {
-        "NugetPackageManager.defaultSource": {
+        "i-synergy-nugetpackagemanager.defaultSource": {
           "type": "string",
           "default": "",
           "description": "Default package source URL. If empty, uses the default from nuget.config."
         },
-        "NugetPackageManager.pageSize": {
+        "i-synergy-nugetpackagemanager.pageSize": {
           "type": "number",
           "default": 20,
           "description": "Number of packages per search page."
         },
-        "NugetPackageManager.showOutputOnError": {
+        "i-synergy-nugetpackagemanager.showOutputOnError": {
           "type": "boolean",
           "default": true,
           "description": "Automatically expand the output log when an operation fails."
         },
-        "NugetPackageManager.skipRestore": {
+        "i-synergy-nugetpackagemanager.skipRestore": {
           "type": "boolean",
           "default": false,
           "description": "Skip performing a restore preview and compatibility check"
         },
-        "NugetPackageManager.sources": {
+        "i-synergy-nugetpackagemanager.sources": {
           "type": "array",
           "items": {
             "type": "string"
@@ -135,7 +135,7 @@
           ],
           "description": "NuGet sources"
         },
-        "NugetPackageManager.logLevel": {
+        "i-synergy-nugetpackagemanager.logLevel": {
           "type": "string",
           "default": "INFO",
           "enum": [
@@ -146,17 +146,17 @@
           ],
           "description": "Minimum logging level"
         },
-        "NugetPackageManager.enablePackageVersionInlineInfo": {
+        "i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo": {
           "type": "boolean",
           "default": false,
           "description": "Show inline information about newer package versions in project files"
         },
-        "NugetPackageManager.prerelease": {
+        "i-synergy-nugetpackagemanager.prerelease": {
           "type": "boolean",
           "default": false,
           "description": "Include prerelease versions when checking for package updates"
         },
-        "NugetPackageManager.statusBarLoadingIndicator": {
+        "i-synergy-nugetpackagemanager.statusBarLoadingIndicator": {
           "type": "boolean",
           "default": false,
           "description": "Show a loading indicator in the status bar when loading packages"

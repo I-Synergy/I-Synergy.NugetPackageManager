@@ -74,7 +74,7 @@ export class UpdatesView extends LitElement {
     }
   }
 
-  async LoadOutdatedPackages(): Promise<void> {
+  async LoadOutdatedPackages(forceReload: boolean = false): Promise<void> {
     this.isLoading = true;
     this.hasError = false;
     this.packages = [];
@@ -85,6 +85,7 @@ export class UpdatesView extends LitElement {
         Prerelease: this.prerelease,
         ProjectPaths: this.projectPaths.length > 0 ? this.projectPaths : undefined,
         SourceUrl: this.sourceUrl || undefined,
+        ForceReload: forceReload || undefined,
       });
 
       if (!result.ok) {

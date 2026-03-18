@@ -121,7 +121,7 @@ export class ConsolidateView extends LitElement {
     }
   }
 
-  async LoadInconsistentPackages(): Promise<void> {
+  async LoadInconsistentPackages(forceReload: boolean = false): Promise<void> {
     this.isLoading = true;
     this.hasError = false;
     this.packages = [];
@@ -129,6 +129,7 @@ export class ConsolidateView extends LitElement {
     try {
       const result = await hostApi.getInconsistentPackages({
         ProjectPaths: this.projectPaths.length > 0 ? this.projectPaths : undefined,
+        ForceReload: forceReload || undefined,
       });
 
       if (!result.ok) {

@@ -176,6 +176,10 @@ export default class NuGetApi {
     }
   }
 
+  public ClearVulnerabilityCache() {
+    this._vulnerabilityCache = null;
+  }
+
   async GetPackageDetailsAsync(packageVersionUrl: string): Promise<GetPackageDetailsResponse> {
     try {
       await this.EnsureSearchUrl();
