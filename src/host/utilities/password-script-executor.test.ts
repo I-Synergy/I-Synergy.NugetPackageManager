@@ -10,7 +10,7 @@ suite('PasswordScriptExecutor Tests', () => {
     let sandbox: sinon.SinonSandbox;
     let createTerminalStub: sinon.SinonStub;
     let spawnStub: sinon.SinonStub;
-    let loggerErrorStub: sinon.SinonStub;
+    let _loggerErrorStub: sinon.SinonStub;
     
     // Holds the latest created process mock
     let mockProcess: {
@@ -24,7 +24,7 @@ suite('PasswordScriptExecutor Tests', () => {
         sandbox = sinon.createSandbox();
         
         // Mock Logger
-        loggerErrorStub = sandbox.stub(Logger, 'error');
+        _loggerErrorStub = sandbox.stub(Logger, 'error');
 
         // Mock vscode.window.createTerminal
         createTerminalStub = sandbox.stub(vscode.window, 'createTerminal');

@@ -99,7 +99,7 @@ suite('ProjectParser Tests', () => {
         // Spy on Logger.error
         const originalError = Logger.error;
         let errorLogged = false;
-        Logger.error = (msg: string) => {
+        Logger.error = (_msg: string) => {
              errorLogged = true;
         };
 

@@ -86,9 +86,10 @@ export default class CpmResolver {
       const document = new DOMParser().parseFromString(cpmContent);
       const packageVersions = xpath.select("//ItemGroup/PackageVersion", document) as Node[];
 
-      (packageVersions || []).forEach((p: any) => {
-        const packageId = p.attributes?.getNamedItem("Include")?.value;
-        const version = p.attributes?.getNamedItem("Version")?.value;
+      (packageVersions || []).forEach((p) => {
+        const el = p as Element;
+        const packageId = el.attributes?.getNamedItem("Include")?.value;
+        const version = el.attributes?.getNamedItem("Version")?.value;
 
         if (packageId && version) {
           versionMap.set(packageId, version);

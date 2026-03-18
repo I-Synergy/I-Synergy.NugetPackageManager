@@ -28,7 +28,7 @@ export default class ProjectParser {
              // Fallback to no namespace if not present
              packagesReferences = xpath.select("//ItemGroup/PackageReference", document) as Node[];
         }
-    } catch (e) {
+    } catch (_e) {
         // Fallback to local-name strategy if namespace selection fails or is complicated
         packagesReferences = xpath.select("//*[local-name()='ItemGroup']/*[local-name()='PackageReference']", document) as Node[];
     }
@@ -45,8 +45,9 @@ export default class ProjectParser {
       CpmEnabled: false,
     };
 
-    (packagesReferences || []).forEach((p: any) => {
-      const versionNode = p.attributes?.getNamedItem("Version");
+    (packagesReferences || []).forEach((p) => {
+      const el = p as Element;
+      const versionNode = el.attributes?.getNamedItem("Version");
       let version = versionNode ? versionNode.value : undefined;
 
       // Check for child element if attribute is missing
@@ -64,10 +65,10 @@ export default class ProjectParser {
            }
       }
 
-      const packageId = p.attributes?.getNamedItem("Include").value;
+      const packageId = el.attributes?.getNamedItem("Include").value;
 
       // Check for VersionOverride attribute (CPM override at project level)
-      let versionOverride = p.attributes?.getNamedItem("VersionOverride")?.value;
+      let versionOverride = el.attributes?.getNamedItem("VersionOverride")?.value;
       if (!versionOverride) {
         const versionOverrideChild = xpath.select("string(*[local-name()='VersionOverride'])", p);
         if (versionOverrideChild) {

@@ -18,7 +18,7 @@ class PasswordScriptTerminal implements vscode.Pseudoterminal {
     private spawnFn: typeof spawn = spawn
   ) {}
 
-  open(initialDimensions: vscode.TerminalDimensions | undefined): void {
+  open(_initialDimensions: vscode.TerminalDimensions | undefined): void {
     const scriptPath_lower = this.scriptPath.toLowerCase();
     let command: string;
     let args: string[];
@@ -160,9 +160,10 @@ export default class PasswordScriptExecutor {
       });
 
       return decodedPassword;
-    } catch (error: any) {
+    } catch (error: unknown) {
       Logger.error(`PasswordScriptExecutor.ExecuteScript: Failed to execute password script ${scriptPath}`, error);
-      throw new Error(`Password script execution failed: ${error.message || error}`);
+      const err = error as { message?: string };
+      throw new Error(`Password script execution failed: ${err.message || String(error)}`);
     }
   }
 

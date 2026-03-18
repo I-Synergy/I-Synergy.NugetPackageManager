@@ -1,7 +1,7 @@
 import '../web-setup';
 import * as assert from 'assert';
 import { ProjectRow } from '@/web/components/project-row';
-import { ProjectViewModel, ProjectPackageViewModel } from '@/web/types';
+import { ProjectViewModel } from '@/web/types';
 import { ok } from '@/common/rpc/result';
 import * as registrations from '@/web/registrations';
 import type { HostAPI } from '@/common/rpc/types';
