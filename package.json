@@ -203,7 +203,8 @@
   },
   "overrides": {
     "@tsconfig/node14": "1.0.3",
-    "bidi-js": "1.0.3"
+    "bidi-js": "1.0.3",
+    "core-util-is": "1.0.3"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.8.0",
