@@ -336,7 +336,11 @@ suite('PackagesView Component', () => {
             assert.ok((mockHostApi.getPackages as sinon.SinonStub).called);
         });
 
-        test('should force reload when Prerelease changes', async () => {
+        test('should NOT force-reload getPackages when only Prerelease changes', async () => {
+            // Prerelease changes must NOT clear the NuGet API factory cache.
+            // The package cache key is "${id}::${prerelease}", so toggling prerelease
+            // already results in a natural cache miss — destroying NuGetApi instances
+            // caused ~15 s delays. Only source changes warrant a factory cache clear.
             packagesView.filters.Prerelease = true;
 
             (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: [] }));
@@ -349,7 +353,7 @@ suite('PackagesView Component', () => {
             });
 
             const callArgs = (mockHostApi.getPackages as sinon.SinonStub).firstCall.args[0];
-            assert.strictEqual(callArgs.ForceReload, true);
+            assert.strictEqual(callArgs.ForceReload, false);
         });
     });
 
