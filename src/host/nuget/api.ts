@@ -196,7 +196,7 @@ export default class NuGetApi {
     const packageObject: Package = {
       Id: item["@id"] || "",
       Name: catalogEntry?.id || "",
-      Authors: catalogEntry?.authors || [],
+      Authors: (typeof catalogEntry?.authors === "string" ? [catalogEntry.authors] : catalogEntry?.authors) || [],
       Description: catalogEntry?.description || "",
       IconUrl: catalogEntry?.iconUrl || "",
       Registration: catalogEntry?.registration || "",
