@@ -178,12 +178,12 @@ Access these from the Command Palette (`Ctrl+Shift+P`):
 
 | Command | ID | Description |
 |---|---|---|
-| **NuGet Package Manager: Open Packages** | `i-synergy-nugetpackagemanager.open` | Focus the NuGet panel |
-| **NuGet Package Manager: Add Package** | `i-synergy-nugetpackagemanager.install` | Prompt for a package ID and open Browse with it pre-searched |
-| **NuGet Package Manager: Update Package** | `i-synergy-nugetpackagemanager.update` | Focus the NuGet panel and switch to the Updates tab |
-| **NuGet Package Manager: Remove Package** | `i-synergy-nugetpackagemanager.remove` | Focus the NuGet panel and switch to the Installed tab |
-| **Settings** | `i-synergy-nugetpackagemanager.openSettings` | Open the NuGet Package Manager settings view |
-| **Report Problem** | `i-synergy-nugetpackagemanager.reportProblem` | Open a new GitHub issue |
+| **NuGet Package Manager: Open Packages** | `nugetpackage.open` | Focus the NuGet panel |
+| **NuGet Package Manager: Add Package** | `nugetpackage.install` | Prompt for a package ID and open Browse with it pre-searched |
+| **NuGet Package Manager: Update Package** | `nugetpackage.update` | Focus the NuGet panel and switch to the Updates tab |
+| **NuGet Package Manager: Remove Package** | `nugetpackage.remove` | Focus the NuGet panel and switch to the Installed tab |
+| **Settings** | `nugetpackage.openSettings` | Open the NuGet Package Manager settings view |
+| **Report Problem** | `nugetpackage.reportProblem` | Open a new GitHub issue |
 
 ---
 
