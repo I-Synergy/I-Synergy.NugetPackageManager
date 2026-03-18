@@ -194,13 +194,10 @@ Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or ed
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `i-synergy-nugetpackagemanager.sources` | `string[]` | `[nuget.org]` | List of NuGet feed URLs to search and update from. Each entry is a JSON string `{"name":"...","url":"..."}`. |
-| `i-synergy-nugetpackagemanager.defaultSource` | `string` | `""` | Default source URL pre-selected in the source dropdown. Empty = use the first configured source. |
 | `i-synergy-nugetpackagemanager.prerelease` | `boolean` | `false` | Include pre-release versions when checking for updates. |
 | `i-synergy-nugetpackagemanager.skipRestore` | `boolean` | `false` | Skip the restore preview and compatibility check when installing/updating packages. |
 | `i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo` | `boolean` | `false` | Show inline gutter decorations in `.csproj` files with available update versions. |
 | `i-synergy-nugetpackagemanager.statusBarLoadingIndicator` | `boolean` | `false` | Show a loading progress indicator in the VS Code status bar. |
-| `i-synergy-nugetpackagemanager.pageSize` | `number` | `20` | Number of packages returned per search page. |
-| `i-synergy-nugetpackagemanager.showOutputOnError` | `boolean` | `true` | Automatically reveal the NuGet output log when an operation fails. |
 | `i-synergy-nugetpackagemanager.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Package Manager output channel. |
 
 ### Example `settings.json`
@@ -213,7 +210,8 @@ Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or ed
   ],
   "i-synergy-nugetpackagemanager.prerelease": false,
   "i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo": true,
-  "i-synergy-nugetpackagemanager.skipRestore": false
+  "i-synergy-nugetpackagemanager.skipRestore": false,
+  "i-synergy-nugetpackagemanager.logLevel": "INFO"
 }
 ```
 
