@@ -87,7 +87,15 @@ export function activate(context: vscode.ExtensionContext) {
   const nugetConfigWatcher = vscode.workspace.createFileSystemWatcher(
     "**/{nuget.config,NuGet.Config,NuGet.config}"
   );
-  const onNugetConfigChanged = () => provider.sendReloadConfiguration();
+  let nugetConfigChangeTimeout: NodeJS.Timeout | undefined;
+  const onNugetConfigChanged = () => {
+    if (nugetConfigChangeTimeout) {
+      clearTimeout(nugetConfigChangeTimeout);
+    }
+    nugetConfigChangeTimeout = setTimeout(() => {
+      provider.sendReloadConfiguration();
+    }, 200);
+  };
   nugetConfigWatcher.onDidChange(onNugetConfigChanged);
   nugetConfigWatcher.onDidCreate(onNugetConfigChanged);
   nugetConfigWatcher.onDidDelete(onNugetConfigChanged);
