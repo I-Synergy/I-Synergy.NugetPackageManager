@@ -22,14 +22,19 @@ import "./main.css";
 type HostCommand =
   | { type: "command"; command: "search"; query: string }
   | { type: "command"; command: "navigate-tab"; tab: string }
-  | { type: "command"; command: "navigate-route"; route: string };
+  | { type: "command"; command: "navigate-route"; route: string }
+  | { type: "command"; command: "reload-configuration" };
 
 @customElement("i-synergy-nugetpackagemanager")
 export class NuGetPackageManager extends LitElement {
-  @state() private configLoaded = false;
+  @state() private configLoaded = configuration.Configuration != null;
   @state() private currentRoute = router.CurrentRoute;
+  @state() private currentConfiguration = configuration.Configuration;
 
-  private readonly onConfigChanged = () => { this.configLoaded = configuration.Configuration != null; };
+  private readonly onConfigChanged = () => {
+    this.currentConfiguration = configuration.Configuration;
+    this.configLoaded = this.currentConfiguration != null;
+  };
   private readonly onRouteChanged = () => { this.currentRoute = router.CurrentRoute; };
   private readonly onMessage = (event: MessageEvent) => {
     const data = event.data as HostCommand;
@@ -74,6 +79,10 @@ export class NuGetPackageManager extends LitElement {
         router.Navigate(cmd.route as "BROWSE" | "SETTINGS");
         break;
       }
+      case "reload-configuration": {
+        void configuration.Reload();
+        break;
+      }
     }
   }
 
@@ -82,8 +91,8 @@ export class NuGetPackageManager extends LitElement {
       return html``;
     }
     if (this.currentRoute === "SETTINGS") {
-      return html`<settings-view></settings-view>`;
+      return html`<settings-view .configuration=${this.currentConfiguration}></settings-view>`;
     }
-    return html`<packages-view></packages-view>`;
+    return html`<packages-view .configuration=${this.currentConfiguration}></packages-view>`;
   }
 }
