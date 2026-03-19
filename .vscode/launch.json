@@ -18,6 +18,13 @@
 			"preLaunchTask": "npm: esbuild"
 		},
 		{
+			"name": "Run Mock Extension (Browser)",
+			"type": "node",
+			"request": "launch",
+			"program": "${workspaceFolder}/tools/dev-server.mjs",
+			"preLaunchTask": "npm: esbuild"
+		},
+		{
 			"name": "Extension Tests",
 			"type": "extensionHost",
 			"request": "launch",
