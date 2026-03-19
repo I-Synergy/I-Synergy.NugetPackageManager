@@ -22,7 +22,8 @@ import "./main.css";
 type HostCommand =
   | { type: "command"; command: "search"; query: string }
   | { type: "command"; command: "navigate-tab"; tab: string }
-  | { type: "command"; command: "navigate-route"; route: string };
+  | { type: "command"; command: "navigate-route"; route: string }
+  | { type: "command"; command: "reload-configuration" };
 
 @customElement("i-synergy-nugetpackagemanager")
 export class NuGetPackageManager extends LitElement {
@@ -72,6 +73,10 @@ export class NuGetPackageManager extends LitElement {
       }
       case "navigate-route": {
         router.Navigate(cmd.route as "BROWSE" | "SETTINGS");
+        break;
+      }
+      case "reload-configuration": {
+        void configuration.Reload();
         break;
       }
     }

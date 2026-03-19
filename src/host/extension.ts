@@ -83,6 +83,15 @@ export function activate(context: vscode.ExtensionContext) {
       provider.sendNavigateToRoute("SETTINGS");
     })
   );
+
+  const nugetConfigWatcher = vscode.workspace.createFileSystemWatcher(
+    "**/{nuget.config,NuGet.Config,NuGet.config}"
+  );
+  const onNugetConfigChanged = () => provider.sendReloadConfiguration();
+  nugetConfigWatcher.onDidChange(onNugetConfigChanged);
+  nugetConfigWatcher.onDidCreate(onNugetConfigChanged);
+  nugetConfigWatcher.onDidDelete(onNugetConfigChanged);
+  context.subscriptions.push(nugetConfigWatcher);
 }
 
 class NugetViewProvider implements vscode.WebviewViewProvider {
@@ -112,6 +121,13 @@ class NugetViewProvider implements vscode.WebviewViewProvider {
       type: "command",
       command: "navigate-route",
       route,
+    });
+  }
+
+  sendReloadConfiguration(): void {
+    this.webviewView?.webview.postMessage({
+      type: "command",
+      command: "reload-configuration",
     });
   }
 

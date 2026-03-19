@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.0.7 (2026-03-19)
+
+- fix: Sources dropdown now updates automatically when `nuget.config` is edited — a `FileSystemWatcher` detects changes to `nuget.config` / `NuGet.Config` and triggers a configuration reload in the webview
+
 ## 1.0.5 (2026-03-18)
 
 - fix: Toggling prerelease no longer causes a ~15 s delay — switching prerelease no longer clears the NuGet API factory cache (only source changes do); the package cache key already includes the prerelease flag so a new state is a natural cache miss
