@@ -246,9 +246,10 @@ export class UpdatesView extends LitElement {
 
   override render(): unknown {
     const visible = this.visiblePackages;
-    const selectedCount = visible.filter((p) => p.Selected).length;
-    const allSelected = this.allVisibleSelected;
-    const updateBtnLabel = allSelected ? "Update All" : "Update Selected";
+    const totalSelectedCount = this.packages.filter((p) => p.Selected).length;
+    const allPackagesSelected =
+      this.packages.length > 0 && this.packages.every((p) => p.Selected);
+    const updateBtnLabel = allPackagesSelected ? "Update All" : "Update Selected";
 
     return html`
       <div class="updates-container" aria-busy=${this.isLoading}>
@@ -257,10 +258,10 @@ export class UpdatesView extends LitElement {
           <div class="toolbar-right">
             ${visible.length > 0
               ? html`
-                  <button class="icon-btn" title="${allSelected ? "Deselect all" : "Select all"}" aria-label="${allSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
-                    <span class="codicon ${allSelected ? "codicon-check-all" : "codicon-circle-large-outline"}"></span>
+                  <button class="icon-btn" title="${allPackagesSelected ? "Deselect all" : "Select all"}" aria-label="${allPackagesSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
+                    <span class="codicon ${allPackagesSelected ? "codicon-check-all" : "codicon-circle-large-outline"}"></span>
                   </button>
-                  <button class="primary-btn" ?disabled=${this.isUpdating || selectedCount === 0} @click=${() => this.updateAllSelected()}>
+                  <button class="primary-btn" ?disabled=${this.isUpdating || totalSelectedCount === 0} @click=${() => this.updateAllSelected()}>
                     ${updateBtnLabel}
                   </button>
                 `
