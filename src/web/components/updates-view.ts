@@ -74,13 +74,13 @@ export class UpdatesView extends LitElement {
   }
 
   private get allVisibleSelected(): boolean {
-    const visible = this.visiblePackages;
-    return visible.length > 0 && visible.every((p) => p.Selected);
+    const all = this.packages;
+    return all.length > 0 && all.every((p) => p.Selected);
   }
 
   private toggleSelectAll(): void {
     const selectAll = !this.allVisibleSelected;
-    this.visiblePackages.forEach((p) => { p.Selected = selectAll; });
+    this.packages.forEach((p) => { p.Selected = selectAll; });
     this.requestUpdate();
   }
 
