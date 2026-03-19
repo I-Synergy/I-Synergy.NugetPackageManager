@@ -1071,6 +1071,7 @@ export class PackagesView extends LitElement {
               .prerelease=${this.filters.Prerelease}
               .projectPaths=${this.effectiveProjectPaths}
               .sourceUrl=${this.filters.SourceUrl}
+              .filterQuery=${this.filters.Query}
               @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
               @package-selected=${(e: CustomEvent) => this.onChildPackageSelected(e)}
             ></updates-view>
