@@ -63,8 +63,26 @@ export class UpdatesView extends LitElement {
   @state() loadingText: string = "Checking for updates...";
   @property({ attribute: false }) projectPaths: string[] = [];
   @property() sourceUrl: string = "";
+  @property() filterQuery: string = "";
 
   private loaded = false;
+
+  private get visiblePackages(): OutdatedPackageViewModel[] {
+    if (!this.filterQuery) return this.packages;
+    const q = this.filterQuery.toLowerCase();
+    return this.packages.filter((p) => p.Id.toLowerCase().includes(q));
+  }
+
+  private get allVisibleSelected(): boolean {
+    const visible = this.visiblePackages;
+    return visible.length > 0 && visible.every((p) => p.Selected);
+  }
+
+  private toggleSelectAll(): void {
+    const selectAll = !this.allVisibleSelected;
+    this.visiblePackages.forEach((p) => { p.Selected = selectAll; });
+    this.requestUpdate();
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -227,15 +245,23 @@ export class UpdatesView extends LitElement {
   }
 
   override render(): unknown {
+    const visible = this.visiblePackages;
+    const selectedCount = visible.filter((p) => p.Selected).length;
+    const allSelected = this.allVisibleSelected;
+    const updateBtnLabel = allSelected ? "Update All" : "Update Selected";
+
     return html`
       <div class="updates-container" aria-busy=${this.isLoading}>
         <div class="toolbar">
           <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
           <div class="toolbar-right">
-            ${this.packages.length > 0
+            ${visible.length > 0
               ? html`
-                  <button class="primary-btn" ?disabled=${this.isUpdating} @click=${() => this.updateAllSelected()}>
-                    Update All
+                  <button class="icon-btn" title="${allSelected ? "Deselect all" : "Select all"}" aria-label="${allSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
+                    <span class="codicon ${allSelected ? "codicon-check-all" : "codicon-circle-large-outline"}"></span>
+                  </button>
+                  <button class="primary-btn" ?disabled=${this.isUpdating || selectedCount === 0} @click=${() => this.updateAllSelected()}>
+                    ${updateBtnLabel}
                   </button>
                 `
               : nothing}
@@ -266,10 +292,10 @@ export class UpdatesView extends LitElement {
               </div>
             `
           : nothing}
-        ${!this.isLoading && this.packages.length > 0
+        ${!this.isLoading && visible.length > 0
           ? html`
               <div class="package-list" role="list" aria-label="Outdated packages">
-                ${this.packages.map((pkg) => this.renderPackageRow(pkg))}
+                ${visible.map((pkg) => this.renderPackageRow(pkg))}
               </div>
             `
           : nothing}

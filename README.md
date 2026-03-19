@@ -308,6 +308,14 @@ npm run dev
 
 Press **F5** in VS Code to launch a new Extension Development Host window with the extension loaded. The host reloads automatically after `npm run esbuild`.
 
+To iterate on the UI without a full VS Code instance, use the **Run Mock Extension (Browser)** launch configuration. It builds the web bundle and starts the dev server at `http://localhost:3729`, loading the UI with realistic mock NuGet data (packages, projects, vulnerabilities, etc.) injected via `tools/mock-api.js`. No `.csproj` files or dotnet CLI required.
+
+Alternatively, run it directly from the terminal:
+
+```bash
+npm run dev
+```
+
 ### Code Style
 
 ```bash
