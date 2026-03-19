@@ -285,6 +285,14 @@ export class UpdatesView extends LitElement {
               </div>
             `
           : nothing}
+        ${!this.isLoading && !this.hasError && this.packages.length > 0 && visible.length === 0
+          ? html`
+              <div class="empty">
+                <span class="codicon codicon-search"></span>
+                No matching updates
+              </div>
+            `
+          : nothing}
         ${this.hasError
           ? html`
               <div class="error" role="alert">
