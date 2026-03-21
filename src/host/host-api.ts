@@ -284,12 +284,26 @@ export function createHostAPI(): HostAPI {
         if (request.Type === "UNINSTALL") {
           await executeRemovePackage(request.PackageId, request.ProjectPath, request.OperationId);
         } else if (isCpmEnabled && cpmVersionsBefore!.has(request.PackageId)) {
-          await CpmResolver.UpdatePackageVersion(request.ProjectPath, request.PackageId, request.Version ?? "");
+          if (!request.Version || request.Version.trim() === "") {
+            return fail("Version is required when updating a CPM-managed package.");
+          }
+          await CpmResolver.UpdatePackageVersion(request.ProjectPath, request.PackageId, request.Version);
           if (!skipRestore) {
-            await TaskExecutor.ExecuteCommand("dotnet", ["restore", request.ProjectPath.replace(/\\/g, "/")], request.OperationId ?? `restore-${request.PackageId}`);
+            await TaskExecutor.ExecuteCommand(
+              "dotnet",
+              ["restore", request.ProjectPath.replace(/\\/g, "/")],
+              request.OperationId ?? `restore-${request.PackageId}`,
+            );
           }
         } else {
-          await executeAddPackage(request.PackageId, request.ProjectPath, request.Version, skipRestore, request.SourceUrl, request.OperationId);
+          await executeAddPackage(
+            request.PackageId,
+            request.ProjectPath,
+            request.Version,
+            skipRestore,
+            request.SourceUrl,
+            request.OperationId,
+          );
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
