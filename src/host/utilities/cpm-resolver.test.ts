@@ -28,9 +28,6 @@ suite('CpmResolver Tests', () => {
         // Default project content
         fs.writeFileSync(projectPath, '<Project><PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup></Project>');
 
-        // Reset cache before each test
-        CpmResolver.ClearCache();
-
         // Silence logger by default to keep test output clean
         Logger.debug = () => {};
         Logger.error = () => {};
@@ -146,7 +143,7 @@ suite('CpmResolver Tests', () => {
         assert.strictEqual(versions!.get('Root.Package'), '3.0.0');
     });
 
-    test('GetPackageVersions uses cache on subsequent calls', async () => {
+    test('GetPackageVersions reads fresh value on subsequent calls', async () => {
         const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
         const cpmContent1 = `
             <Project>
@@ -159,7 +156,6 @@ suite('CpmResolver Tests', () => {
             </Project>`;
         fs.writeFileSync(cpmPath, cpmContent1);
 
-        // First call
         let versions = await CpmResolver.GetPackageVersions(projectPath);
         assert.strictEqual(versions!.get('Test.Package'), '1.0.0');
 
@@ -175,78 +171,8 @@ suite('CpmResolver Tests', () => {
             </Project>`;
         fs.writeFileSync(cpmPath, cpmContent2);
 
-        // Second call should return cached value
+        // Second call should read the updated value from disk
         versions = await CpmResolver.GetPackageVersions(projectPath);
-        assert.strictEqual(versions!.get('Test.Package'), '1.0.0');
-    });
-
-    test('ClearCache clears the cache', async () => {
-        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
-        const cpmContent1 = `
-            <Project>
-                <PropertyGroup>
-                    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-                </PropertyGroup>
-                <ItemGroup>
-                    <PackageVersion Include="Test.Package" Version="1.0.0" />
-                </ItemGroup>
-            </Project>`;
-        fs.writeFileSync(cpmPath, cpmContent1);
-
-        await CpmResolver.GetPackageVersions(projectPath);
-
-        // Update file
-        const cpmContent2 = `
-            <Project>
-                <PropertyGroup>
-                    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-                </PropertyGroup>
-                <ItemGroup>
-                    <PackageVersion Include="Test.Package" Version="2.0.0" />
-                </ItemGroup>
-            </Project>`;
-        fs.writeFileSync(cpmPath, cpmContent2);
-
-        // Clear cache
-        CpmResolver.ClearCache();
-
-        // Should get new value
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
-        assert.strictEqual(versions!.get('Test.Package'), '2.0.0');
-    });
-
-    test('ClearCacheForProject clears cache for specific project', async () => {
-        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
-        const cpmContent1 = `
-            <Project>
-                <PropertyGroup>
-                    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-                </PropertyGroup>
-                <ItemGroup>
-                    <PackageVersion Include="Test.Package" Version="1.0.0" />
-                </ItemGroup>
-            </Project>`;
-        fs.writeFileSync(cpmPath, cpmContent1);
-
-        await CpmResolver.GetPackageVersions(projectPath);
-
-        // Update file
-        const cpmContent2 = `
-            <Project>
-                <PropertyGroup>
-                    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-                </PropertyGroup>
-                <ItemGroup>
-                    <PackageVersion Include="Test.Package" Version="2.0.0" />
-                </ItemGroup>
-            </Project>`;
-        fs.writeFileSync(cpmPath, cpmContent2);
-
-        // Clear cache for project
-        CpmResolver.ClearCacheForProject(projectPath);
-
-        // Should get new value
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
         assert.strictEqual(versions!.get('Test.Package'), '2.0.0');
     });
 
