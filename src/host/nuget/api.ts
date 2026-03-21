@@ -109,7 +109,7 @@ export default class NuGetApi {
         prerelease: prerelease,
         semVerLevel: "2.0.0",
       },
-      signal,
+      ...(signal && { signal }),
     });
     const mappedData: Array<Package> = (result.data.data as RawPackageSearchItem[]).map((item) => ({
       Id: item["@id"] || "",
@@ -151,7 +151,7 @@ export default class NuGetApi {
     const items: RawCatalogItem[] = [];
     try {
       Logger.debug(`NuGetApi.GetPackageAsync: GET ${url}`);
-      const result = await this.http.get(url, { signal });
+      const result = await this.http.get(url, ...(signal ? [{ signal }] : []));
       if (result instanceof AxiosError) {
         Logger.error("NuGetApi.GetPackageAsync: Axios Error Data:", result.response?.data);
         return {
@@ -244,7 +244,7 @@ export default class NuGetApi {
     try {
       await this.EnsureSearchUrl();
       Logger.debug(`NuGetApi.GetPackageDetailsAsync: Fetching package version from ${packageVersionUrl}`);
-      const packageVersion = await this.ExecuteGet(packageVersionUrl, { signal });
+      const packageVersion = await this.ExecuteGet(packageVersionUrl, ...(signal ? [{ signal }] : []));
       
       if (!packageVersion.data?.catalogEntry) {
         Logger.debug(`NuGetApi.GetPackageDetailsAsync: No catalogEntry found in package version response`);
@@ -333,12 +333,12 @@ export default class NuGetApi {
     const vulnerabilities = new Map<string, VulnerabilityEntry[]>();
 
     try {
-      const indexResponse = await this.ExecuteGet(this._vulnerabilityUrl, { signal });
+      const indexResponse = await this.ExecuteGet(this._vulnerabilityUrl, ...(signal ? [{ signal }] : []));
       const pages: Array<{ "@name": string; "@id": string; "@updated": string }> = indexResponse.data;
 
       for (const page of pages) {
         if (signal?.aborted) break;
-        const pageResponse = await this.ExecuteGet(page["@id"], { signal });
+        const pageResponse = await this.ExecuteGet(page["@id"], ...(signal ? [{ signal }] : []));
         const data: Record<string, VulnerabilityEntry[]> = pageResponse.data;
 
         for (const [packageId, entries] of Object.entries(data)) {
