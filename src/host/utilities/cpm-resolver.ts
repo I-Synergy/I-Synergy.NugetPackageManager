@@ -71,6 +71,37 @@ export default class CpmResolver {
     }
   }
 
+  static async UpdatePackageVersion(projectPath: string, packageId: string, newVersion: string): Promise<void> {
+    const cpmFilePath = await this.FindDirectoryPackagesPropsFile(projectPath);
+    if (!cpmFilePath) {
+      throw new Error(`Directory.Packages.props not found for ${projectPath}`);
+    }
+
+    const content = await fs.promises.readFile(cpmFilePath, "utf8");
+    const escaped = packageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    // Handle: Include="PackageId" ... Version="oldVersion"
+    let updated = content.replace(
+      new RegExp(`(Include="${escaped}"[^>]*?Version=")[^"]*"`),
+      `$1${newVersion}"`
+    );
+
+    // Handle: Version="oldVersion" ... Include="PackageId"
+    if (updated === content) {
+      updated = content.replace(
+        new RegExp(`(Version=")[^"]*("[^>]*?Include="${escaped}")`),
+        `$1${newVersion}$2`
+      );
+    }
+
+    if (updated === content) {
+      throw new Error(`Package ${packageId} not found in ${cpmFilePath}`);
+    }
+
+    await fs.promises.writeFile(cpmFilePath, updated, "utf8");
+    Logger.info(`CpmResolver.UpdatePackageVersion: Updated ${packageId} to ${newVersion} in ${cpmFilePath}`);
+  }
+
   private static async ParsePackageVersions(cpmFilePath: string): Promise<Map<string, string>> {
     Logger.debug(`CpmResolver.ParsePackageVersions: Parsing ${cpmFilePath}`);
     const versionMap = new Map<string, string>();

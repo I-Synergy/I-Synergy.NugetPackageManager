@@ -66,6 +66,7 @@ export class UpdatesView extends LitElement {
   @property() filterQuery: string = "";
 
   private loaded = false;
+  private _loadAc: AbortController | null = null;
 
   private get visiblePackages(): OutdatedPackageViewModel[] {
     if (!this.filterQuery) return this.packages;
@@ -92,7 +93,16 @@ export class UpdatesView extends LitElement {
     }
   }
 
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._loadAc?.abort();
+  }
+
   async LoadOutdatedPackages(forceReload: boolean = false): Promise<void> {
+    this._loadAc?.abort();
+    const ac = new AbortController();
+    this._loadAc = ac;
+
     this.isLoading = true;
     this.hasError = false;
     this.packages = [];
@@ -105,7 +115,9 @@ export class UpdatesView extends LitElement {
       if (this.projectPaths.length > 0) req.ProjectPaths = this.projectPaths;
       if (this.sourceUrl) req.SourceUrl = this.sourceUrl;
       if (forceReload) req.ForceReload = true;
-      const result = await hostApi.getOutdatedPackages(req);
+      const result = await hostApi.getOutdatedPackages(req, ac.signal);
+
+      if (ac.signal.aborted) return;
 
       if (!result.ok) {
         this.hasError = true;
@@ -126,9 +138,10 @@ export class UpdatesView extends LitElement {
             : "";
       }
     } catch {
+      if (ac.signal.aborted) return;
       this.hasError = true;
     } finally {
-      this.isLoading = false;
+      if (!ac.signal.aborted) this.isLoading = false;
     }
   }
 
@@ -136,7 +149,7 @@ export class UpdatesView extends LitElement {
     pkg.IsUpdating = true;
     this.requestUpdate();
     try {
-      await hostApi.batchUpdatePackages({
+      const result = await hostApi.batchUpdatePackages({
         Updates: [
           {
             PackageId: pkg.Id,
@@ -145,16 +158,22 @@ export class UpdatesView extends LitElement {
           },
         ],
       });
-      this.packages = this.packages.filter((p) => p.Id !== pkg.Id);
-      this.dispatchEvent(new CustomEvent<number>("count-changed", {
-        detail: this.packages.length,
-        bubbles: true,
-        composed: true,
-      }));
-      this.statusText =
-        this.packages.length > 0
-          ? `${this.packages.length} update${this.packages.length !== 1 ? "s" : ""} available`
-          : "All packages are up to date";
+      const succeeded = result.ok && result.value.Results.every((r) => r.Success);
+      if (succeeded) {
+        this.packages = this.packages.filter((p) => p.Id !== pkg.Id);
+        this.dispatchEvent(new CustomEvent<number>("count-changed", {
+          detail: this.packages.length,
+          bubbles: true,
+          composed: true,
+        }));
+        this.statusText =
+          this.packages.length > 0
+            ? `${this.packages.length} update${this.packages.length !== 1 ? "s" : ""} available`
+            : "All packages are up to date";
+      } else {
+        const error = result.ok ? result.value.Results.find((r) => !r.Success)?.Error : result.error;
+        this.statusText = `Failed to update ${pkg.Id}${error ? `: ${error}` : ""}`;
+      }
     } finally {
       pkg.IsUpdating = false;
       this.requestUpdate();
