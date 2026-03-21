@@ -286,7 +286,6 @@ export class PackagesView extends LitElement {
   private _projectsPackagesAc: AbortController | null = null;
   packagesPage: number = 0;
   packagesLoadingInProgress: boolean = false;
-  private currentLoadPackageHash: string = "";
 
   @state() activeTab: TabId = "browse";
   @state() projects: Array<ProjectViewModel> = [];
