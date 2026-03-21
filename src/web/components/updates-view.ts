@@ -136,7 +136,7 @@ export class UpdatesView extends LitElement {
     pkg.IsUpdating = true;
     this.requestUpdate();
     try {
-      await hostApi.batchUpdatePackages({
+      const result = await hostApi.batchUpdatePackages({
         Updates: [
           {
             PackageId: pkg.Id,
@@ -145,16 +145,22 @@ export class UpdatesView extends LitElement {
           },
         ],
       });
-      this.packages = this.packages.filter((p) => p.Id !== pkg.Id);
-      this.dispatchEvent(new CustomEvent<number>("count-changed", {
-        detail: this.packages.length,
-        bubbles: true,
-        composed: true,
-      }));
-      this.statusText =
-        this.packages.length > 0
-          ? `${this.packages.length} update${this.packages.length !== 1 ? "s" : ""} available`
-          : "All packages are up to date";
+      const succeeded = result.ok && result.value.Results.every((r) => r.Success);
+      if (succeeded) {
+        this.packages = this.packages.filter((p) => p.Id !== pkg.Id);
+        this.dispatchEvent(new CustomEvent<number>("count-changed", {
+          detail: this.packages.length,
+          bubbles: true,
+          composed: true,
+        }));
+        this.statusText =
+          this.packages.length > 0
+            ? `${this.packages.length} update${this.packages.length !== 1 ? "s" : ""} available`
+            : "All packages are up to date";
+      } else {
+        const error = result.ok ? result.value.Results.find((r) => !r.Success)?.Error : result.error;
+        this.statusText = `Failed to update ${pkg.Id}${error ? `: ${error}` : ""}`;
+      }
     } finally {
       pkg.IsUpdating = false;
       this.requestUpdate();
