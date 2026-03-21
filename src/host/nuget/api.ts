@@ -162,10 +162,11 @@ export default class NuGetApi {
       }
 
       for (let i = 0; i < result.data.count; i++) {
+        if (signal?.aborted) break;
         const page: RawRegistrationPage = result.data.items[i];
         if (page.items) items.push(...page.items);
         else {
-          const pageData = await this.http.get(page["@id"] as string);
+          const pageData = await this.http.get(page["@id"] as string, ...(signal ? [{ signal }] : []));
           if (pageData instanceof AxiosError) {
             Logger.error("NuGetApi.GetPackageAsync: Axios Error while loading page data:", pageData.message);
           } else {
@@ -280,7 +281,7 @@ export default class NuGetApi {
           };
         }
         Logger.debug(`NuGetApi.GetPackageDetailsAsync: Fetching catalog from ${catalogUrl}`);
-        const result = await this.ExecuteGet(catalogUrl);
+        const result = await this.ExecuteGet(catalogUrl, ...(signal ? [{ signal }] : []));
         catalogData = result.data;
       }
 
