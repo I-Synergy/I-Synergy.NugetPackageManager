@@ -281,6 +281,9 @@ export class PackagesView extends LitElement {
   ];
 
   private splitter: Split.Instance | null = null;
+  private _packagesAc: AbortController | null = null;
+  private _projectsAc: AbortController | null = null;
+  private _projectsPackagesAc: AbortController | null = null;
   packagesPage: number = 0;
   packagesLoadingInProgress: boolean = false;
   private currentLoadPackageHash: string = "";
@@ -324,6 +327,9 @@ export class PackagesView extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.splitter?.destroy();
+    this._packagesAc?.abort();
+    this._projectsAc?.abort();
+    this._projectsPackagesAc?.abort();
   }
 
   private initSplitter(): void {
@@ -522,7 +528,10 @@ export class PackagesView extends LitElement {
     this.LoadProjectsPackages();
   }, 300);
 
-  async LoadProjectsPackages(forceReload: boolean = false): Promise<void> {
+  async LoadProjectsPackages(forceReload: boolean = false, _signal?: AbortSignal): Promise<void> {
+    this._projectsPackagesAc?.abort();
+    const ac = new AbortController();
+    this._projectsPackagesAc = ac;
     const projectsToUse =
       this.selectedProjectPaths.length > 0
         ? this.projects.filter((p) =>
@@ -607,8 +616,10 @@ export class PackagesView extends LitElement {
       let idx = 0;
       const runNext = async (): Promise<void> => {
         while (idx < this.projectsPackages.length) {
+          if (ac.signal.aborted) return;
           const pkg = this.projectsPackages[idx++]!;
-          await this.UpdatePackage(pkg, forceReload);
+          await this.UpdatePackage(pkg, forceReload, ac.signal);
+          if (ac.signal.aborted) return;
           completed++;
           void hostApi.updateStatusBar({
             Percentage: (completed / total) * 100,
@@ -619,9 +630,11 @@ export class PackagesView extends LitElement {
       const workers = Array.from({ length: Math.min(CONCURRENCY, this.projectsPackages.length) }, runNext);
       await Promise.allSettled(workers);
     } finally {
-      this.projectsPackages = [...this.projectsPackages];
-      if (total > 0) {
-        void hostApi.updateStatusBar({ Percentage: null });
+      if (!ac.signal.aborted) {
+        this.projectsPackages = [...this.projectsPackages];
+        if (total > 0) {
+          void hostApi.updateStatusBar({ Percentage: null });
+        }
       }
     }
   }
@@ -637,7 +650,8 @@ export class PackagesView extends LitElement {
 
   private async UpdatePackage(
     projectPackage: PackageViewModel,
-    forceReload: boolean = false
+    forceReload: boolean = false,
+    signal?: AbortSignal
   ): Promise<void> {
     const updatePkgReq: Parameters<typeof hostApi.getPackage>[0] = {
       Id: projectPackage.Id,
@@ -647,8 +661,9 @@ export class PackagesView extends LitElement {
     };
     if (this.CurrentSource?.Name !== undefined) updatePkgReq.SourceName = this.CurrentSource.Name;
     if (this.CurrentSource?.PasswordScriptPath !== undefined) updatePkgReq.PasswordScriptPath = this.CurrentSource.PasswordScriptPath;
-    const result = await hostApi.getPackage(updatePkgReq);
+    const result = await hostApi.getPackage(updatePkgReq, signal);
 
+    if (signal?.aborted) return;
     if (!result.ok || !result.value.Package) {
       projectPackage.Status = "Error";
     } else {
@@ -742,6 +757,15 @@ export class PackagesView extends LitElement {
     append: boolean = false,
     forceReload: boolean = false
   ): Promise<void> {
+    if (!append) {
+      this._packagesAc?.abort();
+      this._packagesAc = new AbortController();
+      this.packagesPage = 0;
+      this.selectedPackage = null;
+      this.packages = [];
+    }
+    const ac = this._packagesAc ?? new AbortController();
+
     const buildRequest = (): Parameters<typeof hostApi.getPackages>[0] => {
       const req: Parameters<typeof hostApi.getPackages>[0] = {
         Url: this.filters.SourceUrl,
@@ -758,23 +782,12 @@ export class PackagesView extends LitElement {
 
     this.packagesLoadingError = false;
     this.packagesLoadingInProgress = true;
-
-    if (!append) {
-      this.packagesPage = 0;
-      this.selectedPackage = null;
-      this.packages = [];
-    }
     this.noMorePackages = false;
 
     const requestObject = buildRequest();
-    this.currentLoadPackageHash = hash(requestObject);
+    const result = await hostApi.getPackages(requestObject, ac.signal);
 
-    const result = await hostApi.getPackages(requestObject);
-
-    if (this.currentLoadPackageHash !== hash(buildRequest())) {
-      // A newer request was started, discard this result
-      return;
-    }
+    if (ac.signal.aborted) return;
 
     if (!result.ok) {
       this.packagesLoadingError = true;
@@ -794,8 +807,14 @@ export class PackagesView extends LitElement {
   }
 
   async LoadProjects(forceReload: boolean = false): Promise<void> {
+    this._projectsAc?.abort();
+    const ac = new AbortController();
+    this._projectsAc = ac;
+
     this.projects = [];
-    const result = await hostApi.getProjects({ ForceReload: forceReload });
+    const result = await hostApi.getProjects({ ForceReload: forceReload }, ac.signal);
+
+    if (ac.signal.aborted) return;
 
     if (result.ok) {
       this.projects = result.value.Projects.map(

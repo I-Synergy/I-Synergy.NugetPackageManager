@@ -112,6 +112,7 @@ export class ConsolidateView extends LitElement {
   @property({ attribute: false }) projectPaths: string[] = [];
 
   private loaded = false;
+  private _loadAc: AbortController | null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -121,7 +122,16 @@ export class ConsolidateView extends LitElement {
     }
   }
 
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._loadAc?.abort();
+  }
+
   async LoadInconsistentPackages(forceReload: boolean = false): Promise<void> {
+    this._loadAc?.abort();
+    const ac = new AbortController();
+    this._loadAc = ac;
+
     this.isLoading = true;
     this.hasError = false;
     this.packages = [];
@@ -130,7 +140,9 @@ export class ConsolidateView extends LitElement {
       const req: Parameters<typeof hostApi.getInconsistentPackages>[0] = {};
       if (this.projectPaths.length > 0) req.ProjectPaths = this.projectPaths;
       if (forceReload) req.ForceReload = true;
-      const result = await hostApi.getInconsistentPackages(req);
+      const result = await hostApi.getInconsistentPackages(req, ac.signal);
+
+      if (ac.signal.aborted) return;
 
       if (!result.ok) {
         this.hasError = true;
@@ -150,9 +162,10 @@ export class ConsolidateView extends LitElement {
             : "";
       }
     } catch {
+      if (ac.signal.aborted) return;
       this.hasError = true;
     } finally {
-      this.isLoading = false;
+      if (!ac.signal.aborted) this.isLoading = false;
     }
   }
 

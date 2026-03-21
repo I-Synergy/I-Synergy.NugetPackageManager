@@ -96,7 +96,8 @@ export default class NuGetApi {
     filter: string,
     prerelease: boolean,
     skip: number,
-    take: number
+    take: number,
+    signal?: AbortSignal
   ): Promise<GetPackagesResponse> {
     Logger.debug(`NuGetApi.GetPackagesAsync: Fetching packages (filter: '${filter}', prerelease: ${prerelease}, skip: ${skip}, take: ${take})`);
     await this.EnsureSearchUrl();
@@ -108,6 +109,7 @@ export default class NuGetApi {
         prerelease: prerelease,
         semVerLevel: "2.0.0",
       },
+      signal,
     });
     const mappedData: Array<Package> = (result.data.data as RawPackageSearchItem[]).map((item) => ({
       Id: item["@id"] || "",
@@ -135,7 +137,7 @@ export default class NuGetApi {
     };
   }
 
-  async GetPackageAsync(id: string, prerelease: boolean = true): Promise<GetPackageResponse> {
+  async GetPackageAsync(id: string, prerelease: boolean = true, signal?: AbortSignal): Promise<GetPackageResponse> {
     const cacheKey = `${id.toLowerCase()}::${prerelease}`;
     const cached = this._packageCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < this._cacheTtl)) {
@@ -149,7 +151,7 @@ export default class NuGetApi {
     const items: RawCatalogItem[] = [];
     try {
       Logger.debug(`NuGetApi.GetPackageAsync: GET ${url}`);
-      const result = await this.http.get(url);
+      const result = await this.http.get(url, { signal });
       if (result instanceof AxiosError) {
         Logger.error("NuGetApi.GetPackageAsync: Axios Error Data:", result.response?.data);
         return {
@@ -238,11 +240,11 @@ export default class NuGetApi {
     this._vulnerabilityCache = null;
   }
 
-  async GetPackageDetailsAsync(packageVersionUrl: string): Promise<GetPackageDetailsResponse> {
+  async GetPackageDetailsAsync(packageVersionUrl: string, signal?: AbortSignal): Promise<GetPackageDetailsResponse> {
     try {
       await this.EnsureSearchUrl();
       Logger.debug(`NuGetApi.GetPackageDetailsAsync: Fetching package version from ${packageVersionUrl}`);
-      const packageVersion = await this.ExecuteGet(packageVersionUrl);
+      const packageVersion = await this.ExecuteGet(packageVersionUrl, { signal });
       
       if (!packageVersion.data?.catalogEntry) {
         Logger.debug(`NuGetApi.GetPackageDetailsAsync: No catalogEntry found in package version response`);
@@ -313,7 +315,7 @@ export default class NuGetApi {
     }
   }
 
-  async GetVulnerabilitiesAsync(): Promise<Map<string, VulnerabilityEntry[]>> {
+  async GetVulnerabilitiesAsync(signal?: AbortSignal): Promise<Map<string, VulnerabilityEntry[]>> {
     // Return cached data if fresh
     if (this._vulnerabilityCache && (Date.now() - this._vulnerabilityCache.timestamp < this._vulnCacheTtl)) {
       Logger.debug("NuGetApi.GetVulnerabilitiesAsync: Returning cached vulnerability data");
@@ -331,11 +333,12 @@ export default class NuGetApi {
     const vulnerabilities = new Map<string, VulnerabilityEntry[]>();
 
     try {
-      const indexResponse = await this.ExecuteGet(this._vulnerabilityUrl);
+      const indexResponse = await this.ExecuteGet(this._vulnerabilityUrl, { signal });
       const pages: Array<{ "@name": string; "@id": string; "@updated": string }> = indexResponse.data;
 
       for (const page of pages) {
-        const pageResponse = await this.ExecuteGet(page["@id"]);
+        if (signal?.aborted) break;
+        const pageResponse = await this.ExecuteGet(page["@id"], { signal });
         const data: Record<string, VulnerabilityEntry[]> = pageResponse.data;
 
         for (const [packageId, entries] of Object.entries(data)) {

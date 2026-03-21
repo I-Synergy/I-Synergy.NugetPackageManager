@@ -87,7 +87,7 @@ function formatApiError(err: unknown): string {
 
 export function createHostAPI(): HostAPI {
   return {
-    async getProjects(request: GetProjectsRequest): Promise<Result<GetProjectsResponse>> {
+    async getProjects(request: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>> {
       Logger.info("getProjects: Handling request");
 
       const projectFiles = await vscode.workspace.findFiles(
@@ -99,12 +99,14 @@ export function createHostAPI(): HostAPI {
 
       const parseResults = await Promise.allSettled(
         projectFiles.map(async (file) => {
+          if (signal?.aborted) throw new Error("cancelled");
           const cpmVersions = await CpmResolver.GetPackageVersions(file.fsPath);
           const project = await ProjectParser.Parse(file.fsPath, cpmVersions);
           project.CpmEnabled = cpmVersions !== null;
           return project;
         })
       );
+      if (signal?.aborted) return fail("cancelled");
       const projects: Project[] = [];
       parseResults.forEach((r, i) => {
         if (r.status === "fulfilled") {
@@ -121,7 +123,7 @@ export function createHostAPI(): HostAPI {
       return ok({ Projects: sorted });
     },
 
-    async getPackages(request: GetPackagesRequest): Promise<Result<GetPackagesResponse>> {
+    async getPackages(request: GetPackagesRequest, signal?: AbortSignal): Promise<Result<GetPackagesResponse>> {
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       StatusBarUtils.show(0, "Loading packages...");
 
@@ -148,7 +150,8 @@ export function createHostAPI(): HostAPI {
                   request.Filter,
                   request.Prerelease,
                   request.Skip,
-                  request.Take
+                  request.Take,
+                  signal
                 );
               } catch (error) {
                 Logger.error(`getPackages: Failed to fetch from ${source.Url}`, error);
@@ -182,7 +185,8 @@ export function createHostAPI(): HostAPI {
           request.Filter,
           request.Prerelease,
           request.Skip,
-          request.Take
+          request.Take,
+          signal
         );
         Logger.info(`getPackages: Successfully fetched ${packages.data.length} packages`);
         return ok({ Packages: packages.data });
@@ -195,7 +199,7 @@ export function createHostAPI(): HostAPI {
       }
     },
 
-    async getPackage(request: GetPackageRequest): Promise<Result<GetPackageResponse>> {
+    async getPackage(request: GetPackageRequest, signal?: AbortSignal): Promise<Result<GetPackageResponse>> {
       if (request.Url === "") {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
@@ -206,7 +210,7 @@ export function createHostAPI(): HostAPI {
             if (request.ForceReload) {
               api.ClearPackageCache(request.Id);
             }
-            const packageResult = await api.GetPackageAsync(request.Id, request.Prerelease);
+            const packageResult = await api.GetPackageAsync(request.Id, request.Prerelease, signal);
 
             if (!packageResult.isError && packageResult.data) {
               Logger.info(`getPackage: Found ${request.Id} in ${source.Url}`);
@@ -225,7 +229,7 @@ export function createHostAPI(): HostAPI {
         if (request.ForceReload) {
           api.ClearPackageCache(request.Id);
         }
-        const packageResult = await api.GetPackageAsync(request.Id, request.Prerelease);
+        const packageResult = await api.GetPackageAsync(request.Id, request.Prerelease, signal);
 
         if (packageResult.isError || !packageResult.data) {
           return fail("Failed to fetch package");
@@ -240,13 +244,13 @@ export function createHostAPI(): HostAPI {
       }
     },
 
-    async getPackageDetails(request: GetPackageDetailsRequest): Promise<Result<GetPackageDetailsResponse>> {
+    async getPackageDetails(request: GetPackageDetailsRequest, signal?: AbortSignal): Promise<Result<GetPackageDetailsResponse>> {
       if (!request.Url) return fail("SourceUrl is empty");
       if (!request.PackageVersionUrl) return fail("PackageVersionUrl is empty");
 
       try {
         const api = await nugetApiFactory.GetSourceApi(request.Url);
-        const details = await api.GetPackageDetailsAsync(request.PackageVersionUrl);
+        const details = await api.GetPackageDetailsAsync(request.PackageVersionUrl, signal);
         return ok({ Package: details.data });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -388,7 +392,7 @@ export function createHostAPI(): HostAPI {
       return ok(undefined as void);
     },
 
-    async getOutdatedPackages(request: GetOutdatedPackagesRequest): Promise<Result<GetOutdatedPackagesResponse>> {
+    async getOutdatedPackages(request: GetOutdatedPackagesRequest, signal?: AbortSignal): Promise<Result<GetOutdatedPackagesResponse>> {
       Logger.info("getOutdatedPackages: Checking for outdated packages");
       StatusBarUtils.show(0, "Checking for updates...");
 
@@ -464,14 +468,17 @@ export function createHostAPI(): HostAPI {
         const batchSize = 5;
 
         for (let i = 0; i < packageIds.length; i += batchSize) {
+          if (signal?.aborted) break;
           const batch = packageIds.slice(i, i + batchSize);
           const progress = Math.round(((i + batch.length) / packageIds.length) * 100);
           StatusBarUtils.show(progress, `Checking updates (${i + batch.length}/${packageIds.length})...`);
 
           const promises = batch.map(async (packageId) => {
+            if (signal?.aborted) return;
             const installed = installedMap.get(packageId)!;
-            const latest = await getLatestVersion(packageId, request.Prerelease, sources);
+            const latest = await getLatestVersion(packageId, request.Prerelease, sources, signal);
 
+            if (signal?.aborted) return;
             if (latest && compareVersions(latest.version, installed.version) > 0) {
               outdated.push({
                 Id: packageId,
@@ -539,7 +546,7 @@ export function createHostAPI(): HostAPI {
       return ok({ Results: results });
     },
 
-    async getInconsistentPackages(request: GetInconsistentPackagesRequest): Promise<Result<GetInconsistentPackagesResponse>> {
+    async getInconsistentPackages(request: GetInconsistentPackagesRequest, signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>> {
       Logger.info("getInconsistentPackages: Checking for version inconsistencies");
 
       try {
@@ -615,7 +622,7 @@ export function createHostAPI(): HostAPI {
       }
     },
 
-    async getVulnerablePackages(request: GetVulnerablePackagesRequest): Promise<Result<GetVulnerablePackagesResponse>> {
+    async getVulnerablePackages(request: GetVulnerablePackagesRequest, signal?: AbortSignal): Promise<Result<GetVulnerablePackagesResponse>> {
       Logger.info("getVulnerablePackages: Scanning for vulnerable packages");
       StatusBarUtils.show(0, "Scanning for vulnerabilities...");
 
@@ -687,7 +694,7 @@ export function createHostAPI(): HostAPI {
         const vulnResults = await Promise.allSettled(
           sources.map(async (source) => {
             const api = await nugetApiFactory.GetSourceApi(source.Url);
-            return { source, vulns: await api.GetVulnerabilitiesAsync() };
+            return { source, vulns: await api.GetVulnerabilitiesAsync(signal) };
           })
         );
         for (const result of vulnResults) {
@@ -843,14 +850,15 @@ async function executeAddPackage(
 async function getLatestVersion(
   packageId: string,
   prerelease: boolean,
-  sources: Array<{ Name: string; Url: string }>
+  sources: Array<{ Name: string; Url: string }>,
+  signal?: AbortSignal
 ): Promise<{ version: string; sourceUrl: string; sourceName: string } | null> {
   let best: { version: string; sourceUrl: string; sourceName: string } | null = null;
 
   const promises = sources.map(async (source) => {
     try {
       const api = await nugetApiFactory.GetSourceApi(source.Url);
-      const result = await api.GetPackagesAsync(packageId, prerelease, 0, 1);
+      const result = await api.GetPackagesAsync(packageId, prerelease, 0, 1, signal);
       const pkg = result.data.find((p) => p.Name.toLowerCase() === packageId.toLowerCase());
       if (pkg) {
         return { version: pkg.Version, sourceUrl: source.Url, sourceName: source.Name };
