@@ -5,8 +5,6 @@ import xpath from "xpath";
 import { Logger } from "../../common/logger";
 
 export default class CpmResolver {
-  private static cache: Map<string, Map<string, string>> = new Map();
-
   static async GetPackageVersions(projectPath: string): Promise<Map<string, string> | null> {
     const cpmFilePath = await this.FindDirectoryPackagesPropsFile(projectPath);
     if (!cpmFilePath) {
@@ -74,10 +72,6 @@ export default class CpmResolver {
   }
 
   private static async ParsePackageVersions(cpmFilePath: string): Promise<Map<string, string>> {
-    if (this.cache.has(cpmFilePath)) {
-      return this.cache.get(cpmFilePath)!;
-    }
-
     Logger.debug(`CpmResolver.ParsePackageVersions: Parsing ${cpmFilePath}`);
     const versionMap = new Map<string, string>();
 
@@ -97,26 +91,10 @@ export default class CpmResolver {
       });
 
       Logger.debug(`CpmResolver.ParsePackageVersions: Found ${versionMap.size} package versions in ${cpmFilePath}`);
-      this.cache.set(cpmFilePath, versionMap);
     } catch (error) {
       Logger.error(`CpmResolver.ParsePackageVersions: Failed to parse CPM versions from ${cpmFilePath}`, error);
     }
 
     return versionMap;
-  }
-
-  static ClearCache(cpmFilePath?: string): void {
-    if (cpmFilePath) {
-      this.cache.delete(cpmFilePath);
-    } else {
-      this.cache.clear();
-    }
-  }
-
-  static async ClearCacheForProject(projectPath: string): Promise<void> {
-    const cpmFilePath = await this.FindDirectoryPackagesPropsFile(projectPath);
-    if (cpmFilePath) {
-      this.ClearCache(cpmFilePath);
-    }
   }
 }
