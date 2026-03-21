@@ -116,6 +116,7 @@ export class VulnerabilitiesView extends LitElement {
   @property({ attribute: false }) projectPaths: string[] = [];
 
   private loaded = false;
+  private _loadAc: AbortController | null = null;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -125,7 +126,16 @@ export class VulnerabilitiesView extends LitElement {
     }
   }
 
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._loadAc?.abort();
+  }
+
   async LoadVulnerablePackages(forceReload: boolean = false): Promise<void> {
+    this._loadAc?.abort();
+    const ac = new AbortController();
+    this._loadAc = ac;
+
     this.isLoading = true;
     this.hasError = false;
     this.packages = [];
@@ -134,7 +144,9 @@ export class VulnerabilitiesView extends LitElement {
       const req: Parameters<typeof hostApi.getVulnerablePackages>[0] = {};
       if (this.projectPaths.length > 0) req.ProjectPaths = this.projectPaths;
       if (forceReload) req.ForceReload = true;
-      const result = await hostApi.getVulnerablePackages(req);
+      const result = await hostApi.getVulnerablePackages(req, ac.signal);
+
+      if (ac.signal.aborted) return;
 
       if (!result.ok) {
         this.hasError = true;
@@ -154,9 +166,10 @@ export class VulnerabilitiesView extends LitElement {
             : "";
       }
     } catch {
+      if (ac.signal.aborted) return;
       this.hasError = true;
     } finally {
-      this.isLoading = false;
+      if (!ac.signal.aborted) this.isLoading = false;
     }
   }
 

@@ -186,27 +186,32 @@ export type RpcResponse = {
   result: Result<unknown>;
 };
 
-export type RpcMessage = RpcRequest | RpcResponse;
+export type RpcCancel = {
+  type: "rpc-cancel";
+  id: number;
+};
+
+export type RpcMessage = RpcRequest | RpcResponse | RpcCancel;
 
 // ============================================================
 // Host API Contract
 // ============================================================
 
 export interface HostAPI {
-  getProjects(req: GetProjectsRequest): Promise<Result<GetProjectsResponse>>;
-  getPackages(req: GetPackagesRequest): Promise<Result<GetPackagesResponse>>;
-  getPackage(req: GetPackageRequest): Promise<Result<GetPackageResponse>>;
-  getPackageDetails(req: GetPackageDetailsRequest): Promise<Result<GetPackageDetailsResponse>>;
+  getProjects(req: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>>;
+  getPackages(req: GetPackagesRequest, signal?: AbortSignal): Promise<Result<GetPackagesResponse>>;
+  getPackage(req: GetPackageRequest, signal?: AbortSignal): Promise<Result<GetPackageResponse>>;
+  getPackageDetails(req: GetPackageDetailsRequest, signal?: AbortSignal): Promise<Result<GetPackageDetailsResponse>>;
   updateProject(req: UpdateProjectRequest): Promise<Result<UpdateProjectResponse>>;
   getConfiguration(): Promise<Result<GetConfigurationResponse>>;
   updateConfiguration(req: UpdateConfigurationRequest): Promise<Result<void>>;
   openUrl(req: OpenUrlRequest): Promise<Result<void>>;
   updateStatusBar(req: UpdateStatusBarRequest): Promise<Result<void>>;
-  getOutdatedPackages(req: GetOutdatedPackagesRequest): Promise<Result<GetOutdatedPackagesResponse>>;
+  getOutdatedPackages(req: GetOutdatedPackagesRequest, signal?: AbortSignal): Promise<Result<GetOutdatedPackagesResponse>>;
   batchUpdatePackages(req: BatchUpdateRequest): Promise<Result<BatchUpdateResponse>>;
-  getInconsistentPackages(req: GetInconsistentPackagesRequest): Promise<Result<GetInconsistentPackagesResponse>>;
+  getInconsistentPackages(req: GetInconsistentPackagesRequest, signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>>;
   consolidatePackages(req: ConsolidateRequest): Promise<Result<void>>;
-  getVulnerablePackages(req: GetVulnerablePackagesRequest): Promise<Result<GetVulnerablePackagesResponse>>;
+  getVulnerablePackages(req: GetVulnerablePackagesRequest, signal?: AbortSignal): Promise<Result<GetVulnerablePackagesResponse>>;
   showConfirmation(req: ShowConfirmationRequest): Promise<Result<ShowConfirmationResponse>>;
   getOperationProgress(req: GetOperationProgressRequest): Promise<Result<GetOperationProgressResponse>>;
 }
