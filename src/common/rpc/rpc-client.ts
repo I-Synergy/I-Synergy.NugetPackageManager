@@ -5,6 +5,7 @@ import { fail } from "./result";
 type PendingCall = {
   resolve: (result: Result<unknown>) => void;
   timer: ReturnType<typeof setTimeout>;
+  cleanup: (() => void) | undefined;
 };
 
 export function createRpcClient(
@@ -22,6 +23,7 @@ export function createRpcClient(
     if (!call) return;
 
     clearTimeout(call.timer);
+    call.cleanup?.();
     pending.delete(msg.id);
     call.resolve(msg.result);
   });
@@ -44,14 +46,17 @@ export function createRpcClient(
         resolve(fail("cancelled"));
       };
 
+      const cleanup = signal ? (): void => { signal.removeEventListener("abort", cancel); } : undefined;
+
       signal?.addEventListener("abort", cancel, { once: true });
 
       const timer = setTimeout(() => {
         pending.delete(id);
+        cleanup?.();
         resolve(fail(`RPC timeout after ${timeoutMs}ms for method: ${method}`));
       }, timeoutMs);
 
-      pending.set(id, { resolve, timer });
+      pending.set(id, { resolve, timer, cleanup });
 
       const request: RpcRequest = {
         type: "rpc-request",
