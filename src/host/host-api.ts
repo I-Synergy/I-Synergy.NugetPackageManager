@@ -272,14 +272,18 @@ export function createHostAPI(): HostAPI {
       }
 
       const skipRestoreConfig = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") ?? "";
-      const isCpmEnabled = await CpmResolver.GetPackageVersions(request.ProjectPath) !== null;
+      const cpmVersionsBefore = await CpmResolver.GetPackageVersions(request.ProjectPath);
+      const isCpmEnabled = cpmVersionsBefore !== null;
       const skipRestore = !!skipRestoreConfig && !isCpmEnabled;
 
       try {
-        if (request.Type === "UPDATE") {
-          await executeAddPackage(request.PackageId, request.ProjectPath, request.Version, skipRestore, request.SourceUrl, request.OperationId);
-        } else if (request.Type === "UNINSTALL") {
+        if (request.Type === "UNINSTALL") {
           await executeRemovePackage(request.PackageId, request.ProjectPath, request.OperationId);
+        } else if (isCpmEnabled && cpmVersionsBefore!.has(request.PackageId)) {
+          await CpmResolver.UpdatePackageVersion(request.ProjectPath, request.PackageId, request.Version ?? "");
+          if (!skipRestore) {
+            await TaskExecutor.ExecuteCommand("dotnet", ["restore", request.ProjectPath.replace(/\\/g, "/")], request.OperationId ?? `restore-${request.PackageId}`);
+          }
         } else {
           await executeAddPackage(request.PackageId, request.ProjectPath, request.Version, skipRestore, request.SourceUrl, request.OperationId);
         }
@@ -507,11 +511,19 @@ export function createHostAPI(): HostAPI {
 
         try {
           for (const projectPath of update.ProjectPaths) {
-            const isCpm = await CpmResolver.GetPackageVersions(projectPath) !== null;
+            const cpmVersions = await CpmResolver.GetPackageVersions(projectPath);
+            const isCpm = cpmVersions !== null;
             const skipRestore =
               !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") && !isCpm;
 
-            await executeAddPackage(update.PackageId, projectPath, update.Version, skipRestore);
+            if (isCpm && cpmVersions!.has(update.PackageId)) {
+              await CpmResolver.UpdatePackageVersion(projectPath, update.PackageId, update.Version);
+              if (!skipRestore) {
+                await TaskExecutor.ExecuteCommand("dotnet", ["restore", projectPath.replace(/\\/g, "/")], `restore-${update.PackageId}-${i}`);
+              }
+            } else {
+              await executeAddPackage(update.PackageId, projectPath, update.Version, skipRestore);
+            }
           }
 
           results.push({ PackageId: update.PackageId, Success: true });
@@ -766,11 +778,19 @@ export function createHostAPI(): HostAPI {
             `Consolidating ${request.PackageId} (${i + 1}/${request.ProjectPaths.length})...`
           );
 
-          const isCpm = await CpmResolver.GetPackageVersions(projectPath) !== null;
+          const cpmVersions = await CpmResolver.GetPackageVersions(projectPath);
+          const isCpm = cpmVersions !== null;
           const skipRestore =
             !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") && !isCpm;
 
-          await executeAddPackage(request.PackageId, projectPath, request.TargetVersion, skipRestore);
+          if (isCpm && cpmVersions!.has(request.PackageId)) {
+            await CpmResolver.UpdatePackageVersion(projectPath, request.PackageId, request.TargetVersion);
+            if (!skipRestore) {
+              await TaskExecutor.ExecuteCommand("dotnet", ["restore", projectPath.replace(/\\/g, "/")], `restore-${request.PackageId}`);
+            }
+          } else {
+            await executeAddPackage(request.PackageId, projectPath, request.TargetVersion, skipRestore);
+          }
         }
 
         StatusBarUtils.hide();
