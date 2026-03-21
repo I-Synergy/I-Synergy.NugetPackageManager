@@ -89,9 +89,6 @@ export function createHostAPI(): HostAPI {
   return {
     async getProjects(request: GetProjectsRequest): Promise<Result<GetProjectsResponse>> {
       Logger.info("getProjects: Handling request");
-      if (request.ForceReload) {
-        CpmResolver.ClearCache();
-      }
 
       const projectFiles = await vscode.workspace.findFiles(
         "**/*.{csproj,fsproj,vbproj}",
@@ -293,7 +290,6 @@ export function createHostAPI(): HostAPI {
         StatusBarUtils.hide();
       }
 
-      CpmResolver.ClearCache();
       nugetApiFactory.ClearCache();
 
       const cpmVersions = await CpmResolver.GetPackageVersions(request.ProjectPath);
@@ -527,7 +523,6 @@ export function createHostAPI(): HostAPI {
         }
       }
 
-      CpmResolver.ClearCache();
       StatusBarUtils.hide();
       return ok({ Results: results });
     },
@@ -778,7 +773,6 @@ export function createHostAPI(): HostAPI {
           await executeAddPackage(request.PackageId, projectPath, request.TargetVersion, skipRestore);
         }
 
-        CpmResolver.ClearCache();
         StatusBarUtils.hide();
         Logger.info(`consolidatePackages: Done`);
         return ok(undefined as void);
