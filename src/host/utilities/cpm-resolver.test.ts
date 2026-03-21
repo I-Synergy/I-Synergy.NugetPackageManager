@@ -12,6 +12,7 @@ suite('CpmResolver Tests', () => {
 
     // Store original Logger methods to restore them after tests
     const originalDebug = Logger.debug;
+    const originalInfo = Logger.info;
     const originalError = Logger.error;
 
     setup(() => {
@@ -30,12 +31,14 @@ suite('CpmResolver Tests', () => {
 
         // Silence logger by default to keep test output clean
         Logger.debug = () => {};
+        Logger.info = () => {};
         Logger.error = () => {};
     });
 
     teardown(() => {
         // Restore logger
         Logger.debug = originalDebug;
+        Logger.info = originalInfo;
         Logger.error = originalError;
 
         try {
@@ -243,5 +246,89 @@ suite('CpmResolver Tests', () => {
         const versions = await CpmResolver.GetPackageVersions(projectPath);
         assert.strictEqual(versions, null);
         assert.strictEqual(errorLogged, true);
+    });
+
+    // UpdatePackageVersion tests
+
+    test('UpdatePackageVersion updates version with Include-first attribute ordering', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        const cpmContent = `<Project>
+  <ItemGroup>
+    <PackageVersion Include="My.Package" Version="1.0.0" />
+  </ItemGroup>
+</Project>`;
+        fs.writeFileSync(cpmPath, cpmContent);
+
+        await CpmResolver.UpdatePackageVersion(projectPath, 'My.Package', '2.0.0');
+
+        const updated = fs.readFileSync(cpmPath, 'utf8');
+        assert.ok(updated.includes('Version="2.0.0"'), 'Version should be updated to 2.0.0');
+        assert.ok(!updated.includes('Version="1.0.0"'), 'Old version should not remain');
+        assert.ok(updated.includes('Include="My.Package"'), 'Include attribute should remain unchanged');
+    });
+
+    test('UpdatePackageVersion updates version with Version-first attribute ordering', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        const cpmContent = `<Project>
+  <ItemGroup>
+    <PackageVersion Version="1.0.0" Include="My.Package" />
+  </ItemGroup>
+</Project>`;
+        fs.writeFileSync(cpmPath, cpmContent);
+
+        await CpmResolver.UpdatePackageVersion(projectPath, 'My.Package', '3.1.0');
+
+        const updated = fs.readFileSync(cpmPath, 'utf8');
+        assert.ok(updated.includes('Version="3.1.0"'), 'Version should be updated to 3.1.0');
+        assert.ok(!updated.includes('Version="1.0.0"'), 'Old version should not remain');
+        assert.ok(updated.includes('Include="My.Package"'), 'Include attribute should remain unchanged');
+    });
+
+    test('UpdatePackageVersion throws when package is not found in the file', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        const cpmContent = `<Project>
+  <ItemGroup>
+    <PackageVersion Include="Other.Package" Version="1.0.0" />
+  </ItemGroup>
+</Project>`;
+        fs.writeFileSync(cpmPath, cpmContent);
+
+        await assert.rejects(
+            () => CpmResolver.UpdatePackageVersion(projectPath, 'Missing.Package', '2.0.0'),
+            (err: Error) => {
+                assert.ok(err.message.includes('Missing.Package'), 'Error message should mention the package id');
+                return true;
+            }
+        );
+    });
+
+    test('UpdatePackageVersion throws when Directory.Packages.props is not found', async () => {
+        // No Directory.Packages.props file is created — FindDirectoryPackagesPropsFile returns null
+        await assert.rejects(
+            () => CpmResolver.UpdatePackageVersion(projectPath, 'My.Package', '2.0.0'),
+            (err: Error) => {
+                assert.ok(err.message.includes('Directory.Packages.props'), 'Error message should mention the missing file');
+                return true;
+            }
+        );
+    });
+
+    test('UpdatePackageVersion only updates the targeted package and leaves others unchanged', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        const cpmContent = `<Project>
+  <ItemGroup>
+    <PackageVersion Include="Package.A" Version="1.0.0" />
+    <PackageVersion Include="Package.B" Version="2.0.0" />
+  </ItemGroup>
+</Project>`;
+        fs.writeFileSync(cpmPath, cpmContent);
+
+        await CpmResolver.UpdatePackageVersion(projectPath, 'Package.A', '1.5.0');
+
+        const updated = fs.readFileSync(cpmPath, 'utf8');
+        assert.ok(updated.includes('Include="Package.A"'), 'Package.A Include attribute should remain');
+        assert.ok(updated.includes('Version="1.5.0"'), 'Package.A version should be updated');
+        assert.ok(updated.includes('Include="Package.B"'), 'Package.B Include attribute should remain');
+        assert.ok(updated.includes('Version="2.0.0"'), 'Package.B version should be unchanged');
     });
 });
