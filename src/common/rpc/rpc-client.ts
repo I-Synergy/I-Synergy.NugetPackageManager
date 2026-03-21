@@ -1,4 +1,4 @@
-import type { HostAPI, RpcRequest, RpcResponse } from "./types";
+import type { HostAPI, RpcRequest, RpcResponse, RpcCancel } from "./types";
 import type { Result } from "./result";
 import { fail } from "./result";
 
@@ -26,9 +26,25 @@ export function createRpcClient(
     call.resolve(msg.result);
   });
 
-  function call(method: string, params: unknown): Promise<Result<unknown>> {
+  function call(method: string, params: unknown, signal?: AbortSignal): Promise<Result<unknown>> {
     return new Promise<Result<unknown>>((resolve) => {
+      if (signal?.aborted) {
+        resolve(fail("cancelled"));
+        return;
+      }
+
       const id = nextId++;
+
+      const cancel = (): void => {
+        const c = pending.get(id);
+        if (!c) return;
+        clearTimeout(c.timer);
+        pending.delete(id);
+        postMessage({ type: "rpc-cancel", id } satisfies RpcCancel);
+        resolve(fail("cancelled"));
+      };
+
+      signal?.addEventListener("abort", cancel, { once: true });
 
       const timer = setTimeout(() => {
         pending.delete(id);
@@ -49,7 +65,7 @@ export function createRpcClient(
 
   return new Proxy({} as HostAPI, {
     get(_target, prop: string) {
-      return (params: unknown) => call(prop, params);
+      return (params: unknown, signal?: AbortSignal) => call(prop, params, signal);
     },
   });
 }
