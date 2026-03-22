@@ -111,7 +111,11 @@ export class UpdatesView extends LitElement {
   async LoadOutdatedPackagesAsync(forceReload: boolean = false): Promise<void> {
     this.packages = [];
     this.statusText = "";
-    await this._loadTask.run([this.projectPaths, this.sourceUrl, this.prerelease, forceReload]);
+    try {
+      await this._loadTask.run([this.projectPaths, this.sourceUrl, this.prerelease, forceReload]);
+    } catch {
+      // Avoid unhandled promise rejections; rely on TaskStatus.ERROR for rendering.
+    }
   }
 
   private async updateSingleAsync(pkg: OutdatedPackageViewModel, skipRestore = false): Promise<void> {
