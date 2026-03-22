@@ -375,10 +375,39 @@ suite('NuGetConfigResolver Tests', () => {
         });
     });
 
+    suite('CollectWorkspaceConfigFiles', () => {
+        test('Returns workspace-level config files for each root', () => {
+            writeConfig(workspaceDir, 'nuget.config', '<configuration/>');
+            writeConfig(workspaceDir, '.nuget/nuget.config', '<configuration/>');
+
+            const paths = (NuGetConfigResolver as any).CollectWorkspaceConfigFiles([workspaceDir]);
+
+            assert.ok(paths.includes(path.join(workspaceDir, '.nuget', 'nuget.config')));
+            assert.ok(paths.includes(path.join(workspaceDir, 'nuget.config')));
+            assert.strictEqual(paths.length, 2);
+        });
+
+        test('Returns empty array when no workspace roots provided', () => {
+            const paths = (NuGetConfigResolver as any).CollectWorkspaceConfigFiles([]);
+            assert.strictEqual(paths.length, 0);
+        });
+
+        test('Does not include machine or user config paths', () => {
+            // Even if user configs exist, CollectWorkspaceConfigFiles should only return workspace paths
+            writeConfig(homeDir, '.nuget/NuGet/NuGet.Config', '<configuration/>');
+            writeConfig(workspaceDir, 'nuget.config', '<configuration/>');
+
+            const paths = (NuGetConfigResolver as any).CollectWorkspaceConfigFiles([workspaceDir]);
+
+            assert.ok(!paths.includes(path.join(homeDir, '.nuget', 'NuGet', 'NuGet.Config')));
+            assert.ok(paths.includes(path.join(workspaceDir, 'nuget.config')));
+        });
+    });
+
     suite('GetSourcesAndDecodePasswords', () => {
         test('Uses VS Code configuration sources', async () => {
-            // Mock empty file sources
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([]);
+            // Stub ResolveConfigsAsync with no file-based sources and no workspace <clear />
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [], clearFound: false });
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
@@ -393,6 +422,42 @@ suite('NuGetConfigResolver Tests', () => {
 
             const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
             assert.ok(sources.find(s => s.Name === 'VSSource'));
+        });
+
+        test('Adds VS Code settings sources when <clear /> is only in a user/machine config (clearFound = false)', async () => {
+            // clearFound = false means <clear /> was not in any workspace config; it should NOT
+            // block extension-configured sources from VS Code settings.
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [], clearFound: false });
+
+            vscodeGetConfigurationStub.returns({
+                get: (key: string) => {
+                    if (key === 'sources') {
+                        return [JSON.stringify({ name: 'ExtSource', url: 'http://ext-source' })];
+                    }
+                    return undefined;
+                }
+            });
+
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
+            assert.ok(sources.find(s => s.Name === 'ExtSource'), 'VS Code settings source should be added when clearFound is false');
+        });
+
+        test('Blocks VS Code settings sources when <clear /> is in a workspace config (clearFound = true)', async () => {
+            // clearFound = true means a workspace nuget.config used <clear /> to restrict sources.
+            // New sources from VS Code settings should NOT be added to honour that intent.
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [], clearFound: true });
+
+            vscodeGetConfigurationStub.returns({
+                get: (key: string) => {
+                    if (key === 'sources') {
+                        return [JSON.stringify({ name: 'ExtSource', url: 'http://ext-source' })];
+                    }
+                    return undefined;
+                }
+            });
+
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
+            assert.strictEqual(sources.find(s => s.Name === 'ExtSource'), undefined, 'VS Code settings source should be blocked when clearFound is true');
         });
 
         test('Decodes password when passwordScriptPath is provided', async () => {
