@@ -355,7 +355,7 @@ suite('NuGetConfigResolver Tests', () => {
 
         test('Decodes password when passwordScriptPath is provided', async () => {
             const source = { Name: 'SecureSource', Url: 'http://secure', Password: 'Encrypted' };
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([source]);
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [source], clearFound: false });
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
@@ -378,7 +378,7 @@ suite('NuGetConfigResolver Tests', () => {
 
         test('Handles password decoding failure', async () => {
             const source = { Name: 'SecureSource', Url: 'http://secure', Password: 'Encrypted' };
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([source]);
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [source], clearFound: false });
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
@@ -404,7 +404,7 @@ suite('NuGetConfigResolver Tests', () => {
 
         test('Caches credentials even without script', async () => {
              const source = { Name: 'PlainSource', Url: 'http://plain', Username: 'user', Password: 'password' };
-             sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([source]);
+             sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [source], clearFound: false });
              vscodeGetConfigurationStub.returns({ get: () => [] });
 
              await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
