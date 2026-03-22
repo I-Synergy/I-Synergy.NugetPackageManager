@@ -67,11 +67,11 @@ export class PackageVersionDecorator implements vscode.Disposable {
             this._timeout = undefined;
         }
         this._timeout = setTimeout(() => {
-            this.updateDecorations(editor);
+            this.updateDecorationsAsync(editor);
         }, 500);
     }
 
-    private async updateDecorations(editor: vscode.TextEditor) {
+    private async updateDecorationsAsync(editor: vscode.TextEditor) {
         if (!editor || editor.document.isClosed) {
             return;
         }
@@ -141,11 +141,11 @@ export class PackageVersionDecorator implements vscode.Disposable {
 
         // Fetch and decorate
         if (packagesToFetch.size > 0) {
-            await this.fetchAndDecorate(packagesToFetch, packagePositions, editor);
+            await this.fetchAndDecorateAsync(packagesToFetch, packagePositions, editor);
         }
     }
 
-    private async fetchAndDecorate(
+    private async fetchAndDecorateAsync(
         packageIds: Set<string>,
         packagePositions: Map<string, { start: vscode.Position, end: vscode.Position, version: string }[]>,
         editor: vscode.TextEditor
@@ -154,7 +154,7 @@ export class PackageVersionDecorator implements vscode.Disposable {
         const decorations: vscode.DecorationOptions[] = [];
 
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
+        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
 
         const promises = Array.from(packageIds).map(async (packageId) => {
              if (this._failedCache.has(packageId)) return;
@@ -164,7 +164,7 @@ export class PackageVersionDecorator implements vscode.Disposable {
 
                  for (const source of sources) {
                      try {
-                         const api = await nugetApiFactory.GetSourceApi(source.Url);
+                         const api = await nugetApiFactory.GetSourceApiAsync(source.Url);
                          const result = await api.GetPackageAsync(packageId, this._prerelease);
                          if (!result.isError && result.data) {
                              latestVersion = result.data.Version;

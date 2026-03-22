@@ -11,14 +11,14 @@ type SourceApiCollection = {
 class NuGetApiFactory {
   private readonly _sourceApiCollection: SourceApiCollection = {};
 
-  public async GetSourceApi(url: string): Promise<NuGetApi> {
+  public async GetSourceApiAsync(url: string): Promise<NuGetApi> {
     if (!(url in this._sourceApiCollection)) {
-      Logger.debug(`NuGetApiFactory.GetSourceApi: Creating new API instance for ${url}`);
+      Logger.debug(`NuGetApiFactory.GetSourceApiAsync: Creating new API instance for ${url}`);
       const workspaceFolders = vscode.workspace.workspaceFolders;
       const workspaceRoot = workspaceFolders?.[0]?.uri.fsPath;
-      const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
+      const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
 
-      Logger.debug(`NuGetApiFactory.GetSourceApi: Available sources: ${sources.map(s => `${s.Name}=${s.Url} (hasAuth=${!!s.Username || !!s.Password})`).join(", ")}`);
+      Logger.debug(`NuGetApiFactory.GetSourceApiAsync: Available sources: ${sources.map(s => `${s.Name}=${s.Url} (hasAuth=${!!s.Username || !!s.Password})`).join(", ")}`);
 
       // Match by URL with/without trailing slash normalization
       const normalizeUrl = (u: string) => u.replace(/\/+$/, "").toLowerCase();
@@ -26,14 +26,14 @@ class NuGetApiFactory {
 
       const hasAuth = !!(sourceWithCreds?.Username || sourceWithCreds?.Password);
       if (hasAuth) {
-        Logger.info(`NuGetApiFactory.GetSourceApi: Using credentials for ${url} (user: ${sourceWithCreds?.Username})`);
+        Logger.info(`NuGetApiFactory.GetSourceApiAsync: Using credentials for ${url} (user: ${sourceWithCreds?.Username})`);
       } else {
-        Logger.warn(`NuGetApiFactory.GetSourceApi: No credentials found for ${url}. Available source URLs: [${sources.map(s => s.Url).join(", ")}]`);
+        Logger.warn(`NuGetApiFactory.GetSourceApiAsync: No credentials found for ${url}. Available source URLs: [${sources.map(s => s.Url).join(", ")}]`);
       }
 
       this._sourceApiCollection[url] = new NuGetApi(url, sourceWithCreds?.Username, sourceWithCreds?.Password);
     } else {
-      Logger.debug(`NuGetApiFactory.GetSourceApi: Returning cached API instance for ${url}`);
+      Logger.debug(`NuGetApiFactory.GetSourceApiAsync: Returning cached API instance for ${url}`);
     }
 
     return this._sourceApiCollection[url] as NuGetApi;

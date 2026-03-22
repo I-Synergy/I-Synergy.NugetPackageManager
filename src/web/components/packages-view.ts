@@ -2,7 +2,6 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import Split from "split.js";
-import hash from "object-hash";
 import lodash from "lodash";
 import { hostApi, configuration } from "@/web/registrations";
 import codicon from "@/web/styles/codicon.css";
@@ -316,7 +315,8 @@ export class PackagesView extends LitElement {
       Prerelease: configuration.Configuration?.Prerelease ?? false,
     };
     // LoadPackages is triggered by search-bar's connectedCallback emitting filter-changed
-    this.LoadProjects();
+    // connectedCallback cannot be async (Web Components spec) — void is intentional
+    void this.LoadProjectsAsync();
   }
 
   override firstUpdated(): void {
@@ -365,12 +365,11 @@ export class PackagesView extends LitElement {
     return gutter;
   }
 
-  private toggleProjectTree(): void {
+  private async toggleProjectTreeAsync(): Promise<void> {
     this.showProjectTree = !this.showProjectTree;
-    void this.updateComplete.then(() => {
-      this.initSplitter();
-      this.reloadChildViews();
-    });
+    await this.updateComplete;
+    this.initSplitter();
+    await this.reloadChildViewsAsync();
   }
 
   get CurrentSource(): Source | undefined {
@@ -405,8 +404,11 @@ export class PackagesView extends LitElement {
     );
   }
 
+  // Stable empty-array reference so child Task args don't change on every render
+  private static readonly _emptyPaths: string[] = [];
+
   private get effectiveProjectPaths(): string[] {
-    return this.showProjectTree ? this.selectedProjectPaths : [];
+    return this.showProjectTree ? this.selectedProjectPaths : PackagesView._emptyPaths;
   }
 
   private get filteredProjects(): Array<ProjectViewModel> {
@@ -416,7 +418,7 @@ export class PackagesView extends LitElement {
     );
   }
 
-  private handleTabKeydown(e: KeyboardEvent): void {
+  private async handleTabKeydownAsync(e: KeyboardEvent): Promise<void> {
     const tabs: TabId[] = ["browse", "installed", "updates", "consolidate", "vulnerabilities"];
     const currentIdx = tabs.indexOf(this.activeTab);
     let newIdx = currentIdx;
@@ -438,39 +440,38 @@ export class PackagesView extends LitElement {
         return;
     }
     e.preventDefault();
-    this.setTab(tabs[newIdx] as TabId);
+    await this.setTabAsync(tabs[newIdx] as TabId);
     const tabButtons = this.shadowRoot?.querySelectorAll('[role="tab"]');
     (tabButtons?.[newIdx] as HTMLElement)?.focus();
   }
 
-  setTab(tab: TabId): void {
+  async setTabAsync(tab: TabId): Promise<void> {
     if (tab === this.activeTab) return;
     this.activeTab = tab;
-    void this.updateComplete.then(() => {
-      if (tab === "updates") {
-        (this.shadowRoot?.querySelector("updates-view") as UpdatesView | null)?.LoadOutdatedPackages();
-      } else if (tab === "consolidate") {
-        (this.shadowRoot?.querySelector("consolidate-view") as ConsolidateView | null)?.LoadInconsistentPackages();
-      } else if (tab === "vulnerabilities") {
-        (this.shadowRoot?.querySelector("vulnerabilities-view") as VulnerabilitiesView | null)?.LoadVulnerablePackages();
-      }
-    });
+    await this.updateComplete;
+    if (tab === "updates") {
+      await (this.shadowRoot?.querySelector("updates-view") as UpdatesView | null)?.LoadOutdatedPackagesAsync();
+    } else if (tab === "consolidate") {
+      await (this.shadowRoot?.querySelector("consolidate-view") as ConsolidateView | null)?.LoadInconsistentPackagesAsync();
+    } else if (tab === "vulnerabilities") {
+      await (this.shadowRoot?.querySelector("vulnerabilities-view") as VulnerabilitiesView | null)?.LoadVulnerablePackagesAsync();
+    }
   }
 
-  private async onChildPackageSelected(e: CustomEvent<{ packageId: string; sourceUrl?: string }>): Promise<void> {
+  private async onChildPackageSelectedAsync(e: CustomEvent<{ packageId: string; sourceUrl?: string }>): Promise<void> {
     const { packageId, sourceUrl } = e.detail;
 
     // Check if we already have this package in projectsPackages (installed)
     const existing = this.projectsPackages.find((p) => p.Id === packageId);
     if (existing) {
-      await this.SelectPackage(existing);
+      await this.SelectPackageAsync(existing);
       return;
     }
 
     // Check if we have it in browse packages
     const browsePkg = this.packages.find((p) => p.Id === packageId);
     if (browsePkg) {
-      await this.SelectPackage(browsePkg);
+      await this.SelectPackageAsync(browsePkg);
       return;
     }
 
@@ -495,39 +496,38 @@ export class PackagesView extends LitElement {
       "MissingDetails"
     );
     if (sourceUrl) pkg.SourceUrl = sourceUrl;
-    await this.SelectPackage(pkg);
+    await this.SelectPackageAsync(pkg);
   }
 
-  setSearchQuery(query: string): void {
-    this.setTab("browse");
-    void this.updateComplete.then(() => {
-      const searchBar = this.shadowRoot?.querySelector("search-bar") as SearchBar | null;
-      searchBar?.setSearchQuery(query);
-    });
+  async setSearchQueryAsync(query: string): Promise<void> {
+    await this.setTabAsync("browse");
+    await this.updateComplete;
+    const searchBar = this.shadowRoot?.querySelector("search-bar") as SearchBar | null;
+    searchBar?.setSearchQuery(query);
   }
 
-  private OnProjectSelectionChanged(paths: string[]): void {
+  private async OnProjectSelectionChangedAsync(paths: string[]): Promise<void> {
     this.selectedProjectPaths = paths;
-    this.reloadChildViews();
+    await this.reloadChildViewsAsync();
     this.debouncedLoadProjectsPackages();
   }
 
-  private reloadChildViews(forceReload: boolean = false): void {
-    void this.updateComplete.then(() => {
-      const updates = this.shadowRoot?.querySelector("updates-view") as UpdatesView | null;
-      const consolidate = this.shadowRoot?.querySelector("consolidate-view") as ConsolidateView | null;
-      const vulnerabilities = this.shadowRoot?.querySelector("vulnerabilities-view") as VulnerabilitiesView | null;
-      updates?.LoadOutdatedPackages(forceReload);
-      consolidate?.LoadInconsistentPackages(forceReload);
-      vulnerabilities?.LoadVulnerablePackages(forceReload);
-    });
+  private async reloadChildViewsAsync(forceReload: boolean = false): Promise<void> {
+    const updates = this.shadowRoot?.querySelector("updates-view") as UpdatesView | null;
+    const consolidate = this.shadowRoot?.querySelector("consolidate-view") as ConsolidateView | null;
+    const vulnerabilities = this.shadowRoot?.querySelector("vulnerabilities-view") as VulnerabilitiesView | null;
+    await Promise.all([
+      updates?.LoadOutdatedPackagesAsync(forceReload),
+      consolidate?.LoadInconsistentPackagesAsync(forceReload),
+      vulnerabilities?.LoadVulnerablePackagesAsync(forceReload),
+    ]);
   }
 
-  private debouncedLoadProjectsPackages = lodash.debounce(() => {
-    this.LoadProjectsPackages();
+  private debouncedLoadProjectsPackages = lodash.debounce(async () => {
+    await this.LoadProjectsPackagesAsync();
   }, 300);
 
-  async LoadProjectsPackages(forceReload: boolean = false, _signal?: AbortSignal): Promise<void> {
+  async LoadProjectsPackagesAsync(forceReload: boolean = false, _signal?: AbortSignal): Promise<void> {
     this._projectsPackagesAc?.abort();
     const ac = new AbortController();
     this._projectsPackagesAc = ac;
@@ -604,7 +604,7 @@ export class PackagesView extends LitElement {
     let completed = 0;
 
     if (total > 0) {
-      hostApi.updateStatusBar({
+      hostApi.updateStatusBarAsync({
         Percentage: 0,
         Message: "Loading installed packages...",
       });
@@ -617,10 +617,10 @@ export class PackagesView extends LitElement {
         while (idx < this.projectsPackages.length) {
           if (ac.signal.aborted) return;
           const pkg = this.projectsPackages[idx++]!;
-          await this.UpdatePackage(pkg, forceReload, ac.signal);
+          await this.UpdatePackageAsync(pkg, forceReload, ac.signal);
           if (ac.signal.aborted) return;
           completed++;
-          void hostApi.updateStatusBar({
+          void hostApi.updateStatusBarAsync({
             Percentage: (completed / total) * 100,
             Message: "Loading installed packages...",
           });
@@ -632,27 +632,27 @@ export class PackagesView extends LitElement {
       if (!ac.signal.aborted) {
         this.projectsPackages = [...this.projectsPackages];
         if (total > 0) {
-          void hostApi.updateStatusBar({ Percentage: null });
+          void hostApi.updateStatusBarAsync({ Percentage: null });
         }
       }
     }
   }
 
-  async OnProjectUpdated(event: CustomEvent): Promise<void> {
+  async OnProjectUpdatedAsync(event: CustomEvent): Promise<void> {
     const isCpmEnabled = event.detail?.isCpmEnabled ?? false;
     if (isCpmEnabled) {
-      await this.LoadProjects();
+      await this.LoadProjectsAsync();
     } else {
-      await this.LoadProjectsPackages();
+      await this.LoadProjectsPackagesAsync();
     }
   }
 
-  private async UpdatePackage(
+  private async UpdatePackageAsync(
     projectPackage: PackageViewModel,
     forceReload: boolean = false,
     signal?: AbortSignal
   ): Promise<void> {
-    const updatePkgReq: Parameters<typeof hostApi.getPackage>[0] = {
+    const updatePkgReq: Parameters<typeof hostApi.getPackageAsync>[0] = {
       Id: projectPackage.Id,
       Url: this.filters.SourceUrl,
       Prerelease: this.filters.Prerelease,
@@ -660,7 +660,7 @@ export class PackagesView extends LitElement {
     };
     if (this.CurrentSource?.Name !== undefined) updatePkgReq.SourceName = this.CurrentSource.Name;
     if (this.CurrentSource?.PasswordScriptPath !== undefined) updatePkgReq.PasswordScriptPath = this.CurrentSource.PasswordScriptPath;
-    const result = await hostApi.getPackage(updatePkgReq, signal);
+    const result = await hostApi.getPackageAsync(updatePkgReq, signal);
 
     if (signal?.aborted) return;
     if (!result.ok || !result.value.Package) {
@@ -675,8 +675,7 @@ export class PackagesView extends LitElement {
     }
   }
 
-  async UpdatePackagesFilters(filters: FilterEvent): Promise<void> {
-    const prereleaseChanged = this.filters.Prerelease !== filters.Prerelease;
+  async UpdatePackagesFiltersAsync(filters: FilterEvent): Promise<void> {
     const sourceChanged = this.filters.SourceUrl !== filters.SourceUrl;
     this.filters = filters;
     // Only clear the NuGet API factory cache when the source changes.
@@ -685,15 +684,18 @@ export class PackagesView extends LitElement {
     // Clearing the factory on every prerelease toggle destroyed all NuGetApi instances,
     // forcing expensive re-creation (config file reads, source index HTTP calls) for every
     // installed package — causing ~15 s delays.
-    await this.LoadPackages(false, sourceChanged);
-    await this.LoadProjectsPackages(sourceChanged);
+    await this.LoadPackagesAsync(false, sourceChanged);
+    await this.LoadProjectsPackagesAsync(sourceChanged);
 
-    if (sourceChanged || prereleaseChanged) {
-      this.reloadChildViews(sourceChanged);
+    // Only explicitly reload child views when the source changes (force-reload to bypass cache).
+    // Prerelease changes are handled automatically: the child Task args include `prerelease`
+    // as a bound property, so a prerelease toggle already triggers an auto-rerun.
+    if (sourceChanged) {
+      await this.reloadChildViewsAsync(true);
     }
   }
 
-  async SelectPackage(
+  async SelectPackageAsync(
     selectedPackage: PackageViewModel
   ): Promise<void> {
     this.packages
@@ -707,14 +709,14 @@ export class PackagesView extends LitElement {
 
     if (this.selectedPackage.Status === "MissingDetails") {
       const packageToUpdate = this.selectedPackage;
-      const selectPkgReq: Parameters<typeof hostApi.getPackage>[0] = {
+      const selectPkgReq: Parameters<typeof hostApi.getPackageAsync>[0] = {
         Id: packageToUpdate.Id,
         Url: this.filters.SourceUrl,
         Prerelease: this.filters.Prerelease,
       };
       if (this.CurrentSource?.Name !== undefined) selectPkgReq.SourceName = this.CurrentSource.Name;
       if (this.CurrentSource?.PasswordScriptPath !== undefined) selectPkgReq.PasswordScriptPath = this.CurrentSource.PasswordScriptPath;
-      const result = await hostApi.getPackage(selectPkgReq);
+      const result = await hostApi.getPackageAsync(selectPkgReq);
 
       if (!result.ok || !result.value.Package) {
         packageToUpdate.Status = "Error";
@@ -734,25 +736,25 @@ export class PackagesView extends LitElement {
     this.requestUpdate();
   }
 
-  async PackagesScrollEvent(target: HTMLElement): Promise<void> {
+  async PackagesScrollEventAsync(target: HTMLElement): Promise<void> {
     if (this.packagesLoadingInProgress || this.noMorePackages) return;
     if (
       target.scrollTop + target.getBoundingClientRect().height >
       target.scrollHeight - PACKAGE_CONTAINER_SCROLL_MARGIN
     ) {
-      await this.LoadPackages(true);
+      await this.LoadPackagesAsync(true);
     }
   }
 
-  async ReloadInvoked(
+  async ReloadInvokedAsync(
     forceReload: boolean = false
   ): Promise<void> {
-    await this.LoadPackages(false, forceReload);
-    await this.LoadProjects(forceReload);
-    this.reloadChildViews(forceReload);
+    await this.LoadPackagesAsync(false, forceReload);
+    await this.LoadProjectsAsync(forceReload);
+    await this.reloadChildViewsAsync(forceReload);
   }
 
-  async LoadPackages(
+  async LoadPackagesAsync(
     append: boolean = false,
     forceReload: boolean = false
   ): Promise<void> {
@@ -765,8 +767,8 @@ export class PackagesView extends LitElement {
     }
     const ac = this._packagesAc ?? new AbortController();
 
-    const buildRequest = (): Parameters<typeof hostApi.getPackages>[0] => {
-      const req: Parameters<typeof hostApi.getPackages>[0] = {
+    const buildRequest = (): Parameters<typeof hostApi.getPackagesAsync>[0] => {
+      const req: Parameters<typeof hostApi.getPackagesAsync>[0] = {
         Url: this.filters.SourceUrl,
         Filter: this.filters.Query,
         Prerelease: this.filters.Prerelease,
@@ -784,7 +786,7 @@ export class PackagesView extends LitElement {
     this.noMorePackages = false;
 
     const requestObject = buildRequest();
-    const result = await hostApi.getPackages(requestObject, ac.signal);
+    const result = await hostApi.getPackagesAsync(requestObject, ac.signal);
 
     if (ac.signal.aborted) return;
 
@@ -805,13 +807,13 @@ export class PackagesView extends LitElement {
     }
   }
 
-  async LoadProjects(forceReload: boolean = false): Promise<void> {
+  async LoadProjectsAsync(forceReload: boolean = false): Promise<void> {
     this._projectsAc?.abort();
     const ac = new AbortController();
     this._projectsAc = ac;
 
     this.projects = [];
-    const result = await hostApi.getProjects({ ForceReload: forceReload }, ac.signal);
+    const result = await hostApi.getProjectsAsync({ ForceReload: forceReload }, ac.signal);
 
     if (ac.signal.aborted) return;
 
@@ -824,7 +826,7 @@ export class PackagesView extends LitElement {
       if (this.selectedProjectPaths.length === 0) {
         this.selectedProjectPaths = this.projects.map((p) => p.Path);
       }
-      await this.LoadProjectsPackages(forceReload);
+      await this.LoadProjectsPackagesAsync(forceReload);
     }
   }
 
@@ -835,13 +837,13 @@ export class PackagesView extends LitElement {
       <div
         class="packages-container"
         @scroll=${async (e: Event) =>
-          await this.PackagesScrollEvent(e.target as HTMLElement)}
+          await this.PackagesScrollEventAsync(e.target as HTMLElement)}
       >
         ${this.packagesLoadingError
           ? html`<div class="error">
               <span class="codicon codicon-error"></span>
               ${this.packagesLoadingErrorMessage || "Failed to fetch packages"}
-              <button class="icon-btn" title="Retry" aria-label="Retry" @click=${() => this.LoadPackages()}>
+              <button class="icon-btn" title="Retry" aria-label="Retry" @click=${async () => await this.LoadPackagesAsync()}>
                 <span class="codicon codicon-refresh"></span>
               </button>
             </div>`
@@ -850,7 +852,7 @@ export class PackagesView extends LitElement {
                 (pkg) => html`
                   <package-row
                     .package=${pkg}
-                    @click=${() => this.SelectPackage(pkg)}
+                    @click=${async () => await this.SelectPackageAsync(pkg)}
                   ></package-row>
                 `
               )}
@@ -862,19 +864,35 @@ export class PackagesView extends LitElement {
     `;
   }
 
+  private get filteredInstalledPackages(): PackageViewModel[] {
+    return this.projectsPackages.filter((pkg) => {
+      const version = pkg.InstalledVersion;
+      const isPrerelease = version.includes("-");
+      return this.filters.Prerelease ? isPrerelease : !isPrerelease;
+    });
+  }
+
   private renderInstalledTab(): unknown {
+    const packages = this.filteredInstalledPackages;
     return html`
       <div class="packages-container installed-packages">
-        ${this.projectsPackages.map(
-          (pkg) => html`
-            <package-row
-              .showInstalledVersion=${true}
-              .package=${pkg}
-              .revision=${pkg.Revision}
-              @click=${() => this.SelectPackage(pkg)}
-            ></package-row>
-          `
-        )}
+        ${packages.length === 0 && this.projectsPackages.length > 0
+          ? html`
+              <div class="empty">
+                <span class="codicon codicon-info"></span>
+                No ${this.filters.Prerelease ? "prerelease" : "stable"} packages installed
+              </div>
+            `
+          : packages.map(
+              (pkg) => html`
+                <package-row
+                  .showInstalledVersion=${true}
+                  .package=${pkg}
+                  .revision=${pkg.Revision}
+                  @click=${async () => await this.SelectPackageAsync(pkg)}
+                ></package-row>
+              `
+            )}
       </div>
     `;
   }
@@ -941,7 +959,7 @@ export class PackagesView extends LitElement {
             ariaLabel="Package version"
             @change=${(e: CustomEvent<string>) => { this.selectedVersion = e.detail; }}
           ></custom-dropdown>
-          <button class="icon-btn" @click=${() => this.LoadProjects()}>
+          <button class="icon-btn" @click=${() => this.LoadProjectsAsync()}>
             <span class="codicon codicon-refresh"></span>
           </button>
         </div>
@@ -951,8 +969,8 @@ export class PackagesView extends LitElement {
           ? this.filteredProjects.map(
               (project) => html`
                 <project-row
-                  @project-updated=${(e: CustomEvent) =>
-                    this.OnProjectUpdated(e)}
+                  @project-updated=${async (e: CustomEvent) =>
+                    await this.OnProjectUpdatedAsync(e)}
                   .project=${project}
                   .packageId=${this.selectedPackage?.Name}
                   .packageVersion=${this.selectedVersion}
@@ -1003,20 +1021,20 @@ export class PackagesView extends LitElement {
           ? html`<div class="col" id="project-tree">
               <project-tree
                 .projects=${this.projects}
-                @selection-changed=${(e: CustomEvent<string[]>) =>
-                  this.OnProjectSelectionChanged(e.detail)}
+                @selection-changed=${async (e: CustomEvent<string[]>) =>
+                  await this.OnProjectSelectionChangedAsync(e.detail)}
               ></project-tree>
             </div>`
           : nothing}
 
         <div class="col" id="packages">
-          <div class="tab-bar" role="tablist" @keydown=${(e: KeyboardEvent) => this.handleTabKeydown(e)}>
+          <div class="tab-bar" role="tablist" @keydown=${async (e: KeyboardEvent) => await this.handleTabKeydownAsync(e)}>
             <button
               class="icon-btn tab-tree-toggle ${this.showProjectTree ? "active" : ""}"
               title="${this.showProjectTree ? "Hide project tree" : "Show project tree"}"
               aria-label="${this.showProjectTree ? "Hide project tree" : "Show project tree"}"
               aria-pressed="${this.showProjectTree}"
-              @click=${() => this.toggleProjectTree()}
+              @click=${async () => await this.toggleProjectTreeAsync()}
             >
               <span class="codicon codicon-list-tree"></span>
             </button>
@@ -1025,7 +1043,7 @@ export class PackagesView extends LitElement {
               role="tab"
               aria-selected=${this.activeTab === "browse"}
               tabindex=${this.activeTab === "browse" ? 0 : -1}
-              @click=${() => this.setTab("browse")}
+              @click=${async () => await this.setTabAsync("browse")}
             >
               BROWSE
             </button>
@@ -1034,16 +1052,18 @@ export class PackagesView extends LitElement {
               role="tab"
               aria-selected=${this.activeTab === "installed"}
               tabindex=${this.activeTab === "installed" ? 0 : -1}
-              @click=${() => this.setTab("installed")}
+              @click=${async () => await this.setTabAsync("installed")}
             >
-              INSTALLED
+              INSTALLED${this.filteredInstalledPackages.length > 0
+                ? html`<span class="tab-badge">${this.filteredInstalledPackages.length}</span>`
+                : nothing}
             </button>
             <button
               class="tab ${this.activeTab === "updates" ? "active" : ""}"
               role="tab"
               aria-selected=${this.activeTab === "updates"}
               tabindex=${this.activeTab === "updates" ? 0 : -1}
-              @click=${() => this.setTab("updates")}
+              @click=${async () => await this.setTabAsync("updates")}
             >
               UPDATES${this.updatesCount !== null
                 ? html`<span class="tab-badge">${this.updatesCount}</span>`
@@ -1054,7 +1074,7 @@ export class PackagesView extends LitElement {
               role="tab"
               aria-selected=${this.activeTab === "consolidate"}
               tabindex=${this.activeTab === "consolidate" ? 0 : -1}
-              @click=${() => this.setTab("consolidate")}
+              @click=${async () => await this.setTabAsync("consolidate")}
             >
               CONSOLIDATE${this.consolidateCount !== null
                 ? html`<span class="tab-badge">${this.consolidateCount}</span>`
@@ -1065,7 +1085,7 @@ export class PackagesView extends LitElement {
               role="tab"
               aria-selected=${this.activeTab === "vulnerabilities"}
               tabindex=${this.activeTab === "vulnerabilities" ? 0 : -1}
-              @click=${() => this.setTab("vulnerabilities")}
+              @click=${async () => await this.setTabAsync("vulnerabilities")}
             >
               VULNERABILITIES${this.vulnerabilitiesCount !== null
                 ? html`<span class="tab-badge">${this.vulnerabilitiesCount}</span>`
@@ -1074,9 +1094,9 @@ export class PackagesView extends LitElement {
           </div>
           <search-bar
             @reload-invoked=${async (e: CustomEvent<boolean>) =>
-              await this.ReloadInvoked(e.detail)}
+              await this.ReloadInvokedAsync(e.detail)}
             @filter-changed=${async (e: CustomEvent<FilterEvent>) =>
-              await this.UpdatePackagesFilters(e.detail)}
+              await this.UpdatePackagesFiltersAsync(e.detail)}
           ></search-bar>
           <div class="tab-content ${this.activeTab === "browse" ? "" : "hidden"}" role="tabpanel" aria-label="browse tab">
             ${this.renderBrowseTab()}
@@ -1091,21 +1111,21 @@ export class PackagesView extends LitElement {
               .sourceUrl=${this.filters.SourceUrl}
               .filterQuery=${this.filters.Query}
               @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
-              @package-selected=${(e: CustomEvent) => this.onChildPackageSelected(e)}
+              @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
             ></updates-view>
           </div>
           <div class="tab-content ${this.activeTab === "consolidate" ? "" : "hidden"}" role="tabpanel" aria-label="consolidate tab">
             <consolidate-view
               .projectPaths=${this.effectiveProjectPaths}
               @count-changed=${(e: CustomEvent<number>) => { this.consolidateCount = e.detail; }}
-              @package-selected=${(e: CustomEvent) => this.onChildPackageSelected(e)}
+              @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
             ></consolidate-view>
           </div>
           <div class="tab-content ${this.activeTab === "vulnerabilities" ? "" : "hidden"}" role="tabpanel" aria-label="vulnerabilities tab">
             <vulnerabilities-view
               .projectPaths=${this.effectiveProjectPaths}
               @count-changed=${(e: CustomEvent<number>) => { this.vulnerabilitiesCount = e.detail; }}
-              @package-selected=${(e: CustomEvent) => this.onChildPackageSelected(e)}
+              @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
             ></vulnerabilities-view>
           </div>
         </div>

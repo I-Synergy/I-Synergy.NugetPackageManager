@@ -30,7 +30,7 @@ suite('HostAPI Tests', () => {
         test('returns sorted projects on success', async () => {
             const projectUri = { fsPath: '/ws/MyApp/MyApp.csproj' } as vscode.Uri;
             sandbox.stub(vscode.workspace, 'findFiles').resolves([projectUri]);
-            sandbox.stub(ProjectParser, 'Parse').resolves({
+            sandbox.stub(ProjectParser, 'ParseAsync').resolves({
                 Name: 'MyApp',
                 Path: '/ws/MyApp/MyApp.csproj',
                 Packages: [],
@@ -38,7 +38,7 @@ suite('HostAPI Tests', () => {
             } as Project);
 
             const api = createHostAPI();
-            const result = await api.getProjects({ ForceReload: false });
+            const result = await api.getProjectsAsync({ ForceReload: false });
 
             assert.ok(result.ok);
             assert.strictEqual(result.value.Projects.length, 1);
@@ -49,7 +49,7 @@ suite('HostAPI Tests', () => {
             sandbox.stub(vscode.workspace, 'findFiles').resolves([]);
 
             const api = createHostAPI();
-            const result = await api.getProjects({});
+            const result = await api.getProjectsAsync({});
 
             assert.ok(result.ok);
             assert.deepStrictEqual(result.value.Projects, []);
@@ -60,12 +60,12 @@ suite('HostAPI Tests', () => {
             const uri2 = { fsPath: '/ws/B.csproj' } as vscode.Uri;
             sandbox.stub(vscode.workspace, 'findFiles').resolves([uri1, uri2]);
 
-            const parseStub = sandbox.stub(ProjectParser, 'Parse');
+            const parseStub = sandbox.stub(ProjectParser, 'ParseAsync');
             parseStub.onFirstCall().resolves({ Name: 'A', Path: '/ws/A.csproj', Packages: [], CpmEnabled: false } as Project);
             parseStub.onSecondCall().rejects(new Error('parse failed'));
 
             const api = createHostAPI();
-            const result = await api.getProjects({});
+            const result = await api.getProjectsAsync({});
 
             assert.ok(result.ok);
             assert.strictEqual(result.value.Projects.length, 1);
@@ -89,12 +89,12 @@ suite('HostAPI Tests', () => {
 
             sandbox.stub(vscode.workspace, 'getConfiguration').returns(configStub as unknown as vscode.WorkspaceConfiguration);
             sandbox.stub(vscode.workspace, 'workspaceFolders').value([{ uri: { fsPath: '/ws' } }]);
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswords').resolves([
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync').resolves([
                 { Name: 'nuget.org', Url: 'https://api.nuget.org/v3/index.json' },
             ]);
 
             const api = createHostAPI();
-            const result = await api.getConfiguration();
+            const result = await api.getConfigurationAsync();
 
             assert.ok(result.ok);
             assert.strictEqual(result.value.Configuration.Sources.length, 1);
@@ -109,10 +109,10 @@ suite('HostAPI Tests', () => {
 
             sandbox.stub(vscode.workspace, 'getConfiguration').returns(configStub as unknown as vscode.WorkspaceConfiguration);
             sandbox.stub(vscode.workspace, 'workspaceFolders').value(undefined);
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswords').resolves([]);
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync').resolves([]);
 
             const api = createHostAPI();
-            const result = await api.getConfiguration();
+            const result = await api.getConfigurationAsync();
 
             assert.ok(result.ok);
             assert.deepStrictEqual(result.value.Configuration.Sources, []);
@@ -127,7 +127,7 @@ suite('HostAPI Tests', () => {
             sandbox.stub(TaskExecutorDefault, 'GetProgress').returns(null);
 
             const api = createHostAPI();
-            const result = await api.getOperationProgress({ OperationId: 'op-123' });
+            const result = await api.getOperationProgressAsync({ OperationId: 'op-123' });
 
             assert.ok(result.ok);
             assert.strictEqual(result.value.Active, false);
@@ -139,7 +139,7 @@ suite('HostAPI Tests', () => {
             sandbox.stub(TaskExecutorDefault, 'GetProgress').returns({ stage: 'Resolving...', percent: 20 });
 
             const api = createHostAPI();
-            const result = await api.getOperationProgress({ OperationId: 'op-456' });
+            const result = await api.getOperationProgressAsync({ OperationId: 'op-456' });
 
             assert.ok(result.ok);
             assert.strictEqual(result.value.Active, true);
@@ -156,7 +156,7 @@ suite('HostAPI Tests', () => {
             sandbox.stub(vscode.window, 'showWarningMessage').resolves('Yes' as unknown as vscode.MessageItem);
 
             const api = createHostAPI();
-            const result = await api.showConfirmation({ Message: 'Are you sure?' });
+            const result = await api.showConfirmationAsync({ Message: 'Are you sure?' });
 
             assert.ok(result.ok);
             assert.strictEqual(result.value.Confirmed, true);
@@ -166,7 +166,7 @@ suite('HostAPI Tests', () => {
             sandbox.stub(vscode.window, 'showWarningMessage').resolves(undefined);
 
             const api = createHostAPI();
-            const result = await api.showConfirmation({ Message: 'Are you sure?' });
+            const result = await api.showConfirmationAsync({ Message: 'Are you sure?' });
 
             assert.ok(result.ok);
             assert.strictEqual(result.value.Confirmed, false);
@@ -179,17 +179,17 @@ suite('HostAPI Tests', () => {
     suite('getPackages', () => {
         test('returns fail result when API throws', async () => {
             sandbox.stub(vscode.workspace, 'workspaceFolders').value([{ uri: { fsPath: '/ws' } }]);
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswords').resolves([
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync').resolves([
                 { Name: 'nuget.org', Url: 'https://api.nuget.org/v3/index.json' },
             ]);
             const mockApi = {
                 GetPackagesAsync: sandbox.stub().rejects(new Error('Network error')),
                 ClearPackageCache: sandbox.stub(),
             };
-            sandbox.stub(nugetApiFactory, 'GetSourceApi').resolves(mockApi as unknown as Awaited<ReturnType<typeof nugetApiFactory.GetSourceApi>>);
+            sandbox.stub(nugetApiFactory, 'GetSourceApiAsync').resolves(mockApi as unknown as Awaited<ReturnType<typeof nugetApiFactory.GetSourceApiAsync>>);
 
             const api = createHostAPI();
-            const result = await api.getPackages({
+            const result = await api.getPackagesAsync({
                 Url: 'https://api.nuget.org/v3/index.json',
                 Filter: 'Newtonsoft',
                 Prerelease: false,
@@ -203,14 +203,14 @@ suite('HostAPI Tests', () => {
 
         test('returns packages on success', async () => {
             sandbox.stub(vscode.workspace, 'workspaceFolders').value([{ uri: { fsPath: '/ws' } }]);
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswords').resolves([]);
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync').resolves([]);
             const mockApi = {
                 GetPackagesAsync: sandbox.stub().resolves({ data: [{ Id: 'Newtonsoft.Json', Name: 'Newtonsoft.Json', Version: '13.0.1' }] }),
             };
-            sandbox.stub(nugetApiFactory, 'GetSourceApi').resolves(mockApi as unknown as Awaited<ReturnType<typeof nugetApiFactory.GetSourceApi>>);
+            sandbox.stub(nugetApiFactory, 'GetSourceApiAsync').resolves(mockApi as unknown as Awaited<ReturnType<typeof nugetApiFactory.GetSourceApiAsync>>);
 
             const api = createHostAPI();
-            const result = await api.getPackages({
+            const result = await api.getPackagesAsync({
                 Url: 'https://api.nuget.org/v3/index.json',
                 Filter: 'Newtonsoft',
                 Prerelease: false,

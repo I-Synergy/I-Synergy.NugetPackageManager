@@ -27,7 +27,7 @@ suite('ProjectParser Tests', () => {
             </Project>`;
         fs.writeFileSync(projectPath, xml);
 
-        const project = await ProjectParser.Parse(projectPath);
+        const project = await ProjectParser.ParseAsync(projectPath);
 
         assert.strictEqual(project.Packages.length, 2);
         assert.strictEqual(project.Packages[0]!.Id, 'Newtonsoft.Json');
@@ -50,7 +50,7 @@ suite('ProjectParser Tests', () => {
         const cpmVersions = new Map<string, string>();
         cpmVersions.set('Newtonsoft.Json', '13.0.3');
 
-        const project = await ProjectParser.Parse(projectPath, cpmVersions);
+        const project = await ProjectParser.ParseAsync(projectPath, cpmVersions);
 
         assert.strictEqual(project.Packages.length, 2);
         assert.strictEqual(project.Packages[0]!.Id, 'Newtonsoft.Json');
@@ -83,7 +83,7 @@ suite('ProjectParser Tests', () => {
         };
 
         try {
-            const project = await ProjectParser.Parse(projectPath, cpmVersions);
+            const project = await ProjectParser.ParseAsync(projectPath, cpmVersions);
             assert.strictEqual(project.Packages.length, 1);
             assert.strictEqual(warned, true);
         } finally {
@@ -105,7 +105,7 @@ suite('ProjectParser Tests', () => {
 
         try {
             await assert.rejects(async () => {
-                await ProjectParser.Parse(projectPath);
+                await ProjectParser.ParseAsync(projectPath);
             });
             assert.strictEqual(errorLogged, true);
         } finally {
@@ -118,7 +118,7 @@ suite('ProjectParser Tests', () => {
         const xml = `<Project></Project>`;
         fs.writeFileSync(projectPath, xml);
 
-        const project = await ProjectParser.Parse(projectPath);
+        const project = await ProjectParser.ParseAsync(projectPath);
         assert.strictEqual(project.Packages.length, 0);
     });
 });

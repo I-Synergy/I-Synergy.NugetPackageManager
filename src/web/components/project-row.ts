@@ -54,11 +54,11 @@ export class ProjectRow extends LitElement {
     return this.project.Packages.find((x) => x.Id === this.packageId);
   }
 
-  private async update_(type: "INSTALL" | "UNINSTALL" | "UPDATE"): Promise<void> {
+  private async updateAsync(type: "INSTALL" | "UNINSTALL" | "UPDATE"): Promise<void> {
     if (this.loaders.get(this.packageId) === true) return;
 
     if (type === "UNINSTALL") {
-      const confirm = await hostApi.showConfirmation({
+      const confirm = await hostApi.showConfirmationAsync({
         Message: `Uninstall ${this.packageId}?`,
         Detail: `This will remove ${this.packageId} from ${this.project.Name}.`,
       });
@@ -77,7 +77,7 @@ export class ProjectRow extends LitElement {
     this.requestUpdate();
 
     try {
-      const result = await hostApi.updateProject(request);
+      const result = await hostApi.updateProjectAsync(request);
 
       if (result.ok) {
         this.project.Packages = result.value.Project.Packages.map(
@@ -107,7 +107,7 @@ export class ProjectRow extends LitElement {
 
     if (pkg === undefined) {
       return html`
-        <button class="icon-btn" aria-label="Install package" title="Install" @click=${() => this.update_("INSTALL")}>
+        <button class="icon-btn" aria-label="Install package" title="Install" @click=${async () => { await this.updateAsync("INSTALL"); }}>
           <span class="codicon codicon-diff-added"></span>
         </button>
       `;
@@ -122,12 +122,12 @@ export class ProjectRow extends LitElement {
       <span class="version">${version}</span>
       ${showUpdate
         ? html`
-            <button class="icon-btn" aria-label="Update package" title="Update" @click=${() => this.update_("UPDATE")}>
+            <button class="icon-btn" aria-label="Update package" title="Update" @click=${async () => { await this.updateAsync("UPDATE"); }}>
               <span class="codicon codicon-arrow-circle-up"></span>
             </button>
           `
         : nothing}
-      <button class="icon-btn" aria-label="Uninstall package" title="Uninstall" @click=${() => this.update_("UNINSTALL")}>
+      <button class="icon-btn" aria-label="Uninstall package" title="Uninstall" @click=${async () => { await this.updateAsync("UNINSTALL"); }}>
         <span class="codicon codicon-diff-removed"></span>
       </button>
     `;

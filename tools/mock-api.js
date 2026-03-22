@@ -1,7 +1,10 @@
 /**
- * Mock acquireVsCodeApi() for the screenshot harness.
- * Intercepts RPC requests and responds with realistic mock data,
- * allowing the web UI to run standalone in a regular browser.
+ * Mock acquireVsCodeApi() for the dev server / screenshot harness.
+ *
+ * Project references (which projects exist and which packages are installed
+ * in each) are mocked locally. All NuGet package data — search results,
+ * available versions, updates, and vulnerabilities — is fetched live from
+ * nuget.org via the dev server's /nuget-proxy endpoint.
  */
 (function () {
   'use strict';
@@ -16,9 +19,12 @@
     vulnerableDone: false,
   };
 
-  // ── Mock data ─────────────────────────────────────────────────────────────
+  // ── Mock project data ──────────────────────────────────────────────────────
+  // These represent .csproj files and their installed package references.
+  // Newtonsoft.Json is intentionally installed at different versions across
+  // projects so the Consolidate view has something to show.
 
-  const PROJECTS = [
+  var PROJECTS = [
     {
       Name: 'MyApp.csproj',
       Path: '/workspace/MyApp/MyApp.csproj',
@@ -34,7 +40,7 @@
       Path: '/workspace/MyApp/MyApp.Tests.csproj',
       CpmEnabled: false,
       Packages: [
-        { Id: 'Newtonsoft.Json', Version: '12.0.3', IsPinned: false, VersionSource: 'project' },
+        { Id: 'Newtonsoft.Json', Version: '13.0.1', IsPinned: false, VersionSource: 'project' },
         { Id: 'Microsoft.NET.Test.Sdk', Version: '17.0.0', IsPinned: false, VersionSource: 'project' },
       ],
     },
@@ -50,193 +56,130 @@
     },
   ];
 
-  const BROWSE_PACKAGES = [
-    {
-      Id: 'Newtonsoft.Json', Name: 'Newtonsoft.Json',
-      Authors: ['James Newton-King'],
-      Description: 'Json.NET is a popular high-performance JSON framework for .NET',
-      IconUrl: '', LicenseUrl: 'https://licenses.nuget.org/MIT',
-      ProjectUrl: 'https://www.newtonsoft.com/json', Registration: '',
-      TotalDownloads: 3500000000, Verified: true,
-      InstalledVersion: '', Version: '13.0.3',
-      // Ascending order (oldest first) — PackageViewModel.constructor calls .reverse(),
-      // so the select's first <option> ends up being the latest version
-      Versions: [{ Id: '', Version: '12.0.3' }, { Id: '', Version: '13.0.1' }, { Id: '', Version: '13.0.3' }],
-      Tags: ['json', 'serialization'],
-    },
-    {
-      Id: 'Serilog', Name: 'Serilog',
-      Authors: ['Serilog Contributors'],
-      Description: 'Simple .NET logging with fully-structured events',
-      IconUrl: '', LicenseUrl: 'https://licenses.nuget.org/Apache-2.0',
-      ProjectUrl: 'https://serilog.net/', Registration: '',
-      TotalDownloads: 250000000, Verified: true,
-      InstalledVersion: '', Version: '3.1.1',
-      Versions: [{ Id: '', Version: '2.11.0' }, { Id: '', Version: '2.12.0' }, { Id: '', Version: '3.1.1' }],
-      Tags: ['logging', 'structured'],
-    },
-    {
-      Id: 'AutoMapper', Name: 'AutoMapper',
-      Authors: ['Jimmy Bogard'],
-      Description: 'A convention-based object-object mapper',
-      IconUrl: '', LicenseUrl: 'https://licenses.nuget.org/MIT',
-      ProjectUrl: 'https://automapper.org/', Registration: '',
-      TotalDownloads: 600000000, Verified: true,
-      InstalledVersion: '', Version: '13.0.1',
-      Versions: [{ Id: '', Version: '11.0.1' }, { Id: '', Version: '12.0.1' }, { Id: '', Version: '13.0.1' }],
-      Tags: ['mapping', 'object'],
-    },
-    {
-      Id: 'MediatR', Name: 'MediatR',
-      Authors: ['Jimmy Bogard'],
-      Description: 'Simple, unambiguous mediator implementation in .NET',
-      IconUrl: '', LicenseUrl: 'https://licenses.nuget.org/Apache-2.0',
-      ProjectUrl: 'https://github.com/jbogard/MediatR', Registration: '',
-      TotalDownloads: 200000000, Verified: false,
-      InstalledVersion: '', Version: '12.1.1',
-      Versions: [{ Id: '', Version: '10.0.0' }, { Id: '', Version: '11.1.0' }, { Id: '', Version: '12.1.1' }],
-      Tags: ['mediator', 'cqrs'],
-    },
-    {
-      Id: 'FluentValidation', Name: 'FluentValidation',
-      Authors: ['Jeremy Skinner'],
-      Description: 'A validation library for .NET that uses a fluent interface to construct strongly-typed validation rules',
-      IconUrl: '', LicenseUrl: 'https://licenses.nuget.org/Apache-2.0',
-      ProjectUrl: 'https://fluentvalidation.net/', Registration: '',
-      TotalDownloads: 350000000, Verified: false,
-      InstalledVersion: '', Version: '11.9.0',
-      Versions: [{ Id: '', Version: '10.4.0' }, { Id: '', Version: '11.8.0' }, { Id: '', Version: '11.9.0' }],
-      Tags: ['validation', 'fluent'],
-    },
-    {
-      Id: 'Dapper', Name: 'Dapper',
-      Authors: ['Marc Gravell', 'Sam Saffron', 'Nick Craver'],
-      Description: 'A simple object mapper for .NET',
-      IconUrl: '', LicenseUrl: 'https://licenses.nuget.org/Apache-2.0',
-      ProjectUrl: 'https://github.com/DapperLib/Dapper', Registration: '',
-      TotalDownloads: 400000000, Verified: true,
-      InstalledVersion: '', Version: '2.0.123',
-      Versions: [{ Id: '', Version: '2.0.78' }, { Id: '', Version: '2.0.123' }],
-      Tags: ['orm', 'micro-orm'],
-    },
-    {
-      Id: 'Polly', Name: 'Polly',
-      Authors: ['App-vNext'],
-      Description: 'Polly is a .NET resilience and transient-fault-handling library that allows developers to express policies such as Retry, Circuit Breaker, and Timeout',
-      IconUrl: '', LicenseUrl: 'https://licenses.nuget.org/BSD-3-Clause',
-      ProjectUrl: 'https://github.com/App-vNext/Polly', Registration: '',
-      TotalDownloads: 600000000, Verified: true,
-      InstalledVersion: '', Version: '8.3.0',
-      Versions: [{ Id: '', Version: '7.2.4' }, { Id: '', Version: '8.2.0' }, { Id: '', Version: '8.3.0' }],
-      Tags: ['resilience', 'circuit-breaker'],
-    },
-    {
-      Id: 'AWSSDK.S3', Name: 'AWSSDK.S3',
-      Authors: ['Amazon Web Services'],
-      Description: 'The Amazon Web Services SDK for .NET - Amazon Simple Storage Service',
-      IconUrl: '', LicenseUrl: 'https://raw.github.com/aws/aws-sdk-net/master/LICENSE.txt',
-      ProjectUrl: 'https://github.com/aws/aws-sdk-net/', Registration: '',
-      TotalDownloads: 100000000, Verified: true,
-      InstalledVersion: '', Version: '3.7.300',
-      Versions: [{ Id: '', Version: '3.7.200' }, { Id: '', Version: '3.7.300' }],
-      Tags: ['aws', 'storage', 'cloud'],
-    },
-  ];
-
-  let OUTDATED_PACKAGES = [
-    {
-      Id: 'Newtonsoft.Json', InstalledVersion: '12.0.3', LatestVersion: '13.0.3',
-      Projects: [
-        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '12.0.3' },
-        { Name: 'MyApp.Tests.csproj', Path: '/workspace/MyApp/MyApp.Tests.csproj', Version: '12.0.3' },
-      ],
-      SourceUrl: 'https://api.nuget.org/v3/index.json', SourceName: 'nuget.org',
-    },
-    {
-      Id: 'Serilog', InstalledVersion: '2.11.0', LatestVersion: '3.1.1',
-      Projects: [
-        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '2.11.0' },
-      ],
-      SourceUrl: 'https://api.nuget.org/v3/index.json', SourceName: 'nuget.org',
-    },
-    {
-      Id: 'AutoMapper', InstalledVersion: '11.0.1', LatestVersion: '13.0.1',
-      Projects: [
-        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '11.0.1' },
-        { Name: 'MyApp.Tests.csproj', Path: '/workspace/MyApp/MyApp.Tests.csproj', Version: '11.0.1' },
-        { Name: 'MyApp.Core.csproj', Path: '/workspace/MyApp/MyApp.Core.csproj', Version: '11.0.1' },
-      ],
-      SourceUrl: 'https://api.nuget.org/v3/index.json', SourceName: 'nuget.org',
-    },
-  ];
-
-  let INCONSISTENT_PACKAGES = [
-    {
-      Id: 'Microsoft.Extensions.Logging',
-      // Latest version first — browser <select> defaults to first <option>
-      // when Lit's .value binding fires before options are in the DOM
-      Versions: [
-        { Version: '8.0.0', Projects: [{ Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj' }] },
-        { Version: '7.0.0', Projects: [{ Name: 'MyApp.Core.csproj', Path: '/workspace/MyApp/MyApp.Core.csproj' }] },
-      ],
-      LatestInstalledVersion: '8.0.0',
-      CpmManaged: false,
-    },
-    {
-      Id: 'AutoMapper',
-      // Latest version first — same reason
-      Versions: [
-        { Version: '13.0.1', Projects: [{ Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj' }] },
-        { Version: '11.0.1', Projects: [{ Name: 'MyApp.Tests.csproj', Path: '/workspace/MyApp/MyApp.Tests.csproj' }] },
-      ],
-      LatestInstalledVersion: '13.0.1',
-      CpmManaged: false,
-    },
-  ];
-
-  const VULNERABLE_PACKAGES = [
-    {
-      Id: 'System.IdentityModel.Tokens.Jwt', InstalledVersion: '6.9.0',
-      Severity: 3,
-      AdvisoryUrl: 'https://github.com/advisories/GHSA-59j7-ghrg-fj52',
-      AffectedVersionRange: '[6.0.0, 6.11.0)',
-      Projects: [{ Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj' }],
-    },
-    {
-      Id: 'Newtonsoft.Json', InstalledVersion: '12.0.3',
-      Severity: 2,
-      AdvisoryUrl: 'https://github.com/advisories/GHSA-5crp-9r3c-p9vx',
-      AffectedVersionRange: '[0.0.0, 13.0.1)',
-      Projects: [
-        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj' },
-        { Name: 'MyApp.Tests.csproj', Path: '/workspace/MyApp/MyApp.Tests.csproj' },
-      ],
-    },
-    {
-      Id: 'Microsoft.AspNetCore.Http', InstalledVersion: '2.1.1',
-      Severity: 1,
-      AdvisoryUrl: 'https://github.com/advisories/GHSA-m747-6d4r-vm2j',
-      AffectedVersionRange: '[2.0.0, 2.1.2)',
-      Projects: [{ Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj' }],
-    },
-    {
-      Id: 'Dapper', InstalledVersion: '2.0.35',
-      Severity: 0,
-      AdvisoryUrl: 'https://github.com/advisories/GHSA-xh2p-7p87-fhgh',
-      AffectedVersionRange: '[0.0.0, 2.0.78)',
-      Projects: [{ Name: 'MyApp.Core.csproj', Path: '/workspace/MyApp/MyApp.Core.csproj' }],
-    },
-  ];
-
-  // ── RPC dispatcher ────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   function delay(ms) {
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
+  /** Semver-aware version comparison. Returns negative/0/positive. */
+  function compareVersions(a, b) {
+    var aParts = (a || '').split('-'), bParts = (b || '').split('-');
+    var aNum = (aParts[0] || '').split('.').map(function(n) { return parseInt(n, 10) || 0; });
+    var bNum = (bParts[0] || '').split('.').map(function(n) { return parseInt(n, 10) || 0; });
+    for (var i = 0; i < Math.max(aNum.length, bNum.length); i++) {
+      var diff = (aNum[i] || 0) - (bNum[i] || 0);
+      if (diff !== 0) return diff;
+    }
+    // release > prerelease per semver
+    var aPre = aParts.length > 1 ? aParts.slice(1).join('-') : null;
+    var bPre = bParts.length > 1 ? bParts.slice(1).join('-') : null;
+    if (aPre === null && bPre !== null) return 1;
+    if (aPre !== null && bPre === null) return -1;
+    if (aPre !== null && bPre !== null) return aPre.localeCompare(bPre);
+    return 0;
+  }
+
+  /**
+   * Collect all unique installed packages across projects, grouped by ID.
+   * For packages installed at different versions, uses the minimum (oldest).
+   * Each entry includes the list of projects it's installed in.
+   */
+  function getInstalledPackages() {
+    var byId = {};
+    PROJECTS.forEach(function (project) {
+      project.Packages.forEach(function (pkg) {
+        if (!byId[pkg.Id]) {
+          byId[pkg.Id] = { id: pkg.Id, version: pkg.Version, projects: [] };
+        } else {
+          // Keep the lowest installed version for the outdated check (semver-aware)
+          if (compareVersions(pkg.Version, byId[pkg.Id].version) < 0) {
+            byId[pkg.Id].version = pkg.Version;
+          }
+        }
+        byId[pkg.Id].projects.push({ Name: project.Name, Path: project.Path, Version: pkg.Version });
+      });
+    });
+    return Object.values(byId);
+  }
+
+  /**
+   * Compute version inconsistencies directly from mock project data.
+   * Returns the same shape as InconsistentPackage[].
+   */
+  function computeInconsistencies() {
+    var byId = {};
+    PROJECTS.forEach(function (project) {
+      project.Packages.forEach(function (pkg) {
+        if (!byId[pkg.Id]) byId[pkg.Id] = {};
+        if (!byId[pkg.Id][pkg.Version]) byId[pkg.Id][pkg.Version] = [];
+        byId[pkg.Id][pkg.Version].push({ Name: project.Name, Path: project.Path });
+      });
+    });
+
+    var result = [];
+    Object.keys(byId).forEach(function (id) {
+      var versionMap = byId[id];
+      var versions = Object.keys(versionMap);
+      if (versions.length > 1) {
+        var sorted = versions.slice().sort().reverse(); // rough desc sort
+        result.push({
+          Id: id,
+          Versions: versions.map(function (v) { return { Version: v, Projects: versionMap[v] }; }),
+          LatestInstalledVersion: sorted[0],
+          CpmManaged: false,
+        });
+      }
+    });
+    return result;
+  }
+
+  // ── NuGet proxy call ───────────────────────────────────────────────────────
+
+  var NUGET_PROXY_METHODS = [
+    'getPackagesAsync',
+    'getPackageAsync',
+    'getPackageDetailsAsync',
+    'getOutdatedPackagesAsync',
+    'getVulnerablePackagesAsync',
+  ];
+
+  function callNugetProxy(msg) {
+    var params = Object.assign({}, msg.params);
+
+    // Inject installed packages for methods that need to compare against NuGet
+    if (msg.method === 'getOutdatedPackagesAsync' || msg.method === 'getVulnerablePackagesAsync') {
+      params._installedPackages = getInstalledPackages();
+    }
+
+    fetch('/nuget-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method: msg.method, params: params }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (result) {
+        // Update readiness flags for the Playwright harness
+        if (msg.method === 'getPackagesAsync') window.__mockState.packagesDone = true;
+        if (msg.method === 'getOutdatedPackagesAsync') window.__mockState.outdatedDone = true;
+        if (msg.method === 'getVulnerablePackagesAsync') window.__mockState.vulnerableDone = true;
+
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'rpc-response', id: msg.id, result: result },
+        }));
+      })
+      .catch(function (err) {
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'rpc-response', id: msg.id, result: { ok: false, error: err.message } },
+        }));
+      });
+  }
+
+  // ── Local mock handlers ────────────────────────────────────────────────────
+
   function getMockResponse(method, params) {
     switch (method) {
-      case 'getConfiguration':
+      case 'getConfigurationAsync':
         window.__mockState.configDone = true;
         return {
           ok: true,
@@ -251,55 +194,15 @@
           },
         };
 
-      case 'getProjects':
+      case 'getProjectsAsync':
         window.__mockState.projectsDone = true;
         return { ok: true, value: { Projects: PROJECTS } };
 
-      case 'getPackages':
-        window.__mockState.packagesDone = true;
-        return { ok: true, value: { Packages: BROWSE_PACKAGES } };
-
-      case 'getPackage': {
-        const found = BROWSE_PACKAGES.find(function (p) { return p.Id === params.Id; });
-        const pkg = found || {
-          Id: params.Id, Name: params.Id,
-          Authors: [], Description: '',
-          IconUrl: '', LicenseUrl: '', ProjectUrl: '', Registration: '',
-          TotalDownloads: 0, Verified: false,
-          InstalledVersion: '', Version: '1.0.0',
-          Versions: [{ Id: '', Version: '1.0.0' }],
-          Tags: [],
-        };
-        return { ok: true, value: { Package: pkg, SourceUrl: 'https://api.nuget.org/v3/index.json' } };
-      }
-
-      case 'getPackageDetails': {
-        const found = BROWSE_PACKAGES.find(function (p) { return p.Id === params.Id; });
-        const pkg = found || {
-          Id: params.Id, Name: params.Id,
-          Authors: [], Description: '',
-          IconUrl: '', LicenseUrl: '', ProjectUrl: '', Registration: '',
-          TotalDownloads: 0, Verified: false,
-          InstalledVersion: '', Version: '1.0.0',
-          Versions: [{ Id: '', Version: '1.0.0' }],
-          Tags: [],
-        };
-        return { ok: true, value: { Package: pkg } };
-      }
-
-      case 'getOutdatedPackages':
-        window.__mockState.outdatedDone = true;
-        return { ok: true, value: { Packages: OUTDATED_PACKAGES } };
-
-      case 'getInconsistentPackages':
+      case 'getInconsistentPackagesAsync':
         window.__mockState.inconsistentDone = true;
-        return { ok: true, value: { Packages: INCONSISTENT_PACKAGES } };
+        return { ok: true, value: { Packages: computeInconsistencies() } };
 
-      case 'getVulnerablePackages':
-        window.__mockState.vulnerableDone = true;
-        return { ok: true, value: { Packages: VULNERABLE_PACKAGES } };
-
-      case 'updateProject':
+      case 'updateProjectAsync':
         return delay(1500).then(function () {
           var project = PROJECTS.find(function (p) { return p.Path === params.ProjectPath; });
           if (!project) return { ok: false, error: 'Project not found' };
@@ -314,7 +217,7 @@
           return { ok: true, value: { Project: project, IsCpmEnabled: false } };
         });
 
-      case 'batchUpdatePackages':
+      case 'batchUpdatePackagesAsync':
         return delay(2000).then(function () {
           var updatedIds = [];
           (params.Updates || []).forEach(function (update) {
@@ -327,31 +230,38 @@
               }
             });
           });
-          OUTDATED_PACKAGES = OUTDATED_PACKAGES.filter(function (p) {
-            return updatedIds.indexOf(p.Id) === -1;
-          });
-          return { ok: true, value: {} };
+          return {
+            ok: true,
+            value: { Results: updatedIds.map(function (id) { return { PackageId: id, Success: true }; }) },
+          };
         });
 
-      case 'consolidatePackages':
+      case 'consolidatePackagesAsync':
         return delay(1500).then(function () {
-          INCONSISTENT_PACKAGES = INCONSISTENT_PACKAGES.filter(function (p) {
-            return p.Id !== params.PackageId;
+          (params.ProjectPaths || []).forEach(function (path) {
+            var project = PROJECTS.find(function (p) { return p.Path === path; });
+            if (project) {
+              var pkg = project.Packages.find(function (p) { return p.Id === params.PackageId; });
+              if (pkg) pkg.Version = params.TargetVersion;
+            }
           });
           return { ok: true, value: undefined };
         });
 
-      case 'updateConfiguration':
+      case 'restoreProjectsAsync':
+        return delay(800).then(function () { return { ok: true, value: undefined }; });
+
+      case 'updateConfigurationAsync':
         return { ok: true, value: undefined };
 
-      case 'updateStatusBar':
-      case 'openUrl':
+      case 'updateStatusBarAsync':
+      case 'openUrlAsync':
         return { ok: true, value: undefined };
 
-      case 'showConfirmation':
+      case 'showConfirmationAsync':
         return { ok: true, value: { Confirmed: true } };
 
-      case 'getOperationProgress':
+      case 'getOperationProgressAsync':
         return { ok: true, value: { Stage: 'Installing...', Percent: 50, Active: false } };
 
       default:
@@ -360,19 +270,24 @@
     }
   }
 
-  // ── acquireVsCodeApi stub ─────────────────────────────────────────────────
+  // ── acquireVsCodeApi stub ──────────────────────────────────────────────────
 
   window.acquireVsCodeApi = function () {
     return {
       postMessage: function (msg) {
         if (!msg || msg.type !== 'rpc-request') return;
-        // Support both sync values and Promises from getMockResponse
+
+        // Route NuGet data methods to the live proxy
+        if (NUGET_PROXY_METHODS.includes(msg.method)) {
+          callNugetProxy(msg);
+          return;
+        }
+
+        // Handle everything else locally
         Promise.resolve(getMockResponse(msg.method, msg.params)).then(function (result) {
-          window.dispatchEvent(
-            new MessageEvent('message', {
-              data: { type: 'rpc-response', id: msg.id, result: result },
-            })
-          );
+          window.dispatchEvent(new MessageEvent('message', {
+            data: { type: 'rpc-response', id: msg.id, result: result },
+          }));
         });
       },
       getState: function () { return {}; },

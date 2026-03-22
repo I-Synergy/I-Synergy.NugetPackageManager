@@ -10,11 +10,11 @@ suite('SearchBar Component', () => {
     let searchBar: SearchBar;
     let originalHostApi: HostAPI;
 
-    let originalReload: typeof configuration.Reload;
+    let originalReload: typeof configuration.ReloadAsync;
 
     setup(() => {
         originalHostApi = registrations.hostApi;
-        originalReload = configuration.Reload.bind(configuration);
+        originalReload = configuration.ReloadAsync.bind(configuration);
 
         // Mock hostApi so prereleaseChangedEvent does not hang
         const mockHostApi = {
@@ -34,8 +34,8 @@ suite('SearchBar Component', () => {
         } as unknown as HostAPI;
         Object.defineProperty(registrations, 'hostApi', { value: mockHostApi, writable: true, configurable: true });
 
-        // Mock configuration.Reload since its internal hostApi reference is not the mock
-        configuration.Reload = () => Promise.resolve();
+        // Mock configuration.ReloadAsync since its internal hostApi reference is not the mock
+        configuration.ReloadAsync = () => Promise.resolve();
 
         // Set mock configuration via private field
         (configuration as any)['configuration'] = {
@@ -56,7 +56,7 @@ suite('SearchBar Component', () => {
     teardown(() => {
         document.body.removeChild(searchBar);
         Object.defineProperty(registrations, 'hostApi', { value: originalHostApi, writable: true, configurable: true });
-        configuration.Reload = originalReload;
+        configuration.ReloadAsync = originalReload;
     });
 
     test('should initialize with default values', () => {
