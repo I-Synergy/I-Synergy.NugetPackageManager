@@ -14,9 +14,8 @@ class NuGetApiFactory {
   public async GetSourceApiAsync(url: string): Promise<NuGetApi> {
     if (!(url in this._sourceApiCollection)) {
       Logger.debug(`NuGetApiFactory.GetSourceApiAsync: Creating new API instance for ${url}`);
-      const workspaceFolders = vscode.workspace.workspaceFolders;
-      const workspaceRoot = workspaceFolders?.[0]?.uri.fsPath;
-      const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
+      const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+      const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoots);
 
       Logger.debug(`NuGetApiFactory.GetSourceApiAsync: Available sources: ${sources.map(s => `${s.Name}=${s.Url} (hasAuth=${!!s.Username || !!s.Password})`).join(", ")}`);
 

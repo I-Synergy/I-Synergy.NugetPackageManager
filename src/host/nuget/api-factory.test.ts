@@ -110,7 +110,7 @@ suite('NuGetApiFactory Tests', () => {
 
             await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org');
 
-            assert.ok(getSourcesStub.calledWith('/my/workspace'));
+            assert.ok(getSourcesStub.calledWith(['/my/workspace']));
         });
 
         test('should handle undefined workspace folders', async () => {
@@ -121,7 +121,7 @@ suite('NuGetApiFactory Tests', () => {
             const api = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org');
 
             assert.ok(api);
-            assert.ok(getSourcesStub.calledWith(undefined));
+            assert.ok(getSourcesStub.calledWith([]));
         });
 
         test('should handle empty workspace folders array', async () => {
