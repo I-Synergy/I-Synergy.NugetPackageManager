@@ -109,6 +109,11 @@ export default class NuGetConfigResolver {
     const configPaths = this.FindAllConfigFiles(workspaceRoots);
     Logger.debug(`NuGetConfigResolver.ResolveConfigs: Found config files: ${configPaths.join(", ")}`);
 
+    // Only treat <clear /> as "block VS Code settings sources" when it comes from a workspace
+    // config. A user-level or machine-level <clear /> resets inherited sources for NuGet's own
+    // resolution chain but should not prevent the extension from adding configured sources.
+    const workspaceConfigPaths = new Set(this.CollectWorkspaceConfigFiles(workspaceRoots));
+
     for (const configPath of configPaths) {
       try {
         Logger.debug(`NuGetConfigResolver.ResolveConfigs: Parsing ${configPath}`);
@@ -118,7 +123,9 @@ export default class NuGetConfigResolver {
           Logger.debug(`NuGetConfigResolver.ResolveConfigs: '<clear />' found in ${configPath}, clearing sources`);
           sources.clear();
           disabledSources.clear();
-          clearFound = true;
+          if (workspaceConfigPaths.has(configPath)) {
+            clearFound = true;
+          }
         }
 
         result.sources.forEach(source => {
@@ -197,6 +204,14 @@ export default class NuGetConfigResolver {
     // 3. Each workspace folder (highest priority — processed last so <clear /> wins).
     // All workspace folders are included so that in a multi-root workspace the folder
     // whose nuget.config contains <clear /> correctly stops further processing.
+    configPaths.push(...this.CollectWorkspaceConfigFiles(workspaceRoots));
+
+    return configPaths;
+  }
+
+  private static CollectWorkspaceConfigFiles(workspaceRoots: string[]): string[] {
+    const configPaths: string[] = [];
+
     for (const workspaceRoot of workspaceRoots) {
       for (const filename of this.CONFIG_FILENAMES) {
         const nugetFolderConfig = path.join(workspaceRoot, ".nuget", filename);
