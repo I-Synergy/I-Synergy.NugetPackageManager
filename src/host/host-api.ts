@@ -125,7 +125,7 @@ export function createHostAPI(): HostAPI {
     },
 
     async getPackagesAsync(request: GetPackagesRequest, signal?: AbortSignal): Promise<Result<GetPackagesResponse>> {
-      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
       StatusBarUtils.show(0, "Loading packages...");
 
       try {
@@ -134,7 +134,7 @@ export function createHostAPI(): HostAPI {
         }
 
         if (request.Url === "") {
-          const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
+          const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoots);
 
           if (!request.Filter) {
             if (sources.length > 0) {
@@ -202,8 +202,8 @@ export function createHostAPI(): HostAPI {
 
     async getPackageAsync(request: GetPackageRequest, signal?: AbortSignal): Promise<Result<GetPackageResponse>> {
       if (request.Url === "") {
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
+        const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoots);
 
         for (const source of sources) {
           try {
@@ -321,8 +321,8 @@ export function createHostAPI(): HostAPI {
       Logger.info("getConfiguration: Retrieving configuration");
       const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
 
-      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      const sourcesWithCreds = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
+      const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+      const sourcesWithCreds = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoots);
 
       const sources: Source[] = sourcesWithCreds.map((s) => ({
         Name: s.Name,
@@ -412,8 +412,8 @@ export function createHostAPI(): HostAPI {
       }
 
       try {
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        let sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
+        const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+        let sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoots);
 
         if (request.SourceUrl) {
           sources = sources.filter((s) => s.Url === request.SourceUrl);
@@ -662,8 +662,8 @@ export function createHostAPI(): HostAPI {
       StatusBarUtils.show(0, "Scanning for vulnerabilities...");
 
       try {
-        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
+        const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
+        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoots);
 
         if (request.ForceReload) {
           for (const source of sources) {

@@ -90,16 +90,59 @@ suite('NuGetConfigResolver Tests', () => {
             writeConfig(workspaceDir, 'nuget.config', '<configuration/>');
             writeConfig(workspaceDir, '.nuget/nuget.config', '<configuration/>');
 
-            const paths = (NuGetConfigResolver as any).FindAllConfigFiles(workspaceDir);
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([workspaceDir]);
 
             const expected1 = path.join(workspaceDir, '.nuget', 'nuget.config');
             const expected2 = path.join(workspaceDir, 'nuget.config');
 
             assert.ok(paths.includes(expected1));
             assert.ok(paths.includes(expected2));
-            assert.strictEqual(paths[0], expected1);
+            // Workspace configs are last (highest priority), both present
+            assert.ok(paths.indexOf(expected1) < paths.indexOf(expected2));
         });
 
+        test('Handles multiple workspace roots with independent configs and <clear />', () => {
+            // Create a second workspace root to simulate a multi-root VS Code workspace
+            const secondWorkspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nuget-multi-root-'));
+
+            // First workspace has a nuget.config that uses <clear /> with a single source
+            const firstWorkspaceConfig = writeConfig(
+                workspaceDir,
+                'nuget.config',
+                [
+                    '<configuration>',
+                    '  <packageSources>',
+                    '    <clear />',
+                    '    <add key="FirstSource" value="https://first.example/v3/index.json" />',
+                    '  </packageSources>',
+                    '</configuration>',
+                ].join('\n'),
+            );
+
+            // Second workspace has a conflicting source without <clear />
+            const secondWorkspaceConfig = writeConfig(
+                secondWorkspaceDir,
+                'nuget.config',
+                [
+                    '<configuration>',
+                    '  <packageSources>',
+                    '    <add key="SecondSource" value="https://second.example/v3/index.json" />',
+                    '  </packageSources>',
+                    '</configuration>',
+                ].join('\n'),
+            );
+
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([workspaceDir, secondWorkspaceDir]);
+
+            // Both workspace-root configs should be discovered
+            assert.ok(paths.includes(firstWorkspaceConfig));
+            assert.ok(paths.includes(secondWorkspaceConfig));
+
+            // Ensure deterministic ordering: configs for the first workspace root should appear
+            // before configs for the second workspace root. This ordering is important for higher-
+            // level resolution logic that applies <clear /> per-root to avoid bleed-through.
+            assert.ok(paths.indexOf(firstWorkspaceConfig) < paths.indexOf(secondWorkspaceConfig));
+        });
         test('Returns user config paths on Windows', () => {
             Object.defineProperty(process, 'platform', { value: 'win32' });
 
@@ -114,7 +157,7 @@ suite('NuGetConfigResolver Tests', () => {
 
             const userProfileConfig = writeConfig(homeDir, '.nuget/NuGet/NuGet.Config', '<configuration/>');
 
-            const paths = (NuGetConfigResolver as any).FindAllConfigFiles(undefined);
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([]);
 
             assert.ok(paths.includes(appDataConfig));
             // Only check if homedir was successfully influenced
@@ -129,7 +172,7 @@ suite('NuGetConfigResolver Tests', () => {
             const userProfileConfig = writeConfig(homeDir, '.nuget/NuGet/NuGet.Config', '<configuration/>');
             const xdgConfig = writeConfig(homeDir, '.config/NuGet/NuGet.Config', '<configuration/>');
 
-            const paths = (NuGetConfigResolver as any).FindAllConfigFiles(undefined);
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([]);
 
             // Only check if homedir was successfully influenced
             if (os.homedir() === homeDir) {
@@ -143,7 +186,7 @@ suite('NuGetConfigResolver Tests', () => {
 
             const machineConfig = writeConfig(programFilesDir, 'NuGet/Config/Microsoft.VisualStudio.Offline.config', '<configuration/>');
 
-            const paths = (NuGetConfigResolver as any).FindAllConfigFiles(undefined);
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([]);
             assert.ok(paths.includes(machineConfig));
         });
     });
@@ -314,11 +357,9 @@ suite('NuGetConfigResolver Tests', () => {
             assert.ok(source2);
 
             if (os.homedir() === homeDir) {
-                // If we successfully set up user config, check that it leaked through (due to implementation order)
-                // or if it was cleared (if implementation was different).
-                // Based on previous run, it leaks.
+                // <clear /> in the workspace config must clear all inherited sources (user/machine).
                 const source1 = sources.find(s => s.Name === 'Source1');
-                assert.ok(source1);
+                assert.strictEqual(source1, undefined);
             }
         });
 
@@ -334,10 +375,39 @@ suite('NuGetConfigResolver Tests', () => {
         });
     });
 
+    suite('CollectWorkspaceConfigFiles', () => {
+        test('Returns workspace-level config files for each root', () => {
+            writeConfig(workspaceDir, 'nuget.config', '<configuration/>');
+            writeConfig(workspaceDir, '.nuget/nuget.config', '<configuration/>');
+
+            const paths = (NuGetConfigResolver as any).CollectWorkspaceConfigFiles([workspaceDir]);
+
+            assert.ok(paths.includes(path.join(workspaceDir, '.nuget', 'nuget.config')));
+            assert.ok(paths.includes(path.join(workspaceDir, 'nuget.config')));
+            assert.strictEqual(paths.length, 2);
+        });
+
+        test('Returns empty array when no workspace roots provided', () => {
+            const paths = (NuGetConfigResolver as any).CollectWorkspaceConfigFiles([]);
+            assert.strictEqual(paths.length, 0);
+        });
+
+        test('Does not include machine or user config paths', () => {
+            // Even if user configs exist, CollectWorkspaceConfigFiles should only return workspace paths
+            writeConfig(homeDir, '.nuget/NuGet/NuGet.Config', '<configuration/>');
+            writeConfig(workspaceDir, 'nuget.config', '<configuration/>');
+
+            const paths = (NuGetConfigResolver as any).CollectWorkspaceConfigFiles([workspaceDir]);
+
+            assert.ok(!paths.includes(path.join(homeDir, '.nuget', 'NuGet', 'NuGet.Config')));
+            assert.ok(paths.includes(path.join(workspaceDir, 'nuget.config')));
+        });
+    });
+
     suite('GetSourcesAndDecodePasswords', () => {
         test('Uses VS Code configuration sources', async () => {
-            // Mock empty file sources
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([]);
+            // Stub ResolveConfigsAsync with no file-based sources and no workspace <clear />
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [], clearFound: false });
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
@@ -354,9 +424,45 @@ suite('NuGetConfigResolver Tests', () => {
             assert.ok(sources.find(s => s.Name === 'VSSource'));
         });
 
+        test('Adds VS Code settings sources when <clear /> is only in a user/machine config (clearFound = false)', async () => {
+            // clearFound = false means <clear /> was not in any workspace config; it should NOT
+            // block extension-configured sources from VS Code settings.
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [], clearFound: false });
+
+            vscodeGetConfigurationStub.returns({
+                get: (key: string) => {
+                    if (key === 'sources') {
+                        return [JSON.stringify({ name: 'ExtSource', url: 'http://ext-source' })];
+                    }
+                    return undefined;
+                }
+            });
+
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
+            assert.ok(sources.find(s => s.Name === 'ExtSource'), 'VS Code settings source should be added when clearFound is false');
+        });
+
+        test('Blocks VS Code settings sources when <clear /> is in a workspace config (clearFound = true)', async () => {
+            // clearFound = true means a workspace nuget.config used <clear /> to restrict sources.
+            // New sources from VS Code settings should NOT be added to honour that intent.
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [], clearFound: true });
+
+            vscodeGetConfigurationStub.returns({
+                get: (key: string) => {
+                    if (key === 'sources') {
+                        return [JSON.stringify({ name: 'ExtSource', url: 'http://ext-source' })];
+                    }
+                    return undefined;
+                }
+            });
+
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
+            assert.strictEqual(sources.find(s => s.Name === 'ExtSource'), undefined, 'VS Code settings source should be blocked when clearFound is true');
+        });
+
         test('Decodes password when passwordScriptPath is provided', async () => {
             const source = { Name: 'SecureSource', Url: 'http://secure', Password: 'Encrypted' };
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([source]);
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [source], clearFound: false });
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
@@ -379,7 +485,7 @@ suite('NuGetConfigResolver Tests', () => {
 
         test('Handles password decoding failure', async () => {
             const source = { Name: 'SecureSource', Url: 'http://secure', Password: 'Encrypted' };
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([source]);
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [source], clearFound: false });
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
@@ -405,7 +511,7 @@ suite('NuGetConfigResolver Tests', () => {
 
         test('Caches credentials even without script', async () => {
              const source = { Name: 'PlainSource', Url: 'http://plain', Username: 'user', Password: 'password' };
-             sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([source]);
+             sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [source], clearFound: false });
              vscodeGetConfigurationStub.returns({ get: () => [] });
 
              await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
