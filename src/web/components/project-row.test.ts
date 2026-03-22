@@ -108,7 +108,7 @@ suite('ProjectRow Component', () => {
         await projectRow.updateComplete;
 
         let calledWith: any;
-        mockHostApi.updateProject = async (req) => {
+        mockHostApi.updateProjectAsync = async (req) => {
             calledWith = req;
             return ok({
                 Project: {
@@ -139,7 +139,7 @@ suite('ProjectRow Component', () => {
         projectRow.packageVersion = '1.0.0';
         await projectRow.updateComplete;
 
-        mockHostApi.updateProject = async () => ok({
+        mockHostApi.updateProjectAsync = async () => ok({
             Project: {
                 Name: 'TestProject',
                 Path: 'path/to/project',

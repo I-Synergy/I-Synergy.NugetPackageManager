@@ -75,7 +75,7 @@ export class UpdatesView extends LitElement {
       if (!result.ok) throw new Error("Failed to check for updates");
       return (result.value.Packages ?? []).map((p) => new OutdatedPackageViewModel(p));
     },
-    args: () => [this.projectPaths, this.sourceUrl, this.prerelease, false] as const,
+    args: () => [this.projectPaths, this.sourceUrl, this.prerelease, false] as [string[], string, boolean, boolean],
     onComplete: (packages) => {
       packages.forEach((p) => (p.Selected = true));
       this.packages = packages;

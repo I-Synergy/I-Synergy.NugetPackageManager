@@ -119,7 +119,7 @@ export class ConsolidateView extends LitElement {
       if (!result.ok) throw new Error("Failed to check for inconsistencies");
       return (result.value.Packages ?? []).map((p) => new InconsistentPackageViewModel(p));
     },
-    args: () => [this.projectPaths, false] as const,
+    args: () => [this.projectPaths, false] as [string[], boolean],
     onComplete: (packages) => {
       this.packages = packages;
       this.statusText =

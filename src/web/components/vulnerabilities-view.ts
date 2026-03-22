@@ -123,7 +123,7 @@ export class VulnerabilitiesView extends LitElement {
       if (!result.ok) throw new Error("Failed to scan for vulnerabilities");
       return (result.value.Packages ?? []).map((p) => new VulnerablePackageViewModel(p));
     },
-    args: () => [this.projectPaths, false] as const,
+    args: () => [this.projectPaths, false] as [string[], boolean],
     onComplete: (packages) => {
       this.packages = packages;
       this.statusText =
