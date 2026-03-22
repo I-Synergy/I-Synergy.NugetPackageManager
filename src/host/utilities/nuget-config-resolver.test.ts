@@ -90,14 +90,15 @@ suite('NuGetConfigResolver Tests', () => {
             writeConfig(workspaceDir, 'nuget.config', '<configuration/>');
             writeConfig(workspaceDir, '.nuget/nuget.config', '<configuration/>');
 
-            const paths = (NuGetConfigResolver as any).FindAllConfigFiles(workspaceDir);
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([workspaceDir]);
 
             const expected1 = path.join(workspaceDir, '.nuget', 'nuget.config');
             const expected2 = path.join(workspaceDir, 'nuget.config');
 
             assert.ok(paths.includes(expected1));
             assert.ok(paths.includes(expected2));
-            assert.strictEqual(paths[0], expected1);
+            // Workspace configs are last (highest priority), both present
+            assert.ok(paths.indexOf(expected1) < paths.indexOf(expected2));
         });
 
         test('Returns user config paths on Windows', () => {
@@ -114,7 +115,7 @@ suite('NuGetConfigResolver Tests', () => {
 
             const userProfileConfig = writeConfig(homeDir, '.nuget/NuGet/NuGet.Config', '<configuration/>');
 
-            const paths = (NuGetConfigResolver as any).FindAllConfigFiles(undefined);
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([]);
 
             assert.ok(paths.includes(appDataConfig));
             // Only check if homedir was successfully influenced
@@ -129,7 +130,7 @@ suite('NuGetConfigResolver Tests', () => {
             const userProfileConfig = writeConfig(homeDir, '.nuget/NuGet/NuGet.Config', '<configuration/>');
             const xdgConfig = writeConfig(homeDir, '.config/NuGet/NuGet.Config', '<configuration/>');
 
-            const paths = (NuGetConfigResolver as any).FindAllConfigFiles(undefined);
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([]);
 
             // Only check if homedir was successfully influenced
             if (os.homedir() === homeDir) {
@@ -143,7 +144,7 @@ suite('NuGetConfigResolver Tests', () => {
 
             const machineConfig = writeConfig(programFilesDir, 'NuGet/Config/Microsoft.VisualStudio.Offline.config', '<configuration/>');
 
-            const paths = (NuGetConfigResolver as any).FindAllConfigFiles(undefined);
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([]);
             assert.ok(paths.includes(machineConfig));
         });
     });
@@ -314,11 +315,9 @@ suite('NuGetConfigResolver Tests', () => {
             assert.ok(source2);
 
             if (os.homedir() === homeDir) {
-                // If we successfully set up user config, check that it leaked through (due to implementation order)
-                // or if it was cleared (if implementation was different).
-                // Based on previous run, it leaks.
+                // <clear /> in the workspace config must clear all inherited sources (user/machine).
                 const source1 = sources.find(s => s.Name === 'Source1');
-                assert.ok(source1);
+                assert.strictEqual(source1, undefined);
             }
         });
 

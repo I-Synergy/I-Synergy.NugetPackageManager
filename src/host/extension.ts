@@ -4,6 +4,8 @@ import { RpcHost } from "@/common/rpc/rpc-host";
 import { createHostAPI } from "./host-api";
 import { Logger } from "../common/logger";
 import { PackageVersionDecorator } from "./utilities/package-version-decorator";
+import nugetApiFactory from "./nuget/api-factory";
+import NuGetConfigResolver from "./utilities/nuget-config-resolver";
 
 export function activate(context: vscode.ExtensionContext) {
   Logger.configure(context);
@@ -150,6 +152,11 @@ class NugetViewProvider implements vscode.WebviewViewProvider {
 
     // Dispose previous RPC host if webview is re-resolved
     this.rpcHost?.dispose();
+
+    // Clear all source-related caches on startup so sources and credentials are
+    // always resolved fresh from nuget.config and password scripts.
+    nugetApiFactory.ClearCache();
+    NuGetConfigResolver.ClearCache();
 
     const api = createHostAPI();
     this.rpcHost = new RpcHost(webviewView.webview, api);
