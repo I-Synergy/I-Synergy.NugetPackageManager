@@ -191,17 +191,20 @@ export class PackageDetailsComponent extends LitElement {
       if (!packageVersionUrl || !source) return;
       this.packageDetailsLoading = true;
 
-      const request: GetPackageDetailsRequest = {
-        PackageVersionUrl: packageVersionUrl,
-        Url: source,
-        ...(passwordScriptPath !== undefined && { PasswordScriptPath: passwordScriptPath }),
-      };
+      try {
+        const request: GetPackageDetailsRequest = {
+          PackageVersionUrl: packageVersionUrl,
+          Url: source,
+          ...(passwordScriptPath !== undefined && { PasswordScriptPath: passwordScriptPath }),
+        };
 
-      const result = await hostApi.getPackageDetailsAsync(request, signal);
-      if (signal.aborted) return;
+        const result = await hostApi.getPackageDetailsAsync(request, signal);
+        if (signal.aborted) return;
 
-      this.packageDetailsLoading = false;
-      if (result.ok) this.packageDetails = result.value.Package;
+        if (result.ok) this.packageDetails = result.value.Package;
+      } finally {
+        this.packageDetailsLoading = false;
+      }
     },
     args: () => [this.packageVersionUrl, this.source, this.passwordScriptPath] as const,
   });
@@ -212,8 +215,8 @@ export class PackageDetailsComponent extends LitElement {
     return count.toString();
   }
 
-  private openUrl(url: string): void {
-    hostApi.openUrlAsync({ Url: url });
+  private async openUrlAsync(url: string): Promise<void> {
+    await hostApi.openUrlAsync({ Url: url });
   }
 
   private renderDescriptionTab(): unknown {
@@ -238,14 +241,14 @@ export class PackageDetailsComponent extends LitElement {
         ${this.package.LicenseUrl
           ? html`
               <span class="label">License</span>
-              <a href=${this.package.LicenseUrl} @click=${(e: Event) => { e.preventDefault(); this.openUrl(this.package!.LicenseUrl); }}>View License</a>
+              <a href=${this.package.LicenseUrl} @click=${async (e: Event) => { e.preventDefault(); await this.openUrlAsync(this.package!.LicenseUrl); }}>View License</a>
             `
           : nothing}
 
         ${this.package.ProjectUrl
           ? html`
               <span class="label">Project URL</span>
-              <a href=${this.package.ProjectUrl} @click=${(e: Event) => { e.preventDefault(); this.openUrl(this.package!.ProjectUrl); }}>View Project</a>
+              <a href=${this.package.ProjectUrl} @click=${async (e: Event) => { e.preventDefault(); await this.openUrlAsync(this.package!.ProjectUrl); }}>View Project</a>
             `
           : nothing}
       </div>

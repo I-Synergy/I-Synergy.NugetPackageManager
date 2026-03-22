@@ -85,25 +85,37 @@ async function fetchRegistrationItems(registrationBaseUrl, pkgId) {
 }
 
 function parseVersion(v) {
-  return (v || '').split('.').map(n => parseInt(n, 10) || 0);
+  // Returns { parts: number[], pre: string|null }
+  // e.g. "1.2.3-alpha.1" → { parts: [1,2,3], pre: "alpha.1" }
+  const [numeric, ...preParts] = (v || '').split('-');
+  const pre = preParts.length > 0 ? preParts.join('-') : null;
+  const parts = (numeric || '').split('.').map(n => parseInt(n, 10) || 0);
+  return { parts, pre };
 }
 
 function compareVersions(a, b) {
   const pa = parseVersion(a);
   const pb = parseVersion(b);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] || 0) - (pb[i] || 0);
+  // Compare numeric parts first
+  for (let i = 0; i < Math.max(pa.parts.length, pb.parts.length); i++) {
+    const diff = (pa.parts[i] || 0) - (pb.parts[i] || 0);
     if (diff !== 0) return diff;
   }
+  // Per semver: release > prerelease (null > non-null)
+  if (pa.pre === null && pb.pre !== null) return 1;
+  if (pa.pre !== null && pb.pre === null) return -1;
+  if (pa.pre !== null && pb.pre !== null) return pa.pre.localeCompare(pb.pre);
   return 0;
 }
 
 function isVersionInRange(version, range) {
   if (!range) return false;
   try {
-    const match = range.match(/^([\[\(])\s*([\d.]*)\s*,\s*([\d.]*)\s*([\]\)])$/);
+    // Match NuGet range notation: [min,max], (min,max), [min,), etc.
+    // Version segments may include prerelease labels like "1.0.0-alpha"
+    const match = range.match(/^([\[\(])\s*([^,]*?)\s*,\s*([^,]*?)\s*([\]\)])$/);
     if (!match) {
-      const exact = range.match(/^\[\s*([\d.]+)\s*\]$/);
+      const exact = range.match(/^\[\s*([^\]]+?)\s*\]$/);
       return exact ? compareVersions(version, exact[1]) === 0 : false;
     }
     const [, openBracket, minVer, maxVer, closeBracket] = match;

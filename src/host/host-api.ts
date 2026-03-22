@@ -532,9 +532,12 @@ export function createHostAPI(): HostAPI {
             const isCpm = cpmVersions !== null;
 
             if (isCpm && cpmVersions!.has(update.PackageId)) {
+              if (!update.Version) {
+                throw new Error(`Version is required for CPM package update: ${update.PackageId}`);
+              }
               await CpmResolver.UpdatePackageVersionAsync(projectPath, update.PackageId, update.Version);
             } else {
-              await executeAddPackage(update.PackageId, projectPath, update.Version, /* skipRestore */ true);
+              await executeAddPackage(update.PackageId, projectPath, update.Version, skipRestore);
             }
           }
 

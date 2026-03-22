@@ -281,7 +281,7 @@ export default class NuGetApi {
           };
         }
         Logger.debug(`NuGetApi.GetPackageDetailsAsync: Fetching catalog from ${catalogUrl}`);
-        const result = await this.ExecuteGetAsync(catalogUrl);
+        const result = await this.ExecuteGetAsync(catalogUrl, ...(signal ? [{ signal }] : []));
         catalogData = result.data;
       }
 
