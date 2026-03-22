@@ -377,8 +377,8 @@ suite('NuGetConfigResolver Tests', () => {
 
     suite('GetSourcesAndDecodePasswords', () => {
         test('Uses VS Code configuration sources', async () => {
-            // Mock empty file sources
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([]);
+            // Stub ResolveConfigsAsync so no filesystem access is needed
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [], clearFound: false });
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
