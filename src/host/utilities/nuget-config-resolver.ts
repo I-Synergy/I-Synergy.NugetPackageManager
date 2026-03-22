@@ -133,11 +133,6 @@ export default class NuGetConfigResolver {
           disabledSources.add(name);
         });
 
-        if (result.clear) {
-          // Stop processing further configs — <clear /> means "only use what I explicitly declare".
-          // Sibling workspace configs from other projects must not bleed through.
-          break;
-        }
       } catch (error) {
         Logger.error(`NuGetConfigResolver.ResolveConfigs: Failed to parse ${configPath}`, error);
       }
