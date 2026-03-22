@@ -969,8 +969,8 @@ export class PackagesView extends LitElement {
           ? this.filteredProjects.map(
               (project) => html`
                 <project-row
-                  @project-updated=${(e: CustomEvent) =>
-                    this.OnProjectUpdatedAsync(e)}
+                  @project-updated=${async (e: CustomEvent) =>
+                    await this.OnProjectUpdatedAsync(e)}
                   .project=${project}
                   .packageId=${this.selectedPackage?.Name}
                   .packageVersion=${this.selectedVersion}
