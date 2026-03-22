@@ -145,7 +145,7 @@ export class NugetLicenseDialog extends LitElement {
   }
 
   private openLicenseUrl(url: string): void {
-    hostApi.openUrl({ Url: url });
+    hostApi.openUrlAsync({ Url: url });
   }
 
   override render() {

@@ -135,14 +135,14 @@ export class SettingsView extends LitElement {
     this.sources = config?.Sources.map((x) => new SourceViewModel(x)) ?? [];
   }
 
-  private async updateConfiguration(): Promise<void> {
+  private async updateConfigurationAsync(): Promise<void> {
     const sources = this.sources.map((x) => x.GetModel());
     configuration.UpdateLocal({
       SkipRestore: this.skipRestore,
       EnablePackageVersionInlineInfo: this.enablePackageVersionInlineInfo,
       Sources: sources,
     });
-    await hostApi.updateConfiguration({
+    await hostApi.updateConfigurationAsync({
       Configuration: {
         SkipRestore: this.skipRestore,
         EnablePackageVersionInlineInfo: this.enablePackageVersionInlineInfo,
@@ -167,32 +167,32 @@ export class SettingsView extends LitElement {
     this.requestUpdate();
   }
 
-  private async removeRow(source: SourceViewModel): Promise<void> {
-    const confirm = await hostApi.showConfirmation({
+  private async removeRowAsync(source: SourceViewModel): Promise<void> {
+    const confirm = await hostApi.showConfirmationAsync({
       Message: `Remove source "${source.Name}"?`,
       Detail: `This will remove the NuGet source "${source.Name}" (${source.Url}).`,
     });
     if (!confirm.ok || !confirm.value.Confirmed) return;
 
     this.sources = this.sources.filter((s) => s !== source);
-    this.updateConfiguration();
+    this.updateConfigurationAsync();
   }
 
   private saveRow(source: SourceViewModel): void {
     if (this.newSource?.Id === source.Id) this.newSource = null;
     source.Save();
     if (source.Name === "" && source.Url === "") {
-      this.removeRow(source);
+      this.removeRowAsync(source);
       return;
     }
     this.requestUpdate();
-    this.updateConfiguration();
+    this.updateConfigurationAsync();
   }
 
   private cancelRow(source: SourceViewModel): void {
     if (this.newSource?.Id === source.Id) this.newSource = null;
     if (source.Name === "" && source.Url === "") {
-      this.removeRow(source);
+      this.removeRowAsync(source);
     } else {
       source.Cancel();
       this.requestUpdate();
@@ -244,7 +244,7 @@ export class SettingsView extends LitElement {
           <button class="icon-btn" aria-label="Edit source" title="Edit" @click=${() => this.editRow(source)}>
             <span class="codicon codicon-edit"></span>
           </button>
-          <button class="icon-btn" aria-label="Remove source" title="Remove" @click=${() => this.removeRow(source)}>
+          <button class="icon-btn" aria-label="Remove source" title="Remove" @click=${() => this.removeRowAsync(source)}>
             <span class="codicon codicon-close"></span>
           </button>
         </div>
@@ -271,7 +271,7 @@ export class SettingsView extends LitElement {
                 .checked=${this.skipRestore}
                 @change=${(e: Event) => {
                   this.skipRestore = (e.target as HTMLInputElement).checked;
-                  this.updateConfiguration();
+                  this.updateConfigurationAsync();
                 }}
               />
               Skip performing a restore preview and compatibility check
@@ -285,7 +285,7 @@ export class SettingsView extends LitElement {
                 .checked=${this.enablePackageVersionInlineInfo}
                 @change=${(e: Event) => {
                   this.enablePackageVersionInlineInfo = (e.target as HTMLInputElement).checked;
-                  this.updateConfiguration();
+                  this.updateConfigurationAsync();
                 }}
               />
               Show inline information about newer package versions in project files

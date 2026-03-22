@@ -11,7 +11,7 @@ export class TaskExecutor {
   private globalMutex: Mutex = new Mutex();
   private progress = new Map<string, OperationProgress>();
 
-  async ExecuteCommand(command: string, args: string[], operationId: string): Promise<void> {
+  async ExecuteCommandAsync(command: string, args: string[], operationId: string): Promise<void> {
     Logger.info(`TaskExecutor.ExecuteCommand: ${command} ${args.join(" ")}`);
     this.progress.set(operationId, { stage: "Starting...", percent: 5 });
 

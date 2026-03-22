@@ -49,7 +49,7 @@ suite('CpmResolver Tests', () => {
     });
 
     test('GetPackageVersions returns null when no Directory.Packages.props exists', async () => {
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
+        const versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.strictEqual(versions, null);
     });
 
@@ -63,7 +63,7 @@ suite('CpmResolver Tests', () => {
             </Project>`;
         fs.writeFileSync(cpmPath, cpmContent);
 
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
+        const versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.strictEqual(versions, null);
     });
 
@@ -86,7 +86,7 @@ suite('CpmResolver Tests', () => {
             </Project>`;
         fs.writeFileSync(projectPath, projectContent);
 
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
+        const versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.strictEqual(versions, null);
     });
 
@@ -102,7 +102,7 @@ suite('CpmResolver Tests', () => {
             </Project>`;
         fs.writeFileSync(cpmPath, cpmContent);
 
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
+        const versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.strictEqual(versions, null);
     });
 
@@ -120,7 +120,7 @@ suite('CpmResolver Tests', () => {
             </Project>`;
         fs.writeFileSync(cpmPath, cpmContent);
 
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
+        const versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.notStrictEqual(versions, null);
         assert.strictEqual(versions!.size, 2);
         assert.strictEqual(versions!.get('Package.A'), '1.0.0');
@@ -141,7 +141,7 @@ suite('CpmResolver Tests', () => {
             </Project>`;
         fs.writeFileSync(cpmPath, cpmContent);
 
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
+        const versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.notStrictEqual(versions, null);
         assert.strictEqual(versions!.get('Root.Package'), '3.0.0');
     });
@@ -159,7 +159,7 @@ suite('CpmResolver Tests', () => {
             </Project>`;
         fs.writeFileSync(cpmPath, cpmContent1);
 
-        let versions = await CpmResolver.GetPackageVersions(projectPath);
+        let versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.strictEqual(versions!.get('Test.Package'), '1.0.0');
 
         // Update file
@@ -175,7 +175,7 @@ suite('CpmResolver Tests', () => {
         fs.writeFileSync(cpmPath, cpmContent2);
 
         // Second call should read the updated value from disk
-        versions = await CpmResolver.GetPackageVersions(projectPath);
+        versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.strictEqual(versions!.get('Test.Package'), '2.0.0');
     });
 
@@ -196,7 +196,7 @@ suite('CpmResolver Tests', () => {
         let errorLogged = false;
         Logger.error = () => { errorLogged = true; };
 
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
+        const versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
 
         // We expect null because IsCentralPackageManagementEnabled returns false due to parsing failure
         assert.strictEqual(versions, null);
@@ -220,7 +220,7 @@ suite('CpmResolver Tests', () => {
             </Project>`;
         fs.writeFileSync(cpmPath, cpmContent);
 
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
+        const versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.notStrictEqual(versions, null);
         assert.strictEqual(versions!.size, 1);
         assert.strictEqual(versions!.get('Valid.Package'), '1.0.0');
@@ -243,7 +243,7 @@ suite('CpmResolver Tests', () => {
         let errorLogged = false;
         Logger.error = () => { errorLogged = true; };
 
-        const versions = await CpmResolver.GetPackageVersions(projectPath);
+        const versions = await CpmResolver.GetPackageVersionsAsync(projectPath);
         assert.strictEqual(versions, null);
         assert.strictEqual(errorLogged, true);
     });

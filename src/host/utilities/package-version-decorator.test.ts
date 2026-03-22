@@ -93,7 +93,7 @@ suite('PackageVersionDecorator Tests', () => {
         decorator = new PackageVersionDecorator();
         
         // Access private method via cast
-        await (decorator as any).updateDecorations(mockEditor);
+        await (decorator as any).updateDecorationsAsync(mockEditor);
 
         assert.ok(setDecorationsStub.calledWith(decorationType, []));
     });
@@ -101,7 +101,7 @@ suite('PackageVersionDecorator Tests', () => {
     test('updateDecorations ignores unsupported files', async () => {
         mockDocument.fileName = 'test.txt';
         decorator = new PackageVersionDecorator();
-        await (decorator as any).updateDecorations(mockEditor);
+        await (decorator as any).updateDecorationsAsync(mockEditor);
         
         assert.ok(setDecorationsStub.notCalled);
     });
@@ -131,7 +131,7 @@ suite('PackageVersionDecorator Tests', () => {
         getSourceApiStub.resolves(mockApi);
 
         decorator = new PackageVersionDecorator();
-        await (decorator as any).updateDecorations(mockEditor);
+        await (decorator as any).updateDecorationsAsync(mockEditor);
 
         // Should have called setDecorations
         assert.ok(setDecorationsStub.calledOnce);
@@ -159,7 +159,7 @@ suite('PackageVersionDecorator Tests', () => {
         getSourceApiStub.resolves(mockApi);
 
         decorator = new PackageVersionDecorator();
-        await (decorator as any).updateDecorations(mockEditor);
+        await (decorator as any).updateDecorationsAsync(mockEditor);
 
         assert.ok(setDecorationsStub.calledOnce); // Called with empty array or existing?
         // Wait, if packagesToFetch > 0, fetchAndDecorate is called.
@@ -187,11 +187,11 @@ suite('PackageVersionDecorator Tests', () => {
         decorator = new PackageVersionDecorator();
         
         // First run - fail
-        await (decorator as any).updateDecorations(mockEditor);
+        await (decorator as any).updateDecorationsAsync(mockEditor);
         assert.ok(mockApi.GetPackageAsync.calledOnce);
 
         // Second run - should assume failed and not call API
-        await (decorator as any).updateDecorations(mockEditor);
+        await (decorator as any).updateDecorationsAsync(mockEditor);
         assert.ok(mockApi.GetPackageAsync.calledOnce); // Still called once
     });
 
@@ -211,7 +211,7 @@ suite('PackageVersionDecorator Tests', () => {
         getSourceApiStub.withArgs('url2').resolves(api2);
 
         decorator = new PackageVersionDecorator();
-        await (decorator as any).updateDecorations(mockEditor);
+        await (decorator as any).updateDecorationsAsync(mockEditor);
 
         assert.ok(api1.GetPackageAsync.called);
         assert.ok(api2.GetPackageAsync.called);

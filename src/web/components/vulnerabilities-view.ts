@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { Task, TaskStatus } from "@lit/task";
 
 import codicon from "@/web/styles/codicon.css";
 import { scrollableBase } from "@/web/styles/base.css";
@@ -110,67 +111,37 @@ export class VulnerabilitiesView extends LitElement {
   ];
 
   @state() packages: VulnerablePackageViewModel[] = [];
-  @state() isLoading: boolean = false;
-  @state() hasError: boolean = false;
   @state() statusText: string = "";
   @property({ attribute: false }) projectPaths: string[] = [];
 
-  private loaded = false;
-  private _loadAc: AbortController | null = null;
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    if (!this.loaded) {
-      this.loaded = true;
-      this.LoadVulnerablePackages();
-    }
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this._loadAc?.abort();
-  }
-
-  async LoadVulnerablePackages(forceReload: boolean = false): Promise<void> {
-    this._loadAc?.abort();
-    const ac = new AbortController();
-    this._loadAc = ac;
-
-    this.isLoading = true;
-    this.hasError = false;
-    this.packages = [];
-
-    try {
-      const req: Parameters<typeof hostApi.getVulnerablePackages>[0] = {};
-      if (this.projectPaths.length > 0) req.ProjectPaths = this.projectPaths;
+  private _loadTask = new Task(this, {
+    task: async ([projectPaths, forceReload], { signal }) => {
+      const req: Parameters<typeof hostApi.getVulnerablePackagesAsync>[0] = {};
+      if (projectPaths.length > 0) req.ProjectPaths = projectPaths;
       if (forceReload) req.ForceReload = true;
-      const result = await hostApi.getVulnerablePackages(req, ac.signal);
+      const result = await hostApi.getVulnerablePackagesAsync(req, signal);
+      if (!result.ok) throw new Error("Failed to scan for vulnerabilities");
+      return (result.value.Packages ?? []).map((p) => new VulnerablePackageViewModel(p));
+    },
+    args: () => [this.projectPaths, false] as const,
+    onComplete: (packages) => {
+      this.packages = packages;
+      this.statusText =
+        packages.length > 0
+          ? `${packages.length} vulnerabilit${packages.length !== 1 ? "ies" : "y"} found`
+          : "";
+      this.dispatchEvent(new CustomEvent<number>("count-changed", {
+        detail: packages.length,
+        bubbles: true,
+        composed: true,
+      }));
+    },
+  });
 
-      if (ac.signal.aborted) return;
-
-      if (!result.ok) {
-        this.hasError = true;
-        this.statusText = "Failed to scan for vulnerabilities";
-      } else {
-        this.packages = (result.value.Packages ?? []).map(
-          (p) => new VulnerablePackageViewModel(p)
-        );
-        this.dispatchEvent(new CustomEvent<number>("count-changed", {
-          detail: this.packages.length,
-          bubbles: true,
-          composed: true,
-        }));
-        this.statusText =
-          this.packages.length > 0
-            ? `${this.packages.length} vulnerabilit${this.packages.length !== 1 ? "ies" : "y"} found`
-            : "";
-      }
-    } catch {
-      if (ac.signal.aborted) return;
-      this.hasError = true;
-    } finally {
-      if (!ac.signal.aborted) this.isLoading = false;
-    }
+  async LoadVulnerablePackagesAsync(forceReload: boolean = false): Promise<void> {
+    this.packages = [];
+    this.statusText = "";
+    await this._loadTask.run([this.projectPaths, forceReload]);
   }
 
   private getSeverityColor(severity: number): string {
@@ -186,7 +157,7 @@ export class VulnerabilitiesView extends LitElement {
   }
 
   private openAdvisory(url: string): void {
-    hostApi.openUrl({ Url: url });
+    hostApi.openUrlAsync({ Url: url });
   }
 
   private renderPackageRow(pkg: VulnerablePackageViewModel): unknown {
@@ -232,13 +203,16 @@ export class VulnerabilitiesView extends LitElement {
   }
 
   override render(): unknown {
+    const isLoading = this._loadTask.status === TaskStatus.PENDING;
+    const hasError = this._loadTask.status === TaskStatus.ERROR;
+
     return html`
-      <div class="vuln-container" aria-busy=${this.isLoading}>
+      <div class="vuln-container" aria-busy=${isLoading}>
         <div class="toolbar">
           <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
         </div>
 
-        ${this.isLoading
+        ${isLoading
           ? html`
               <div class="loading" role="status" aria-label="Loading">
                 <span class="spinner large"></span>
@@ -246,7 +220,7 @@ export class VulnerabilitiesView extends LitElement {
               </div>
             `
           : nothing}
-        ${!this.isLoading && this.packages.length === 0 && !this.hasError
+        ${!isLoading && this.packages.length === 0 && !hasError
           ? html`
               <div class="empty">
                 <span class="codicon codicon-shield"></span>
@@ -254,7 +228,7 @@ export class VulnerabilitiesView extends LitElement {
               </div>
             `
           : nothing}
-        ${this.hasError
+        ${hasError
           ? html`
               <div class="error" role="alert">
                 <span class="codicon codicon-error"></span>
@@ -262,7 +236,7 @@ export class VulnerabilitiesView extends LitElement {
               </div>
             `
           : nothing}
-        ${!this.isLoading && this.packages.length > 0
+        ${!isLoading && this.packages.length > 0
           ? html`
               <div class="package-list" role="list" aria-label="Vulnerable packages">
                 ${this.packages.map((pkg) => this.renderPackageRow(pkg))}

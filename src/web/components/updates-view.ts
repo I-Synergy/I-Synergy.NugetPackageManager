@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { Task, TaskStatus } from "@lit/task";
 
 import codicon from "@/web/styles/codicon.css";
 import { scrollableBase } from "@/web/styles/base.css";
@@ -55,18 +56,40 @@ export class UpdatesView extends LitElement {
   ];
 
   @state() packages: OutdatedPackageViewModel[] = [];
-  @state() isLoading: boolean = false;
   @state() isUpdating: boolean = false;
-  @state() hasError: boolean = false;
-  @property({ type: Boolean }) prerelease: boolean = false;
   @state() statusText: string = "";
-  @state() loadingText: string = "Checking for updates...";
+  @property({ type: Boolean }) prerelease: boolean = false;
   @property({ attribute: false }) projectPaths: string[] = [];
   @property() sourceUrl: string = "";
   @property() filterQuery: string = "";
 
-  private loaded = false;
-  private _loadAc: AbortController | null = null;
+  private _loadTask = new Task(this, {
+    task: async ([projectPaths, sourceUrl, prerelease, forceReload], { signal }) => {
+      const req: Parameters<typeof hostApi.getOutdatedPackagesAsync>[0] = {
+        Prerelease: prerelease,
+      };
+      if (projectPaths.length > 0) req.ProjectPaths = projectPaths;
+      if (sourceUrl) req.SourceUrl = sourceUrl;
+      if (forceReload) req.ForceReload = true;
+      const result = await hostApi.getOutdatedPackagesAsync(req, signal);
+      if (!result.ok) throw new Error("Failed to check for updates");
+      return (result.value.Packages ?? []).map((p) => new OutdatedPackageViewModel(p));
+    },
+    args: () => [this.projectPaths, this.sourceUrl, this.prerelease, false] as const,
+    onComplete: (packages) => {
+      packages.forEach((p) => (p.Selected = true));
+      this.packages = packages;
+      this.statusText =
+        packages.length > 0
+          ? `${packages.length} update${packages.length !== 1 ? "s" : ""} available`
+          : "";
+      this.dispatchEvent(new CustomEvent<number>("count-changed", {
+        detail: packages.length,
+        bubbles: true,
+        composed: true,
+      }));
+    },
+  });
 
   private get visiblePackages(): OutdatedPackageViewModel[] {
     if (!this.filterQuery) return this.packages;
@@ -85,71 +108,18 @@ export class UpdatesView extends LitElement {
     this.requestUpdate();
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-    if (!this.loaded) {
-      this.loaded = true;
-      this.LoadOutdatedPackages();
-    }
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this._loadAc?.abort();
-  }
-
-  async LoadOutdatedPackages(forceReload: boolean = false): Promise<void> {
-    this._loadAc?.abort();
-    const ac = new AbortController();
-    this._loadAc = ac;
-
-    this.isLoading = true;
-    this.hasError = false;
+  async LoadOutdatedPackagesAsync(forceReload: boolean = false): Promise<void> {
     this.packages = [];
-    this.loadingText = "Checking for updates...";
-
-    try {
-      const req: Parameters<typeof hostApi.getOutdatedPackages>[0] = {
-        Prerelease: this.prerelease,
-      };
-      if (this.projectPaths.length > 0) req.ProjectPaths = this.projectPaths;
-      if (this.sourceUrl) req.SourceUrl = this.sourceUrl;
-      if (forceReload) req.ForceReload = true;
-      const result = await hostApi.getOutdatedPackages(req, ac.signal);
-
-      if (ac.signal.aborted) return;
-
-      if (!result.ok) {
-        this.hasError = true;
-        this.statusText = "Failed to check for updates";
-      } else {
-        this.packages = (result.value.Packages ?? []).map(
-          (p) => new OutdatedPackageViewModel(p)
-        );
-        this.packages.forEach((p) => (p.Selected = true));
-        this.dispatchEvent(new CustomEvent<number>("count-changed", {
-          detail: this.packages.length,
-          bubbles: true,
-          composed: true,
-        }));
-        this.statusText =
-          this.packages.length > 0
-            ? `${this.packages.length} update${this.packages.length !== 1 ? "s" : ""} available`
-            : "";
-      }
-    } catch {
-      if (ac.signal.aborted) return;
-      this.hasError = true;
-    } finally {
-      if (!ac.signal.aborted) this.isLoading = false;
-    }
+    this.statusText = "";
+    await this._loadTask.run([this.projectPaths, this.sourceUrl, this.prerelease, forceReload]);
   }
 
-  private async updateSingle(pkg: OutdatedPackageViewModel): Promise<void> {
+  private async updateSingleAsync(pkg: OutdatedPackageViewModel, skipRestore = false): Promise<void> {
     pkg.IsUpdating = true;
     this.requestUpdate();
     try {
-      const result = await hostApi.batchUpdatePackages({
+      const result = await hostApi.batchUpdatePackagesAsync({
+        SkipRestore: skipRestore,
         Updates: [
           {
             PackageId: pkg.Id,
@@ -180,31 +150,28 @@ export class UpdatesView extends LitElement {
     }
   }
 
-  private async updateAllSelected(): Promise<void> {
+  private async updateAllSelectedAsync(): Promise<void> {
     const selected = this.packages.filter((p) => p.Selected);
     if (selected.length === 0) return;
 
-    const confirm = await hostApi.showConfirmation({
+    const confirm = await hostApi.showConfirmationAsync({
       Message: `Update ${selected.length} package${selected.length !== 1 ? "s" : ""}?`,
       Detail: selected.map((p) => `${p.Id}: ${p.InstalledVersion} -> ${p.LatestVersion}`).join("\n"),
     });
     if (!confirm.ok || !confirm.value.Confirmed) return;
 
+    const projectPaths = [...new Set(selected.flatMap((p) => p.Projects.map((proj) => proj.Path)))];
     this.isUpdating = true;
-    selected.forEach((p) => { p.IsUpdating = true; });
     this.requestUpdate();
     try {
-      await hostApi.batchUpdatePackages({
-        Updates: selected.map((p) => ({
-          PackageId: p.Id,
-          Version: p.LatestVersion,
-          ProjectPaths: p.Projects.map((proj) => proj.Path),
-        })),
-      });
-      await this.LoadOutdatedPackages();
+      // Update each package reference in parallel with restore skipped.
+      // Each succeeds as soon as the version is written to the .csproj — the
+      // package is removed from the list immediately, clearing progressively.
+      await Promise.allSettled(selected.map((pkg) => this.updateSingleAsync(pkg, true)));
+      // Run dotnet restore once for all affected projects after all writes are done.
+      await hostApi.restoreProjectsAsync({ ProjectPaths: projectPaths });
     } finally {
       this.isUpdating = false;
-      selected.forEach((p) => { p.IsUpdating = false; });
       this.requestUpdate();
     }
   }
@@ -255,7 +222,7 @@ export class UpdatesView extends LitElement {
           }))}
         ></package-row>
         <div class="row-actions">
-          <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" ?disabled=${pkg.IsUpdating} @click=${() => this.updateSingle(pkg)}>
+          <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" ?disabled=${pkg.IsUpdating} @click=${async () => await this.updateSingleAsync(pkg)}>
             <span class="codicon codicon-arrow-circle-up"></span>
           </button>
         </div>
@@ -264,6 +231,8 @@ export class UpdatesView extends LitElement {
   }
 
   override render(): unknown {
+    const isLoading = this._loadTask.status === TaskStatus.PENDING;
+    const hasError = this._loadTask.status === TaskStatus.ERROR;
     const visible = this.visiblePackages;
     const totalSelectedCount = this.packages.filter((p) => p.Selected).length;
     const allPackagesSelected =
@@ -271,7 +240,7 @@ export class UpdatesView extends LitElement {
     const updateBtnLabel = allPackagesSelected ? "Update All" : "Update Selected";
 
     return html`
-      <div class="updates-container" aria-busy=${this.isLoading}>
+      <div class="updates-container" aria-busy=${isLoading}>
         <div class="toolbar">
           <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
           <div class="toolbar-right">
@@ -280,7 +249,7 @@ export class UpdatesView extends LitElement {
                   <button class="icon-btn" title="${allPackagesSelected ? "Deselect all" : "Select all"}" aria-label="${allPackagesSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
                     <span class="codicon ${allPackagesSelected ? "codicon-check-all" : "codicon-circle-large-outline"}"></span>
                   </button>
-                  <button class="primary-btn" ?disabled=${this.isUpdating || totalSelectedCount === 0} @click=${() => this.updateAllSelected()}>
+                  <button class="primary-btn" ?disabled=${this.isUpdating || totalSelectedCount === 0} @click=${async () => await this.updateAllSelectedAsync()}>
                     ${updateBtnLabel}
                   </button>
                 `
@@ -288,15 +257,15 @@ export class UpdatesView extends LitElement {
           </div>
         </div>
 
-        ${this.isLoading
+        ${isLoading
           ? html`
               <div class="loading" role="status" aria-label="Loading">
                 <span class="spinner large"></span>
-                <span>${this.loadingText}</span>
+                <span>Checking for updates...</span>
               </div>
             `
           : nothing}
-        ${!this.isLoading && this.packages.length === 0 && !this.hasError
+        ${!isLoading && this.packages.length === 0 && !hasError
           ? html`
               <div class="empty">
                 <span class="codicon codicon-check"></span>
@@ -304,7 +273,7 @@ export class UpdatesView extends LitElement {
               </div>
             `
           : nothing}
-        ${!this.isLoading && !this.hasError && this.packages.length > 0 && visible.length === 0
+        ${!isLoading && !hasError && this.packages.length > 0 && visible.length === 0
           ? html`
               <div class="empty">
                 <span class="codicon codicon-search"></span>
@@ -312,7 +281,7 @@ export class UpdatesView extends LitElement {
               </div>
             `
           : nothing}
-        ${this.hasError
+        ${hasError
           ? html`
               <div class="error" role="alert">
                 <span class="codicon codicon-error"></span>
@@ -320,7 +289,7 @@ export class UpdatesView extends LitElement {
               </div>
             `
           : nothing}
-        ${!this.isLoading && visible.length > 0
+        ${!isLoading && visible.length > 0
           ? html`
               <div class="package-list" role="list" aria-label="Outdated packages">
                 ${visible.map((pkg) => this.renderPackageRow(pkg))}

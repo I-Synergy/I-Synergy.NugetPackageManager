@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { PropertyValues } from "lit";
+import { Task } from "@lit/task";
 import type { GetPackageDetailsRequest } from "@/common/rpc/types";
 import { PackageViewModel } from "../types";
 import codicon from "@/web/styles/codicon.css";
@@ -185,34 +185,26 @@ export class PackageDetailsComponent extends LitElement {
   @state() packageDetails?: PackageDetails;
   @state() activeTab: DetailTab = "description";
 
-  protected override updated(changedProps: PropertyValues): void {
-    if (changedProps.has("source") || changedProps.has("packageVersionUrl")) {
-      this.reloadDependencies();
-    }
-  }
+  private _detailsTask = new Task(this, {
+    task: async ([packageVersionUrl, source, passwordScriptPath], { signal }) => {
+      this.packageDetails = undefined;
+      if (!packageVersionUrl || !source) return;
+      this.packageDetailsLoading = true;
 
-  private async reloadDependencies(): Promise<void> {
-    this.packageDetails = undefined as unknown as PackageDetails;
+      const request: GetPackageDetailsRequest = {
+        PackageVersionUrl: packageVersionUrl,
+        Url: source,
+        ...(passwordScriptPath !== undefined && { PasswordScriptPath: passwordScriptPath }),
+      };
 
-    if (!this.source) return;
-    if (!this.packageVersionUrl) return;
-    this.packageDetailsLoading = true;
+      const result = await hostApi.getPackageDetailsAsync(request, signal);
+      if (signal.aborted) return;
 
-    const request: GetPackageDetailsRequest = {
-      PackageVersionUrl: this.packageVersionUrl,
-      Url: this.source,
-      ...(this.passwordScriptPath !== undefined && { PasswordScriptPath: this.passwordScriptPath }),
-    };
-
-    const result = await hostApi.getPackageDetails(request);
-
-    if (request.PackageVersionUrl !== this.packageVersionUrl) return;
-
-    if (result.ok) {
-      this.packageDetails = result.value.Package;
-    }
-    this.packageDetailsLoading = false;
-  }
+      this.packageDetailsLoading = false;
+      if (result.ok) this.packageDetails = result.value.Package;
+    },
+    args: () => [this.packageVersionUrl, this.source, this.passwordScriptPath] as const,
+  });
 
   private formatDownloads(count: number): string {
     if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
@@ -221,7 +213,7 @@ export class PackageDetailsComponent extends LitElement {
   }
 
   private openUrl(url: string): void {
-    hostApi.openUrl({ Url: url });
+    hostApi.openUrlAsync({ Url: url });
   }
 
   private renderDescriptionTab(): unknown {

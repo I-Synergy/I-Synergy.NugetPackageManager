@@ -21,7 +21,7 @@ suite('PackageDetails Component', () => {
 
         // Mock hostApi at module level
         const mockHostApi = {
-            getPackageDetails: (req: GetPackageDetailsRequest) => getPackageDetailsStub(req)
+            getPackageDetailsAsync: (req: GetPackageDetailsRequest) => getPackageDetailsStub(req)
         } as unknown as HostAPI;
 
         Object.defineProperty(registrations, 'hostApi', {
