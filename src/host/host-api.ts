@@ -578,7 +578,7 @@ export function createHostAPI(): HostAPI {
       return ok(undefined);
     },
 
-    async getInconsistentPackagesAsync(request: GetInconsistentPackagesRequest, signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>> {
+    async getInconsistentPackagesAsync(request: GetInconsistentPackagesRequest, _signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>> {
       Logger.info("getInconsistentPackages: Checking for version inconsistencies");
 
       try {

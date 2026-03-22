@@ -2,7 +2,6 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import Split from "split.js";
-import hash from "object-hash";
 import lodash from "lodash";
 import { hostApi, configuration } from "@/web/registrations";
 import codicon from "@/web/styles/codicon.css";
@@ -677,7 +676,6 @@ export class PackagesView extends LitElement {
   }
 
   async UpdatePackagesFiltersAsync(filters: FilterEvent): Promise<void> {
-    const prereleaseChanged = this.filters.Prerelease !== filters.Prerelease;
     const sourceChanged = this.filters.SourceUrl !== filters.SourceUrl;
     this.filters = filters;
     // Only clear the NuGet API factory cache when the source changes.
