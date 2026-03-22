@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.0.11 (2026-03-22)
+
+- fix: NuGet sources dropdown now correctly respects `<clear />` in workspace `nuget.config` — sources from machine/user configs and sibling workspace folders no longer bleed through
+- fix: Config processing order corrected to machine → user → workspace (was reversed), matching NuGet's own merge semantics
+- fix: In multi-root workspaces, all workspace folder roots are now searched for `nuget.config` instead of only the first folder (`workspaceFolders[0]`), preventing another project's sources from appearing in the dropdown
+- fix: Once `<clear />` is encountered, processing stops — sources from other workspace folders processed afterward can no longer bleed in
+- fix: New sources defined in the VS Code extension settings (`i-synergy-nugetpackagemanager.sources`) are now blocked when `<clear />` is present in a workspace `nuget.config`
+- fix: NuGet API instance cache and credentials cache are now cleared on webview startup, ensuring sources and credentials are always resolved fresh from `nuget.config`
+
 ## 1.0.7 (2026-03-19)
 
 - fix: Sources dropdown now updates automatically when `nuget.config` is edited — a `FileSystemWatcher` detects changes to `nuget.config` / `NuGet.Config` and triggers a configuration reload in the webview
