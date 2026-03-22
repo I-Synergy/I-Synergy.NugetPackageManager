@@ -178,21 +178,21 @@ export class SettingsView extends LitElement {
     await this.updateConfigurationAsync();
   }
 
-  private saveRow(source: SourceViewModel): void {
+  private async saveRowAsync(source: SourceViewModel): Promise<void> {
     if (this.newSource?.Id === source.Id) this.newSource = null;
     source.Save();
     if (source.Name === "" && source.Url === "") {
-      this.removeRowAsync(source);
+      await this.removeRowAsync(source);
       return;
     }
     this.requestUpdate();
-    this.updateConfigurationAsync();
+    await this.updateConfigurationAsync();
   }
 
-  private cancelRow(source: SourceViewModel): void {
+  private async cancelRowAsync(source: SourceViewModel): Promise<void> {
     if (this.newSource?.Id === source.Id) this.newSource = null;
     if (source.Name === "" && source.Url === "") {
-      this.removeRowAsync(source);
+      await this.removeRowAsync(source);
     } else {
       source.Cancel();
       this.requestUpdate();
@@ -228,8 +228,8 @@ export class SettingsView extends LitElement {
             }}
           />
           <div>
-            <button @click=${() => this.saveRow(source)}>Ok</button>
-            <button class="secondary-btn" @click=${() => this.cancelRow(source)}>Cancel</button>
+            <button @click=${() => void this.saveRowAsync(source)}>Ok</button>
+            <button class="secondary-btn" @click=${() => void this.cancelRowAsync(source)}>Cancel</button>
           </div>
         </div>
       `;
@@ -244,7 +244,7 @@ export class SettingsView extends LitElement {
           <button class="icon-btn" aria-label="Edit source" title="Edit" @click=${() => this.editRow(source)}>
             <span class="codicon codicon-edit"></span>
           </button>
-          <button class="icon-btn" aria-label="Remove source" title="Remove" @click=${() => this.removeRowAsync(source)}>
+          <button class="icon-btn" aria-label="Remove source" title="Remove" @click=${() => void this.removeRowAsync(source)}>
             <span class="codicon codicon-close"></span>
           </button>
         </div>
