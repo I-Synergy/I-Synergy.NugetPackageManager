@@ -54,7 +54,7 @@ export class ProjectRow extends LitElement {
     return this.project.Packages.find((x) => x.Id === this.packageId);
   }
 
-  private async update_Async(type: "INSTALL" | "UNINSTALL" | "UPDATE"): Promise<void> {
+  private async updateAsync(type: "INSTALL" | "UNINSTALL" | "UPDATE"): Promise<void> {
     if (this.loaders.get(this.packageId) === true) return;
 
     if (type === "UNINSTALL") {
@@ -107,7 +107,7 @@ export class ProjectRow extends LitElement {
 
     if (pkg === undefined) {
       return html`
-        <button class="icon-btn" aria-label="Install package" title="Install" @click=${async () => { await this.update_Async("INSTALL"); }}>
+        <button class="icon-btn" aria-label="Install package" title="Install" @click=${async () => { await this.updateAsync("INSTALL"); }}>
           <span class="codicon codicon-diff-added"></span>
         </button>
       `;
@@ -122,12 +122,12 @@ export class ProjectRow extends LitElement {
       <span class="version">${version}</span>
       ${showUpdate
         ? html`
-            <button class="icon-btn" aria-label="Update package" title="Update" @click=${async () => { await this.update_Async("UPDATE"); }}>
+            <button class="icon-btn" aria-label="Update package" title="Update" @click=${async () => { await this.updateAsync("UPDATE"); }}>
               <span class="codicon codicon-arrow-circle-up"></span>
             </button>
           `
         : nothing}
-      <button class="icon-btn" aria-label="Uninstall package" title="Uninstall" @click=${async () => { await this.update_Async("UNINSTALL"); }}>
+      <button class="icon-btn" aria-label="Uninstall package" title="Uninstall" @click=${async () => { await this.updateAsync("UNINSTALL"); }}>
         <span class="codicon codicon-diff-removed"></span>
       </button>
     `;
