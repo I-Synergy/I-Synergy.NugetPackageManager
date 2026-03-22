@@ -22,7 +22,7 @@ suite('NuGetApiFactory Tests', () => {
         nugetApiFactory.ClearCache();
 
         // Mock dependencies
-        getSourcesStub = sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswords');
+        getSourcesStub = sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync');
         getSourcesStub.resolves([]);
 
         _workspaceFoldersStub = sandbox.stub(vscode.workspace, 'workspaceFolders').value([

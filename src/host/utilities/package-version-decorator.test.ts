@@ -45,12 +45,12 @@ suite('PackageVersionDecorator Tests', () => {
         getConfigurationStub = sandbox.stub(vscode.workspace, 'getConfiguration').returns(configMock as any);
 
         // Mock NuGetConfigResolver
-        getSourcesStub = sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswords').resolves([
+        getSourcesStub = sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync').resolves([
             { Name: 'nuget.org', Url: 'https://api.nuget.org/v3/index.json', Password: '' }
         ]);
 
         // Mock nugetApiFactory
-        getSourceApiStub = sandbox.stub(nugetApiFactory, 'GetSourceApi');
+        getSourceApiStub = sandbox.stub(nugetApiFactory, 'GetSourceApiAsync');
 
         // Mock Editor and Document
         setDecorationsStub = sandbox.stub();

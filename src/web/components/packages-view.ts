@@ -514,7 +514,6 @@ export class PackagesView extends LitElement {
   }
 
   private async reloadChildViewsAsync(forceReload: boolean = false): Promise<void> {
-    await this.updateComplete;
     const updates = this.shadowRoot?.querySelector("updates-view") as UpdatesView | null;
     const consolidate = this.shadowRoot?.querySelector("consolidate-view") as ConsolidateView | null;
     const vulnerabilities = this.shadowRoot?.querySelector("vulnerabilities-view") as VulnerabilitiesView | null;

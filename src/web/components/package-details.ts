@@ -182,7 +182,7 @@ export class PackageDetailsComponent extends LitElement {
   @property() selectedVersion: string = "";
 
   @state() packageDetailsLoading: boolean = false;
-  @state() packageDetails?: PackageDetails;
+  @state() packageDetails: PackageDetails | undefined;
   @state() activeTab: DetailTab = "description";
 
   private _detailsTask = new Task(this, {
