@@ -101,6 +101,48 @@ suite('NuGetConfigResolver Tests', () => {
             assert.ok(paths.indexOf(expected1) < paths.indexOf(expected2));
         });
 
+        test('Handles multiple workspace roots with independent configs and <clear />', () => {
+            // Create a second workspace root to simulate a multi-root VS Code workspace
+            const secondWorkspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nuget-multi-root-'));
+
+            // First workspace has a nuget.config that uses <clear /> with a single source
+            const firstWorkspaceConfig = writeConfig(
+                workspaceDir,
+                'nuget.config',
+                [
+                    '<configuration>',
+                    '  <packageSources>',
+                    '    <clear />',
+                    '    <add key="FirstSource" value="https://first.example/v3/index.json" />',
+                    '  </packageSources>',
+                    '</configuration>',
+                ].join('\n'),
+            );
+
+            // Second workspace has a conflicting source without <clear />
+            const secondWorkspaceConfig = writeConfig(
+                secondWorkspaceDir,
+                'nuget.config',
+                [
+                    '<configuration>',
+                    '  <packageSources>',
+                    '    <add key="SecondSource" value="https://second.example/v3/index.json" />',
+                    '  </packageSources>',
+                    '</configuration>',
+                ].join('\n'),
+            );
+
+            const paths = (NuGetConfigResolver as any).FindAllConfigFiles([workspaceDir, secondWorkspaceDir]);
+
+            // Both workspace-root configs should be discovered
+            assert.ok(paths.includes(firstWorkspaceConfig));
+            assert.ok(paths.includes(secondWorkspaceConfig));
+
+            // Ensure deterministic ordering: configs for the first workspace root should appear
+            // before configs for the second workspace root. This ordering is important for higher-
+            // level resolution logic that applies <clear /> per-root to avoid bleed-through.
+            assert.ok(paths.indexOf(firstWorkspaceConfig) < paths.indexOf(secondWorkspaceConfig));
+        });
         test('Returns user config paths on Windows', () => {
             Object.defineProperty(process, 'platform', { value: 'win32' });
 
