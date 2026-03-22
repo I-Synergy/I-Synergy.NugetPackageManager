@@ -12,7 +12,7 @@ export class TaskExecutor {
   private progress = new Map<string, OperationProgress>();
 
   async ExecuteCommandAsync(command: string, args: string[], operationId: string): Promise<void> {
-    Logger.info(`TaskExecutor.ExecuteCommand: ${command} ${args.join(" ")}`);
+    Logger.info(`TaskExecutor.ExecuteCommandAsync: ${command} ${args.join(" ")}`);
     this.progress.set(operationId, { stage: "Starting...", percent: 5 });
 
     const releaser = await this.globalMutex.acquire();
@@ -60,14 +60,14 @@ export class TaskExecutor {
         this.progress.delete(operationId);
         releaser();
         if (code === 0) {
-          Logger.info(`TaskExecutor.ExecuteCommand: Completed successfully`);
+          Logger.info(`TaskExecutor.ExecuteCommandAsync: Completed successfully`);
           resolve();
         } else {
           const detail = stderrBuf.trim() || stdoutBuf.trim();
           const message = detail
             ? `dotnet exited with code ${code}: ${detail.split("\n").slice(-3).join(" ").trim()}`
             : `dotnet exited with code ${code}`;
-          Logger.error(`TaskExecutor.ExecuteCommand: Exited with code ${code}`);
+          Logger.error(`TaskExecutor.ExecuteCommandAsync: Exited with code ${code}`);
           reject(new Error(message));
         }
       });
@@ -75,7 +75,7 @@ export class TaskExecutor {
       child.on("error", (err) => {
         this.progress.delete(operationId);
         releaser();
-        Logger.error(`TaskExecutor.ExecuteCommand: Process error`, err);
+        Logger.error(`TaskExecutor.ExecuteCommandAsync: Process error`, err);
         reject(err);
       });
     });
