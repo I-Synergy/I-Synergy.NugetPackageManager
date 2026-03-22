@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { Task } from "@lit/task";
+import { Task, TaskStatus } from "@lit/task";
 import type { GetPackageDetailsRequest } from "@/common/rpc/types";
 import { PackageViewModel } from "../types";
 import codicon from "@/web/styles/codicon.css";
@@ -123,6 +123,15 @@ export class PackageDetailsComponent extends LitElement {
         span {
           vertical-align: middle;
         }
+      }
+
+      .error {
+        margin-top: 8px;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        color: var(--vscode-errorForeground);
+        font-size: 12px;
       }
 
       .versions-list {
@@ -268,6 +277,15 @@ export class PackageDetailsComponent extends LitElement {
   private renderDependenciesTab(): unknown {
     if (this.packageDetailsLoading) {
       return html`<span class="spinner large loader"></span>`;
+    }
+
+    if (this._detailsTask.status === TaskStatus.ERROR) {
+      return html`
+        <div class="error" role="alert">
+          <span class="codicon codicon-error"></span>
+          Failed to load package details
+        </div>
+      `;
     }
 
     const frameworks = this.packageDetails?.dependencies?.frameworks ?? {};
