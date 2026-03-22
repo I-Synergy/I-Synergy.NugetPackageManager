@@ -285,7 +285,10 @@ export function createHostAPI(): HostAPI {
         if (request.Type === "UNINSTALL") {
           await executeRemovePackage(request.PackageId, request.ProjectPath, request.OperationId);
         } else if (isCpmEnabled && cpmVersionsBefore!.has(request.PackageId)) {
-          await CpmResolver.UpdatePackageVersionAsync(request.ProjectPath, request.PackageId, request.Version ?? "");
+          if (!request.Version || !request.Version.trim()) {
+            return fail("An explicit version is required when updating a Centrally Managed (CPM) package.");
+          }
+          await CpmResolver.UpdatePackageVersionAsync(request.ProjectPath, request.PackageId, request.Version);
           if (!skipRestore) {
             await TaskExecutor.ExecuteCommandAsync("dotnet", ["restore", request.ProjectPath.replace(/\\/g, "/")], request.OperationId ?? `restore-${request.PackageId}`);
           }

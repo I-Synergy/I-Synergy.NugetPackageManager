@@ -137,7 +137,12 @@ export class ConsolidateView extends LitElement {
   async LoadInconsistentPackagesAsync(forceReload: boolean = false): Promise<void> {
     this.packages = [];
     this.statusText = "";
-    await this._loadTask.run([this.projectPaths, forceReload]);
+    try {
+      await this._loadTask.run([this.projectPaths, forceReload]);
+    } catch (err) {
+      // Avoid unhandled promise rejections; rely on TaskStatus.ERROR for rendering.
+      console.error(err);
+    }
   }
 
   private selectPackage(packageId: string): void {
