@@ -113,8 +113,8 @@ export class UpdatesView extends LitElement {
     this.statusText = "";
     try {
       await this._loadTask.run([this.projectPaths, this.sourceUrl, this.prerelease, forceReload]);
-    } catch {
-      // Avoid unhandled promise rejections; rely on TaskStatus.ERROR for rendering.
+    } catch (err) {
+      console.error(err);
     }
   }
 

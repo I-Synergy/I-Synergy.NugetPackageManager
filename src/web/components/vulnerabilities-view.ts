@@ -143,8 +143,8 @@ export class VulnerabilitiesView extends LitElement {
     this.statusText = "";
     try {
       await this._loadTask.run([this.projectPaths, forceReload]);
-    } catch {
-      // Avoid unhandled promise rejections; rely on TaskStatus.ERROR for rendering.
+    } catch (err) {
+      console.error(err);
     }
   }
 
