@@ -18,12 +18,13 @@ export type SourceWithCredentials = {
 export default class NuGetConfigResolver {
   private static readonly CONFIG_FILENAMES = ["nuget.config", "NuGet.Config", "NuGet.config"];
 
-  static async GetSourcesAndDecodePasswordsAsync(workspaceRoot?: string): Promise<SourceWithCredentials[]> {
-    Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Starting resolution (workspaceRoot: ${workspaceRoot})`);
+  static async GetSourcesAndDecodePasswordsAsync(workspaceRoots?: string | string[]): Promise<SourceWithCredentials[]> {
+    const roots = Array.isArray(workspaceRoots) ? workspaceRoots : (workspaceRoots ? [workspaceRoots] : []);
+    Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Starting resolution (workspaceRoots: ${roots.join(", ")})`);
     const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
     const sourcesMap = new Map<string, SourceWithCredentials>();
-    
-    const sourcesWithCreds = await this.GetSourcesWithCredentialsAsync(workspaceRoot);
+
+    const { sources: sourcesWithCreds, clearFound } = await this.ResolveConfigsAsync(roots);
 
     sourcesWithCreds.forEach(s => {
       const entry: SourceWithCredentials = { Name: s.Name, Url: s.Url };
@@ -34,12 +35,12 @@ export default class NuGetConfigResolver {
 
     const vscodeSourcesRaw = config.get<Array<string>>("sources") ?? [];
     const passwordScriptPaths = new Map<string, string>();
-    
+
     vscodeSourcesRaw.forEach((x) => {
       try {
-        const parsed = JSON.parse(x) as { 
-          name?: string; 
-          url?: string; 
+        const parsed = JSON.parse(x) as {
+          name?: string;
+          url?: string;
           passwordScriptPath?: string;
         };
         Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Found source from setting: ${parsed.name}`);
@@ -49,7 +50,10 @@ export default class NuGetConfigResolver {
             if (parsed.passwordScriptPath) {
               passwordScriptPaths.set(parsed.name, parsed.passwordScriptPath);
             }
-          } else if (parsed.url) {
+          } else if (parsed.url && !clearFound) {
+            // When <clear /> was found in a workspace nuget.config, respect the intent to
+            // restrict sources to only what is explicitly declared — don't add extra sources
+            // from VS Code settings (passwordScriptPath for existing sources is still honoured above).
             sourcesMap.set(parsed.name, {
               Name: parsed.name,
               Url: parsed.url,
@@ -89,24 +93,32 @@ export default class NuGetConfigResolver {
     return sources;
   }
 
-  static async GetSourcesWithCredentialsAsync(workspaceRoot?: string): Promise<SourceWithCredentials[]> {
-    Logger.debug(`NuGetConfigResolver.GetSourcesWithCredentials: Starting resolution (workspaceRoot: ${workspaceRoot})`);
+  static async GetSourcesWithCredentialsAsync(workspaceRoots?: string | string[]): Promise<SourceWithCredentials[]> {
+    const roots = Array.isArray(workspaceRoots) ? workspaceRoots : (workspaceRoots ? [workspaceRoots] : []);
+    const { sources } = await this.ResolveConfigsAsync(roots);
+    return sources;
+  }
+
+  private static async ResolveConfigsAsync(workspaceRoots: string[]): Promise<{ sources: SourceWithCredentials[]; clearFound: boolean }> {
+    Logger.debug(`NuGetConfigResolver.ResolveConfigs: Starting resolution (workspaceRoots: ${workspaceRoots.join(", ")})`);
     const sources = new Map<string, SourceWithCredentials>();
     const disabledSources = new Set<string>();
     const credentials = new Map<string, { Username?: string; Password?: string }>();
+    let clearFound = false;
 
-    const configPaths = this.FindAllConfigFiles(workspaceRoot);
-    Logger.debug(`NuGetConfigResolver.GetSourcesWithCredentials: Found config files: ${configPaths.join(", ")}`);
+    const configPaths = this.FindAllConfigFiles(workspaceRoots);
+    Logger.debug(`NuGetConfigResolver.ResolveConfigs: Found config files: ${configPaths.join(", ")}`);
 
     for (const configPath of configPaths) {
       try {
-        Logger.debug(`NuGetConfigResolver.GetSourcesWithCredentials: Parsing ${configPath}`);
+        Logger.debug(`NuGetConfigResolver.ResolveConfigs: Parsing ${configPath}`);
         const result = await this.ParseConfigFileAsync(configPath);
-        
+
         if (result.clear) {
-          Logger.debug(`NuGetConfigResolver.GetSourcesWithCredentials: 'clear' found in ${configPath}, clearing sources`);
+          Logger.debug(`NuGetConfigResolver.ResolveConfigs: '<clear />' found in ${configPath}, clearing sources`);
           sources.clear();
           disabledSources.clear();
+          clearFound = true;
         }
 
         result.sources.forEach(source => {
@@ -120,8 +132,14 @@ export default class NuGetConfigResolver {
         result.disabledSources.forEach(name => {
           disabledSources.add(name);
         });
+
+        if (result.clear) {
+          // Stop processing further configs — <clear /> means "only use what I explicitly declare".
+          // Sibling workspace configs from other projects must not bleed through.
+          break;
+        }
       } catch (error) {
-        Logger.error(`NuGetConfigResolver.GetSourcesWithCredentials: Failed to parse ${configPath}`, error);
+        Logger.error(`NuGetConfigResolver.ResolveConfigs: Failed to parse ${configPath}`, error);
       }
     }
 
@@ -136,49 +154,29 @@ export default class NuGetConfigResolver {
     const enabledSources = Array.from(sources.values()).filter(
       source => !disabledSources.has(source.Name)
     );
-    
-    return enabledSources;
+
+    return { sources: enabledSources, clearFound };
   }
 
-  private static FindAllConfigFiles(workspaceRoot?: string): string[] {
+  private static FindAllConfigFiles(workspaceRoots: string[]): string[] {
+    // Process order: lowest priority first (machine → user → each workspace folder in order).
+    // A <clear /> stops processing — sibling workspace configs after it are never reached.
     const configPaths: string[] = [];
 
-    // 1. Workspace config (highest priority)
-    if (workspaceRoot) {
-      for (const filename of this.CONFIG_FILENAMES) {
-        const workspaceConfig = path.join(workspaceRoot, filename);
-        if (fs.existsSync(workspaceConfig)) {
-          configPaths.unshift(workspaceConfig);
-          break;
-        }
-      }
-
-      for (const filename of this.CONFIG_FILENAMES) {
-        const nugetFolderConfig = path.join(workspaceRoot, ".nuget", filename);
-        if (fs.existsSync(nugetFolderConfig)) {
-          configPaths.unshift(nugetFolderConfig);
-          break;
+    // 1. Machine config (Windows only, lowest priority)
+    if (process.platform === "win32") {
+      const programFiles = process.env["ProgramFiles(x86)"] || process.env["ProgramFiles"];
+      if (programFiles) {
+        const machineConfigPath = path.join(programFiles, "NuGet", "Config", "Microsoft.VisualStudio.Offline.config");
+        if (fs.existsSync(machineConfigPath)) {
+          configPaths.push(machineConfigPath);
         }
       }
     }
 
     // 2. User config
     const userProfile = os.homedir();
-    
-    // On Windows, check %APPDATA%\NuGet\NuGet.Config first (Windows 11 standard location)
-    if (process.platform === "win32" && process.env.APPDATA) {
-      const appDataConfigPath = path.join(process.env.APPDATA, "NuGet", "NuGet.Config");
-      if (fs.existsSync(appDataConfigPath)) {
-        configPaths.push(appDataConfigPath);
-      }
-    }
-    
-    // Fallback to ~/.nuget/NuGet/NuGet.Config (older Windows or Unix systems)
-    const userConfigPath = path.join(userProfile, ".nuget", "NuGet", "NuGet.Config");
-    if (fs.existsSync(userConfigPath)) {
-      configPaths.push(userConfigPath);
-    }
-    
+
     // On macOS/Linux, also check ~/.config/NuGet/NuGet.Config
     if (process.platform !== "win32") {
       const configDirPath = path.join(userProfile, ".config", "NuGet", "NuGet.Config");
@@ -187,13 +185,37 @@ export default class NuGetConfigResolver {
       }
     }
 
-    // 3. Machine config (Windows only, lowest priority)
-    if (process.platform === "win32") {
-      const programFiles = process.env["ProgramFiles(x86)"] || process.env["ProgramFiles"];
-      if (programFiles) {
-        const machineConfigPath = path.join(programFiles, "NuGet", "Config", "Microsoft.VisualStudio.Offline.config");
-        if (fs.existsSync(machineConfigPath)) {
-          configPaths.push(machineConfigPath);
+    // Fallback to ~/.nuget/NuGet/NuGet.Config (older Windows or Unix systems)
+    const userConfigPath = path.join(userProfile, ".nuget", "NuGet", "NuGet.Config");
+    if (fs.existsSync(userConfigPath)) {
+      configPaths.push(userConfigPath);
+    }
+
+    // On Windows, check %APPDATA%\NuGet\NuGet.Config (Windows 11 standard location)
+    if (process.platform === "win32" && process.env.APPDATA) {
+      const appDataConfigPath = path.join(process.env.APPDATA, "NuGet", "NuGet.Config");
+      if (fs.existsSync(appDataConfigPath)) {
+        configPaths.push(appDataConfigPath);
+      }
+    }
+
+    // 3. Each workspace folder (highest priority — processed last so <clear /> wins).
+    // All workspace folders are included so that in a multi-root workspace the folder
+    // whose nuget.config contains <clear /> correctly stops further processing.
+    for (const workspaceRoot of workspaceRoots) {
+      for (const filename of this.CONFIG_FILENAMES) {
+        const nugetFolderConfig = path.join(workspaceRoot, ".nuget", filename);
+        if (fs.existsSync(nugetFolderConfig)) {
+          configPaths.push(nugetFolderConfig);
+          break;
+        }
+      }
+
+      for (const filename of this.CONFIG_FILENAMES) {
+        const workspaceConfig = path.join(workspaceRoot, filename);
+        if (fs.existsSync(workspaceConfig)) {
+          configPaths.push(workspaceConfig);
+          break;
         }
       }
     }
