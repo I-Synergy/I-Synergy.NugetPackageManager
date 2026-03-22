@@ -12,10 +12,10 @@ export class RpcHost {
   constructor(webview: Webview, api: HostAPI) {
     this.webview = webview;
     this.api = api;
-    this.webview.onDidReceiveMessage((msg) => this.handleMessage(msg));
+    this.webview.onDidReceiveMessage((msg) => this.handleMessageAsync(msg));
   }
 
-  private async handleMessage(msg: unknown): Promise<void> {
+  private async handleMessageAsync(msg: unknown): Promise<void> {
     if (this.isRpcCancel(msg)) {
       this.inFlight.get(msg.id)?.abort();
       this.inFlight.delete(msg.id);

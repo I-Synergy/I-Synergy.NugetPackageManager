@@ -89,6 +89,11 @@ export type BatchUpdateRequest = {
     Version: string;
     ProjectPaths: string[];
   }>;
+  SkipRestore?: boolean;
+};
+
+export type RestoreProjectsRequest = {
+  ProjectPaths: string[];
 };
 
 export type ConsolidateRequest = {
@@ -198,22 +203,23 @@ export type RpcMessage = RpcRequest | RpcResponse | RpcCancel;
 // ============================================================
 
 export interface HostAPI {
-  getProjects(req: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>>;
-  getPackages(req: GetPackagesRequest, signal?: AbortSignal): Promise<Result<GetPackagesResponse>>;
-  getPackage(req: GetPackageRequest, signal?: AbortSignal): Promise<Result<GetPackageResponse>>;
-  getPackageDetails(req: GetPackageDetailsRequest, signal?: AbortSignal): Promise<Result<GetPackageDetailsResponse>>;
-  updateProject(req: UpdateProjectRequest): Promise<Result<UpdateProjectResponse>>;
-  getConfiguration(): Promise<Result<GetConfigurationResponse>>;
-  updateConfiguration(req: UpdateConfigurationRequest): Promise<Result<void>>;
-  openUrl(req: OpenUrlRequest): Promise<Result<void>>;
-  updateStatusBar(req: UpdateStatusBarRequest): Promise<Result<void>>;
-  getOutdatedPackages(req: GetOutdatedPackagesRequest, signal?: AbortSignal): Promise<Result<GetOutdatedPackagesResponse>>;
-  batchUpdatePackages(req: BatchUpdateRequest): Promise<Result<BatchUpdateResponse>>;
-  getInconsistentPackages(req: GetInconsistentPackagesRequest, signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>>;
-  consolidatePackages(req: ConsolidateRequest): Promise<Result<void>>;
-  getVulnerablePackages(req: GetVulnerablePackagesRequest, signal?: AbortSignal): Promise<Result<GetVulnerablePackagesResponse>>;
-  showConfirmation(req: ShowConfirmationRequest): Promise<Result<ShowConfirmationResponse>>;
-  getOperationProgress(req: GetOperationProgressRequest): Promise<Result<GetOperationProgressResponse>>;
+  getProjectsAsync(req: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>>;
+  getPackagesAsync(req: GetPackagesRequest, signal?: AbortSignal): Promise<Result<GetPackagesResponse>>;
+  getPackageAsync(req: GetPackageRequest, signal?: AbortSignal): Promise<Result<GetPackageResponse>>;
+  getPackageDetailsAsync(req: GetPackageDetailsRequest, signal?: AbortSignal): Promise<Result<GetPackageDetailsResponse>>;
+  updateProjectAsync(req: UpdateProjectRequest): Promise<Result<UpdateProjectResponse>>;
+  getConfigurationAsync(): Promise<Result<GetConfigurationResponse>>;
+  updateConfigurationAsync(req: UpdateConfigurationRequest): Promise<Result<void>>;
+  openUrlAsync(req: OpenUrlRequest): Promise<Result<void>>;
+  updateStatusBarAsync(req: UpdateStatusBarRequest): Promise<Result<void>>;
+  getOutdatedPackagesAsync(req: GetOutdatedPackagesRequest, signal?: AbortSignal): Promise<Result<GetOutdatedPackagesResponse>>;
+  batchUpdatePackagesAsync(req: BatchUpdateRequest): Promise<Result<BatchUpdateResponse>>;
+  restoreProjectsAsync(req: RestoreProjectsRequest): Promise<Result<void>>;
+  getInconsistentPackagesAsync(req: GetInconsistentPackagesRequest, signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>>;
+  consolidatePackagesAsync(req: ConsolidateRequest): Promise<Result<void>>;
+  getVulnerablePackagesAsync(req: GetVulnerablePackagesRequest, signal?: AbortSignal): Promise<Result<GetVulnerablePackagesResponse>>;
+  showConfirmationAsync(req: ShowConfirmationRequest): Promise<Result<ShowConfirmationResponse>>;
+  getOperationProgressAsync(req: GetOperationProgressRequest): Promise<Result<GetOperationProgressResponse>>;
 }
 
 // ============================================================

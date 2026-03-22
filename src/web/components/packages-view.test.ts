@@ -48,10 +48,10 @@ suite('PackagesView Component', () => {
 
         // Create mock hostApi
         mockHostApi = {
-            getPackages: sandbox.stub().resolves(ok({ Packages: [] })),
-            getProjects: sandbox.stub().resolves(ok({ Projects: [] })),
-            getPackage: sandbox.stub().resolves(ok({ Package: createMockPackage(), SourceUrl: '' })),
-            updateStatusBar: sandbox.stub().resolves(ok(undefined)),
+            getPackagesAsync: sandbox.stub().resolves(ok({ Packages: [] })),
+            getProjectsAsync: sandbox.stub().resolves(ok({ Projects: [] })),
+            getPackageAsync: sandbox.stub().resolves(ok({ Package: createMockPackage(), SourceUrl: '' })),
+            updateStatusBarAsync: sandbox.stub().resolves(ok(undefined)),
         };
 
         // Inject mock hostApi into the registrations module
@@ -108,7 +108,7 @@ suite('PackagesView Component', () => {
 
     suite('LoadPackages', () => {
         test('should call mediator with correct parameters', async () => {
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: [] }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: [] }));
 
             packagesView.filters = {
                 Prerelease: true,
@@ -117,10 +117,10 @@ suite('PackagesView Component', () => {
                 Sort: 'relevance',
             };
 
-            await packagesView.LoadPackages();
+            await packagesView.LoadPackagesAsync();
 
-            assert.ok((mockHostApi.getPackages as sinon.SinonStub).calledOnce);
-            const callArgs = (mockHostApi.getPackages as sinon.SinonStub).firstCall.args[0];
+            assert.ok((mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).calledOnce);
+            const callArgs = (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).firstCall.args[0];
             assert.strictEqual(callArgs.Filter, 'test-query');
             assert.strictEqual(callArgs.Prerelease, true);
             assert.strictEqual(callArgs.Url, 'https://api.nuget.org/v3/index.json');
@@ -134,9 +134,9 @@ suite('PackagesView Component', () => {
                 createMockPackage({ Id: 'Package2', Name: 'Package2' })
             ];
 
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: mockPackages }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: mockPackages }));
 
-            await packagesView.LoadPackages();
+            await packagesView.LoadPackagesAsync();
 
             assert.strictEqual(packagesView.packages.length, 2);
             assert.strictEqual(packagesView.packages[0]!.Id, 'Package1');
@@ -146,17 +146,17 @@ suite('PackagesView Component', () => {
         test('should set noMorePackages when fewer packages returned than requested', async () => {
             const mockPackages = [createMockPackage()]; // Only 1 package, less than 50
 
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: mockPackages }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: mockPackages }));
 
-            await packagesView.LoadPackages();
+            await packagesView.LoadPackagesAsync();
 
             assert.strictEqual(packagesView.noMorePackages, true);
         });
 
         test('should set packagesLoadingError on failure', async () => {
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(fail('Network error'));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(fail('Network error'));
 
-            await packagesView.LoadPackages();
+            await packagesView.LoadPackagesAsync();
 
             assert.strictEqual(packagesView.packagesLoadingError, true);
         });
@@ -168,11 +168,11 @@ suite('PackagesView Component', () => {
             ];
             packagesView.packagesPage = 1;
 
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(
                 ok({ Packages: [createMockPackage({ Id: 'NewPackage' })] })
             );
 
-            await packagesView.LoadPackages(true);
+            await packagesView.LoadPackagesAsync(true);
 
             assert.strictEqual(packagesView.packages.length, 2);
             assert.strictEqual(packagesView.packages[0]!.Id, 'Existing');
@@ -184,34 +184,34 @@ suite('PackagesView Component', () => {
                 new PackageViewModel(createMockPackage({ Id: 'OldPackage' }))
             ];
 
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(
                 ok({ Packages: [createMockPackage({ Id: 'NewPackage' })] })
             );
 
-            await packagesView.LoadPackages(false);
+            await packagesView.LoadPackagesAsync(false);
 
             assert.strictEqual(packagesView.packages.length, 1);
             assert.strictEqual(packagesView.packages[0]!.Id, 'NewPackage');
         });
 
         test('should pass ForceReload flag to mediator', async () => {
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: [] }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: [] }));
 
-            await packagesView.LoadPackages(false, true);
+            await packagesView.LoadPackagesAsync(false, true);
 
-            const callArgs = (mockHostApi.getPackages as sinon.SinonStub).firstCall.args[0];
+            const callArgs = (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).firstCall.args[0];
             assert.strictEqual(callArgs.ForceReload, true);
         });
     });
 
     suite('LoadProjects', () => {
         test('should call mediator with correct parameters', async () => {
-            (mockHostApi.getProjects as sinon.SinonStub).resolves(ok({ Projects: [] }));
+            (mockHostApi.getProjectsAsync as sinon.SinonStub).resolves(ok({ Projects: [] }));
 
-            await packagesView.LoadProjects();
+            await packagesView.LoadProjectsAsync();
 
-            assert.ok((mockHostApi.getProjects as sinon.SinonStub).called);
-            const callArgs = (mockHostApi.getProjects as sinon.SinonStub).firstCall.args[0];
+            assert.ok((mockHostApi.getProjectsAsync as sinon.SinonStub).called);
+            const callArgs = (mockHostApi.getProjectsAsync as sinon.SinonStub).firstCall.args[0];
             assert.strictEqual(callArgs.ForceReload, false);
         });
 
@@ -221,9 +221,9 @@ suite('PackagesView Component', () => {
                 createMockProject('Project2', [{ Id: 'Pkg2', Version: '2.0.0' }])
             ];
 
-            (mockHostApi.getProjects as sinon.SinonStub).resolves(ok({ Projects: mockProjects }));
+            (mockHostApi.getProjectsAsync as sinon.SinonStub).resolves(ok({ Projects: mockProjects }));
 
-            await packagesView.LoadProjects();
+            await packagesView.LoadProjectsAsync();
 
             assert.strictEqual(packagesView.projects.length, 2);
             assert.strictEqual(packagesView.projects[0]!.Name, 'Project1');
@@ -231,11 +231,11 @@ suite('PackagesView Component', () => {
         });
 
         test('should pass ForceReload flag', async () => {
-            (mockHostApi.getProjects as sinon.SinonStub).resolves(ok({ Projects: [] }));
+            (mockHostApi.getProjectsAsync as sinon.SinonStub).resolves(ok({ Projects: [] }));
 
-            await packagesView.LoadProjects(true);
+            await packagesView.LoadProjectsAsync(true);
 
-            const callArgs = (mockHostApi.getProjects as sinon.SinonStub).firstCall.args[0];
+            const callArgs = (mockHostApi.getProjectsAsync as sinon.SinonStub).firstCall.args[0];
             assert.strictEqual(callArgs.ForceReload, true);
         });
     });
@@ -245,7 +245,7 @@ suite('PackagesView Component', () => {
             const pkg = new PackageViewModel(createMockPackage({ Id: 'Selected' }));
             packagesView.packages = [pkg];
 
-            await packagesView.SelectPackage(pkg);
+            await packagesView.SelectPackageAsync(pkg);
 
             assert.strictEqual(packagesView.selectedPackage, pkg);
         });
@@ -253,7 +253,7 @@ suite('PackagesView Component', () => {
         test('should set package as selected', async () => {
             const pkg = new PackageViewModel(createMockPackage());
 
-            await packagesView.SelectPackage(pkg);
+            await packagesView.SelectPackageAsync(pkg);
 
             assert.strictEqual(pkg.Selected, true);
         });
@@ -264,7 +264,7 @@ suite('PackagesView Component', () => {
             pkg1.Selected = true;
             packagesView.packages = [pkg1, pkg2];
 
-            await packagesView.SelectPackage(pkg2);
+            await packagesView.SelectPackageAsync(pkg2);
 
             assert.strictEqual(pkg1.Selected, false);
             assert.strictEqual(pkg2.Selected, true);
@@ -273,7 +273,7 @@ suite('PackagesView Component', () => {
         test('should set selectedVersion from package Version', async () => {
             const pkg = new PackageViewModel(createMockPackage({ Version: '2.0.0' }));
 
-            await packagesView.SelectPackage(pkg);
+            await packagesView.SelectPackageAsync(pkg);
 
             assert.strictEqual(packagesView.selectedVersion, '2.0.0');
         });
@@ -281,25 +281,25 @@ suite('PackagesView Component', () => {
         test('should fetch package details if status is MissingDetails', async () => {
             const pkg = new PackageViewModel(createMockPackage(), 'MissingDetails');
 
-            (mockHostApi.getPackage as sinon.SinonStub).resolves(
+            (mockHostApi.getPackageAsync as sinon.SinonStub).resolves(
                 ok({
                     Package: createMockPackage({ Version: '1.5.0' }),
                     SourceUrl: 'https://api.nuget.org'
                 })
             );
 
-            await packagesView.SelectPackage(pkg);
+            await packagesView.SelectPackageAsync(pkg);
 
-            assert.ok((mockHostApi.getPackage as sinon.SinonStub).calledOnce);
+            assert.ok((mockHostApi.getPackageAsync as sinon.SinonStub).calledOnce);
             assert.strictEqual(pkg.Status, 'Detailed');
         });
 
         test('should set status to Error if package fetch fails', async () => {
             const pkg = new PackageViewModel(createMockPackage(), 'MissingDetails');
 
-            (mockHostApi.getPackage as sinon.SinonStub).resolves(fail('Not found'));
+            (mockHostApi.getPackageAsync as sinon.SinonStub).resolves(fail('Not found'));
 
-            await packagesView.SelectPackage(pkg);
+            await packagesView.SelectPackageAsync(pkg);
 
             assert.strictEqual(pkg.Status, 'Error');
         });
@@ -307,7 +307,7 @@ suite('PackagesView Component', () => {
 
     suite('UpdatePackagesFilters', () => {
         test('should update filters', async () => {
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: [] }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: [] }));
 
             const newFilters = {
                 Prerelease: false,
@@ -316,7 +316,7 @@ suite('PackagesView Component', () => {
                 Sort: 'relevance' as const,
             };
 
-            await packagesView.UpdatePackagesFilters(newFilters);
+            await packagesView.UpdatePackagesFiltersAsync(newFilters);
 
             assert.strictEqual(packagesView.filters.Prerelease, false);
             assert.strictEqual(packagesView.filters.Query, 'newtonsoft');
@@ -324,16 +324,16 @@ suite('PackagesView Component', () => {
         });
 
         test('should reload packages with new filters', async () => {
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: [] }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: [] }));
 
-            await packagesView.UpdatePackagesFilters({
+            await packagesView.UpdatePackagesFiltersAsync({
                 Prerelease: false,
                 Query: 'test',
                 SourceUrl: '',
                 Sort: 'relevance',
             });
 
-            assert.ok((mockHostApi.getPackages as sinon.SinonStub).called);
+            assert.ok((mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).called);
         });
 
         test('should NOT force-reload getPackages when only Prerelease changes', async () => {
@@ -343,41 +343,41 @@ suite('PackagesView Component', () => {
             // caused ~15 s delays. Only source changes warrant a factory cache clear.
             packagesView.filters.Prerelease = true;
 
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: [] }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: [] }));
 
-            await packagesView.UpdatePackagesFilters({
+            await packagesView.UpdatePackagesFiltersAsync({
                 Prerelease: false, // Changed from true
                 Query: '',
                 SourceUrl: '',
                 Sort: 'relevance',
             });
 
-            const callArgs = (mockHostApi.getPackages as sinon.SinonStub).firstCall.args[0];
+            const callArgs = (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).firstCall.args[0];
             assert.strictEqual(callArgs.ForceReload, false);
         });
     });
 
     suite('ReloadInvoked', () => {
         test('should reload packages and projects', async () => {
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: [] }));
-            (mockHostApi.getProjects as sinon.SinonStub).resolves(ok({ Projects: [] }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: [] }));
+            (mockHostApi.getProjectsAsync as sinon.SinonStub).resolves(ok({ Projects: [] }));
 
-            await packagesView.ReloadInvoked();
+            await packagesView.ReloadInvokedAsync();
 
-            assert.ok((mockHostApi.getPackages as sinon.SinonStub).called);
-            assert.ok((mockHostApi.getProjects as sinon.SinonStub).called);
+            assert.ok((mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).called);
+            assert.ok((mockHostApi.getProjectsAsync as sinon.SinonStub).called);
         });
 
         test('should pass forceReload flag', async () => {
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: [] }));
-            (mockHostApi.getProjects as sinon.SinonStub).resolves(ok({ Projects: [] }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: [] }));
+            (mockHostApi.getProjectsAsync as sinon.SinonStub).resolves(ok({ Projects: [] }));
 
-            await packagesView.ReloadInvoked(true);
+            await packagesView.ReloadInvokedAsync(true);
 
-            const getPackagesArgs = (mockHostApi.getPackages as sinon.SinonStub).firstCall.args[0];
+            const getPackagesArgs = (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).firstCall.args[0];
             assert.strictEqual(getPackagesArgs.ForceReload, true);
 
-            const getProjectsArgs = (mockHostApi.getProjects as sinon.SinonStub).firstCall.args[0];
+            const getProjectsArgs = (mockHostApi.getProjectsAsync as sinon.SinonStub).firstCall.args[0];
             assert.strictEqual(getProjectsArgs.ForceReload, true);
         });
     });
@@ -392,9 +392,9 @@ suite('PackagesView Component', () => {
                 scrollHeight: 1200
             } as HTMLElement;
 
-            await packagesView.PackagesScrollEvent(mockTarget);
+            await packagesView.PackagesScrollEventAsync(mockTarget);
 
-            assert.ok((mockHostApi.getPackages as sinon.SinonStub).notCalled);
+            assert.ok((mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).notCalled);
         });
 
         test('should not load more if noMorePackages is true', async () => {
@@ -406,16 +406,16 @@ suite('PackagesView Component', () => {
                 scrollHeight: 1200
             } as HTMLElement;
 
-            await packagesView.PackagesScrollEvent(mockTarget);
+            await packagesView.PackagesScrollEventAsync(mockTarget);
 
-            assert.ok((mockHostApi.getPackages as sinon.SinonStub).notCalled);
+            assert.ok((mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).notCalled);
         });
 
         test('should load more when scrolled near bottom', async () => {
             packagesView.packagesLoadingInProgress = false;
             packagesView.noMorePackages = false;
 
-            (mockHostApi.getPackages as sinon.SinonStub).resolves(ok({ Packages: [] }));
+            (mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).resolves(ok({ Packages: [] }));
 
             // Simulate scrolled near bottom
             const mockTarget = {
@@ -424,23 +424,23 @@ suite('PackagesView Component', () => {
                 scrollHeight: 1200 // 900 + 500 = 1400 > 1200 - 196 = 1004
             } as HTMLElement;
 
-            await packagesView.PackagesScrollEvent(mockTarget);
+            await packagesView.PackagesScrollEventAsync(mockTarget);
 
-            assert.ok((mockHostApi.getPackages as sinon.SinonStub).called);
+            assert.ok((mockHostApi.getPackageAsyncsAsync as sinon.SinonStub).called);
         });
     });
 
     suite('OnProjectUpdated', () => {
         test('should reload all projects when CPM is enabled', async () => {
-            (mockHostApi.getProjects as sinon.SinonStub).resolves(ok({ Projects: [] }));
+            (mockHostApi.getProjectsAsync as sinon.SinonStub).resolves(ok({ Projects: [] }));
 
             const event = new CustomEvent('project-updated', {
                 detail: { isCpmEnabled: true }
             });
 
-            await packagesView.OnProjectUpdated(event);
+            await packagesView.OnProjectUpdatedAsync(event);
 
-            assert.ok((mockHostApi.getProjects as sinon.SinonStub).called);
+            assert.ok((mockHostApi.getProjectsAsync as sinon.SinonStub).called);
         });
 
         test('should only refresh packages when CPM is not enabled', async () => {
@@ -451,7 +451,7 @@ suite('PackagesView Component', () => {
                 ]))
             ];
 
-            (mockHostApi.getPackage as sinon.SinonStub).resolves(
+            (mockHostApi.getPackageAsync as sinon.SinonStub).resolves(
                 ok({ Package: createMockPackage(), SourceUrl: '' })
             );
 
@@ -459,10 +459,10 @@ suite('PackagesView Component', () => {
                 detail: { isCpmEnabled: false }
             });
 
-            await packagesView.OnProjectUpdated(event);
+            await packagesView.OnProjectUpdatedAsync(event);
 
             // Should call getPackage for installed packages, not getProjects
-            assert.ok((mockHostApi.getProjects as sinon.SinonStub).notCalled);
+            assert.ok((mockHostApi.getProjectsAsync as sinon.SinonStub).notCalled);
         });
     });
 
@@ -569,11 +569,11 @@ suite('PackagesView Component', () => {
                 ]))
             ];
 
-            (mockHostApi.getPackage as sinon.SinonStub).resolves(
+            (mockHostApi.getPackageAsync as sinon.SinonStub).resolves(
                 ok({ Package: createMockPackage(), SourceUrl: 'https://api.nuget.org' })
             );
 
-            await packagesView.LoadProjectsPackages();
+            await packagesView.LoadProjectsPackagesAsync();
 
             // Should have 3 unique packages: Pkg1, Pkg2, Pkg3
             assert.strictEqual(packagesView.projectsPackages.length, 3);
@@ -589,14 +589,14 @@ suite('PackagesView Component', () => {
             packagesView.filters.Query = 'newtonsoft';
 
             // Mock returns matching package
-            (mockHostApi.getPackage as sinon.SinonStub).resolves(
+            (mockHostApi.getPackageAsync as sinon.SinonStub).resolves(
                 ok({
                     Package: createMockPackage({ Id: 'Newtonsoft.Json', Name: 'Newtonsoft.Json' }),
                     SourceUrl: ''
                 })
             );
 
-            await packagesView.LoadProjectsPackages();
+            await packagesView.LoadProjectsPackagesAsync();
 
             // Should only have 1 package matching the query filter
             assert.strictEqual(packagesView.projectsPackages.length, 1);
@@ -614,14 +614,14 @@ suite('PackagesView Component', () => {
             ];
 
             // Mock returns matching package ID so the find() works
-            (mockHostApi.getPackage as sinon.SinonStub).resolves(
+            (mockHostApi.getPackageAsync as sinon.SinonStub).resolves(
                 ok({
                     Package: createMockPackage({ Id: 'Pkg1', Name: 'Pkg1' }),
                     SourceUrl: ''
                 })
             );
 
-            await packagesView.LoadProjectsPackages();
+            await packagesView.LoadProjectsPackagesAsync();
 
             const pkg1 = packagesView.projectsPackages.find(p => p.Id === 'Pkg1');
             assert.ok(pkg1, 'Package Pkg1 should exist');
@@ -635,13 +635,13 @@ suite('PackagesView Component', () => {
                 ]))
             ];
 
-            (mockHostApi.getPackage as sinon.SinonStub).resolves(
+            (mockHostApi.getPackageAsync as sinon.SinonStub).resolves(
                 ok({ Package: createMockPackage(), SourceUrl: '' })
             );
 
-            await packagesView.LoadProjectsPackages();
+            await packagesView.LoadProjectsPackagesAsync();
 
-            const statusBarStub = mockHostApi.updateStatusBar as sinon.SinonStub;
+            const statusBarStub = mockHostApi.updateStatusBarAsync as sinon.SinonStub;
             const statusBarCalls = statusBarStub.getCalls();
 
             // Should have calls for: start (0%), progress, and hide (null)

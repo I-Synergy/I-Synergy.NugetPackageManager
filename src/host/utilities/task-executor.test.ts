@@ -32,7 +32,7 @@ suite('TaskExecutor Tests', () => {
     test('ExecuteCommand rejects when dotnet is not found', async () => {
         const executor = new TaskExecutor();
         await assert.rejects(
-            () => executor.ExecuteCommand('dotnet-does-not-exist-xyz', [], 'op1'),
+            () => executor.ExecuteCommandAsync('dotnet-does-not-exist-xyz', [], 'op1'),
             (err: Error) => err instanceof Error
         );
         // Progress is cleaned up after rejection

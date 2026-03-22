@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { Task, TaskStatus } from "@lit/task";
 
 import codicon from "@/web/styles/codicon.css";
 import type { DropdownOption } from "./dropdown";
@@ -105,68 +106,38 @@ export class ConsolidateView extends LitElement {
   ];
 
   @state() packages: InconsistentPackageViewModel[] = [];
-  @state() isLoading: boolean = false;
   @state() isConsolidating: boolean = false;
-  @state() hasError: boolean = false;
   @state() statusText: string = "";
   @property({ attribute: false }) projectPaths: string[] = [];
 
-  private loaded = false;
-  private _loadAc: AbortController | null = null;
-
-  override connectedCallback(): void {
-    super.connectedCallback();
-    if (!this.loaded) {
-      this.loaded = true;
-      this.LoadInconsistentPackages();
-    }
-  }
-
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
-    this._loadAc?.abort();
-  }
-
-  async LoadInconsistentPackages(forceReload: boolean = false): Promise<void> {
-    this._loadAc?.abort();
-    const ac = new AbortController();
-    this._loadAc = ac;
-
-    this.isLoading = true;
-    this.hasError = false;
-    this.packages = [];
-
-    try {
-      const req: Parameters<typeof hostApi.getInconsistentPackages>[0] = {};
-      if (this.projectPaths.length > 0) req.ProjectPaths = this.projectPaths;
+  private _loadTask = new Task(this, {
+    task: async ([projectPaths, forceReload], { signal }) => {
+      const req: Parameters<typeof hostApi.getInconsistentPackagesAsync>[0] = {};
+      if (projectPaths.length > 0) req.ProjectPaths = projectPaths;
       if (forceReload) req.ForceReload = true;
-      const result = await hostApi.getInconsistentPackages(req, ac.signal);
+      const result = await hostApi.getInconsistentPackagesAsync(req, signal);
+      if (!result.ok) throw new Error("Failed to check for inconsistencies");
+      return (result.value.Packages ?? []).map((p) => new InconsistentPackageViewModel(p));
+    },
+    args: () => [this.projectPaths, false] as const,
+    onComplete: (packages) => {
+      this.packages = packages;
+      this.statusText =
+        packages.length > 0
+          ? `${packages.length} package${packages.length !== 1 ? "s" : ""} with inconsistent versions`
+          : "";
+      this.dispatchEvent(new CustomEvent<number>("count-changed", {
+        detail: packages.length,
+        bubbles: true,
+        composed: true,
+      }));
+    },
+  });
 
-      if (ac.signal.aborted) return;
-
-      if (!result.ok) {
-        this.hasError = true;
-        this.statusText = "Failed to check";
-      } else {
-        this.packages = (result.value.Packages ?? []).map(
-          (p) => new InconsistentPackageViewModel(p)
-        );
-        this.dispatchEvent(new CustomEvent<number>("count-changed", {
-          detail: this.packages.length,
-          bubbles: true,
-          composed: true,
-        }));
-        this.statusText =
-          this.packages.length > 0
-            ? `${this.packages.length} package${this.packages.length !== 1 ? "s" : ""} with inconsistent versions`
-            : "";
-      }
-    } catch {
-      if (ac.signal.aborted) return;
-      this.hasError = true;
-    } finally {
-      if (!ac.signal.aborted) this.isLoading = false;
-    }
+  async LoadInconsistentPackagesAsync(forceReload: boolean = false): Promise<void> {
+    this.packages = [];
+    this.statusText = "";
+    await this._loadTask.run([this.projectPaths, forceReload]);
   }
 
   private selectPackage(packageId: string): void {
@@ -177,13 +148,13 @@ export class ConsolidateView extends LitElement {
     }));
   }
 
-  private async consolidateSingle(pkg: InconsistentPackageViewModel): Promise<void> {
+  private async consolidateSingleAsync(pkg: InconsistentPackageViewModel): Promise<void> {
     pkg.IsConsolidating = true;
     this.requestUpdate();
     try {
       const allProjects = pkg.Versions.flatMap((v) => v.Projects.map((p) => p.Path));
 
-      await hostApi.consolidatePackages({
+      await hostApi.consolidatePackagesAsync({
         PackageId: pkg.Id,
         TargetVersion: pkg.TargetVersion,
         ProjectPaths: allProjects,
@@ -205,8 +176,8 @@ export class ConsolidateView extends LitElement {
     }
   }
 
-  private async consolidateAll(): Promise<void> {
-    const confirm = await hostApi.showConfirmation({
+  private async consolidateAllAsync(): Promise<void> {
+    const confirm = await hostApi.showConfirmationAsync({
       Message: `Consolidate ${this.packages.length} package${this.packages.length !== 1 ? "s" : ""}?`,
       Detail: "This will update all inconsistent packages to their target versions.",
     });
@@ -214,15 +185,14 @@ export class ConsolidateView extends LitElement {
 
     this.isConsolidating = true;
     try {
-      const results = await Promise.allSettled(this.packages.map((pkg) => this.consolidateSingle(pkg)));
+      const results = await Promise.allSettled(this.packages.map((pkg) => this.consolidateSingleAsync(pkg)));
       const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
       if (failed.length > 0) {
-        this.hasError = true;
         this.statusText = `${failed.length} package${failed.length !== 1 ? "s" : ""} failed to consolidate`;
       }
     } finally {
       this.isConsolidating = false;
-      await this.LoadInconsistentPackages();
+      await this.LoadInconsistentPackagesAsync();
     }
   }
 
@@ -246,7 +216,7 @@ export class ConsolidateView extends LitElement {
                       this.requestUpdate();
                     }}
                   ></custom-dropdown>
-                  <button class="icon-btn" aria-label="Consolidate ${pkg.Id}" title="Consolidate ${pkg.Id}" @click=${() => this.consolidateSingle(pkg)}>
+                  <button class="icon-btn" aria-label="Consolidate ${pkg.Id}" title="Consolidate ${pkg.Id}" @click=${async () => await this.consolidateSingleAsync(pkg)}>
                     <span class="codicon codicon-arrow-circle-up"></span>
                   </button>
                 `}
@@ -267,8 +237,11 @@ export class ConsolidateView extends LitElement {
   }
 
   override render(): unknown {
+    const isLoading = this._loadTask.status === TaskStatus.PENDING;
+    const hasError = this._loadTask.status === TaskStatus.ERROR;
+
     return html`
-      <div class="consolidate-container" aria-busy=${this.isLoading}>
+      <div class="consolidate-container" aria-busy=${isLoading}>
         <div class="toolbar">
           <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
           <div class="toolbar-right">
@@ -277,7 +250,7 @@ export class ConsolidateView extends LitElement {
                   <button
                     class="primary-btn"
                     ?disabled=${this.isConsolidating}
-                    @click=${() => this.consolidateAll()}
+                    @click=${async () => await this.consolidateAllAsync()}
                   >
                     Consolidate All
                   </button>
@@ -286,7 +259,7 @@ export class ConsolidateView extends LitElement {
           </div>
         </div>
 
-        ${this.isLoading
+        ${isLoading
           ? html`
               <div class="loading" role="status" aria-label="Loading">
                 <span class="spinner large"></span>
@@ -294,7 +267,7 @@ export class ConsolidateView extends LitElement {
               </div>
             `
           : nothing}
-        ${!this.isLoading && this.packages.length === 0 && !this.hasError
+        ${!isLoading && this.packages.length === 0 && !hasError
           ? html`
               <div class="empty">
                 <span class="codicon codicon-check"></span>
@@ -302,7 +275,7 @@ export class ConsolidateView extends LitElement {
               </div>
             `
           : nothing}
-        ${this.hasError
+        ${hasError
           ? html`
               <div class="error" role="alert">
                 <span class="codicon codicon-error"></span>
@@ -310,7 +283,7 @@ export class ConsolidateView extends LitElement {
               </div>
             `
           : nothing}
-        ${!this.isLoading && this.packages.length > 0
+        ${!isLoading && this.packages.length > 0
           ? html`
               <div class="package-list" role="list" aria-label="Inconsistent packages">
                 ${this.packages.map((pkg) => this.renderPackageRow(pkg))}

@@ -107,6 +107,8 @@ Run a single test file by modifying `.vscode-test.mjs` config or using the test 
 - **Styling**: CSS-in-JS via Lit `css` tagged template literals, using VS Code CSS variables
 - **Commit messages**: English, conventional commits (`feat:`, `fix:`, `refactor:`, `chore:`, etc.). **Never include `Co-Authored-By:` trailers in commit messages.**
 - **No `.Update()` on EF entities** — this project doesn't use EF Core; ignore C# rules
+- **Async all the way**: Every async operation must be properly `await`ed — no fire-and-forget, no unhandled floating Promises. Use `@lit/task` (`Task` reactive controller) for async work in Lit lifecycle methods (`connectedCallback`, `updated`, `firstUpdated`) since they cannot be made `async`. Never write `this.someAsyncMethod()` without `await` or `void`; if `void` is the only option, it is a smell — prefer `@lit/task` instead.
+- **Async method naming**: Every `async` method name must end with `Async` (e.g., `LoadProjectsAsync`, `getPackagesAsync`). This applies to all methods in all files — host, web, utilities, RPC, and components. Private methods included. Exception: Lit lifecycle overrides (`connectedCallback`, `disconnectedCallback`, `render`, etc.) which are spec-defined names.
 
 ## Security Rules
 

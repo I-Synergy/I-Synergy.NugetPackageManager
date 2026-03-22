@@ -46,7 +46,7 @@ suite('NuGetApiFactory Tests', () => {
         test('should create new API instance for new URL', async () => {
             getSourcesStub.resolves([]);
 
-            const api = await nugetApiFactory.GetSourceApi('https://api.nuget.org/v3/index.json');
+            const api = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org/v3/index.json');
 
             assert.ok(api);
             assert.ok(loggerDebugStub.calledWith(sinon.match(/Creating new API instance/)));
@@ -55,8 +55,8 @@ suite('NuGetApiFactory Tests', () => {
         test('should return cached API instance for same URL', async () => {
             getSourcesStub.resolves([]);
 
-            const api1 = await nugetApiFactory.GetSourceApi('https://api.nuget.org/v3/index.json');
-            const api2 = await nugetApiFactory.GetSourceApi('https://api.nuget.org/v3/index.json');
+            const api1 = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org/v3/index.json');
+            const api2 = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org/v3/index.json');
 
             assert.strictEqual(api1, api2, 'Should return same instance');
             assert.ok(loggerDebugStub.calledWith(sinon.match(/Returning cached API instance/)));
@@ -65,8 +65,8 @@ suite('NuGetApiFactory Tests', () => {
         test('should create separate instances for different URLs', async () => {
             getSourcesStub.resolves([]);
 
-            const api1 = await nugetApiFactory.GetSourceApi('https://api.nuget.org/v3/index.json');
-            const api2 = await nugetApiFactory.GetSourceApi('https://private.nuget.org/v3/index.json');
+            const api1 = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org/v3/index.json');
+            const api2 = await nugetApiFactory.GetSourceApiAsync('https://private.nuget.org/v3/index.json');
 
             assert.notStrictEqual(api1, api2, 'Should be different instances');
         });
@@ -81,7 +81,7 @@ suite('NuGetApiFactory Tests', () => {
                 }
             ]);
 
-            const api = await nugetApiFactory.GetSourceApi('https://private.nuget.org');
+            const api = await nugetApiFactory.GetSourceApiAsync('https://private.nuget.org');
 
             assert.ok(api);
             assert.ok(loggerInfoStub.calledWith(sinon.match(/Using credentials/)));
@@ -96,7 +96,7 @@ suite('NuGetApiFactory Tests', () => {
                 }
             ]);
 
-            await nugetApiFactory.GetSourceApi('https://api.nuget.org');
+            await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org');
 
             assert.ok(loggerWarnStub.calledWith(sinon.match(/No credentials found/)));
         });
@@ -108,7 +108,7 @@ suite('NuGetApiFactory Tests', () => {
 
             getSourcesStub.resolves([]);
 
-            await nugetApiFactory.GetSourceApi('https://api.nuget.org');
+            await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org');
 
             assert.ok(getSourcesStub.calledWith('/my/workspace'));
         });
@@ -118,7 +118,7 @@ suite('NuGetApiFactory Tests', () => {
 
             getSourcesStub.resolves([]);
 
-            const api = await nugetApiFactory.GetSourceApi('https://api.nuget.org');
+            const api = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org');
 
             assert.ok(api);
             assert.ok(getSourcesStub.calledWith(undefined));
@@ -129,7 +129,7 @@ suite('NuGetApiFactory Tests', () => {
 
             getSourcesStub.resolves([]);
 
-            const api = await nugetApiFactory.GetSourceApi('https://api.nuget.org');
+            const api = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org');
 
             assert.ok(api);
         });
@@ -141,7 +141,7 @@ suite('NuGetApiFactory Tests', () => {
                 { Name: 'Source3', Url: 'https://source3.nuget.org' }
             ]);
 
-            await nugetApiFactory.GetSourceApi('https://source2.nuget.org');
+            await nugetApiFactory.GetSourceApiAsync('https://source2.nuget.org');
 
             assert.ok(loggerInfoStub.calledWith(sinon.match(/Using credentials for https:\/\/source2\.nuget\.org/)));
         });
@@ -156,7 +156,7 @@ suite('NuGetApiFactory Tests', () => {
                 }
             ]);
 
-            const api = await nugetApiFactory.GetSourceApi('https://partial.nuget.org');
+            const api = await nugetApiFactory.GetSourceApiAsync('https://partial.nuget.org');
 
             assert.ok(api);
             assert.ok(loggerInfoStub.calledWith(sinon.match(/Using credentials/)));
@@ -172,7 +172,7 @@ suite('NuGetApiFactory Tests', () => {
                 }
             ]);
 
-            const api = await nugetApiFactory.GetSourceApi('https://partial.nuget.org');
+            const api = await nugetApiFactory.GetSourceApiAsync('https://partial.nuget.org');
 
             assert.ok(api);
             // Should still log "Using credentials" since auth data is present
@@ -185,15 +185,15 @@ suite('NuGetApiFactory Tests', () => {
             getSourcesStub.resolves([]);
 
             // Create some cached instances
-            await nugetApiFactory.GetSourceApi('https://api1.nuget.org');
-            await nugetApiFactory.GetSourceApi('https://api2.nuget.org');
+            await nugetApiFactory.GetSourceApiAsync('https://api1.nuget.org');
+            await nugetApiFactory.GetSourceApiAsync('https://api2.nuget.org');
 
             // Clear the cache
             nugetApiFactory.ClearCache();
 
             // Get new instances - they should be new (creating, not returning cached)
             loggerDebugStub.resetHistory();
-            await nugetApiFactory.GetSourceApi('https://api1.nuget.org');
+            await nugetApiFactory.GetSourceApiAsync('https://api1.nuget.org');
 
             // Should create new instance, not return cached
             assert.ok(loggerDebugStub.calledWith(sinon.match(/Creating new API instance/)));
@@ -210,8 +210,8 @@ suite('NuGetApiFactory Tests', () => {
             getSourcesStub.resolves([]);
 
             // Create cached instances
-            const api1 = await nugetApiFactory.GetSourceApi('https://api1.nuget.org');
-            const api2 = await nugetApiFactory.GetSourceApi('https://api2.nuget.org');
+            const api1 = await nugetApiFactory.GetSourceApiAsync('https://api1.nuget.org');
+            const api2 = await nugetApiFactory.GetSourceApiAsync('https://api2.nuget.org');
 
             const clearCache1 = sandbox.stub(api1, 'ClearPackageCache');
             const clearCache2 = sandbox.stub(api2, 'ClearPackageCache');
@@ -232,9 +232,9 @@ suite('NuGetApiFactory Tests', () => {
         test('should allow new instances after clear', async () => {
             getSourcesStub.resolves([]);
 
-            const api1 = await nugetApiFactory.GetSourceApi('https://api.nuget.org');
+            const api1 = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org');
             nugetApiFactory.ClearCache();
-            const api2 = await nugetApiFactory.GetSourceApi('https://api.nuget.org');
+            const api2 = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org');
 
             assert.notStrictEqual(api1, api2, 'Should be different instances after cache clear');
         });
@@ -247,8 +247,8 @@ suite('NuGetApiFactory Tests', () => {
                 { Name: 'Private', Url: 'https://private.nuget.org', Username: 'user', Password: 'pass' }
             ]);
 
-            const publicApi = await nugetApiFactory.GetSourceApi('https://api.nuget.org/v3/index.json');
-            const privateApi = await nugetApiFactory.GetSourceApi('https://private.nuget.org');
+            const publicApi = await nugetApiFactory.GetSourceApiAsync('https://api.nuget.org/v3/index.json');
+            const privateApi = await nugetApiFactory.GetSourceApiAsync('https://private.nuget.org');
 
             assert.ok(publicApi);
             assert.ok(privateApi);
@@ -259,11 +259,11 @@ suite('NuGetApiFactory Tests', () => {
             getSourcesStub.resolves([]);
 
             // Multiple calls to same URLs
-            const a1 = await nugetApiFactory.GetSourceApi('https://a.nuget.org');
-            const b1 = await nugetApiFactory.GetSourceApi('https://b.nuget.org');
-            const a2 = await nugetApiFactory.GetSourceApi('https://a.nuget.org');
-            const b2 = await nugetApiFactory.GetSourceApi('https://b.nuget.org');
-            const a3 = await nugetApiFactory.GetSourceApi('https://a.nuget.org');
+            const a1 = await nugetApiFactory.GetSourceApiAsync('https://a.nuget.org');
+            const b1 = await nugetApiFactory.GetSourceApiAsync('https://b.nuget.org');
+            const a2 = await nugetApiFactory.GetSourceApiAsync('https://a.nuget.org');
+            const b2 = await nugetApiFactory.GetSourceApiAsync('https://b.nuget.org');
+            const a3 = await nugetApiFactory.GetSourceApiAsync('https://a.nuget.org');
 
             assert.strictEqual(a1, a2);
             assert.strictEqual(a2, a3);

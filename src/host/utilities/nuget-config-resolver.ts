@@ -18,12 +18,12 @@ export type SourceWithCredentials = {
 export default class NuGetConfigResolver {
   private static readonly CONFIG_FILENAMES = ["nuget.config", "NuGet.Config", "NuGet.config"];
 
-  static async GetSourcesAndDecodePasswords(workspaceRoot?: string): Promise<SourceWithCredentials[]> {
+  static async GetSourcesAndDecodePasswordsAsync(workspaceRoot?: string): Promise<SourceWithCredentials[]> {
     Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Starting resolution (workspaceRoot: ${workspaceRoot})`);
     const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
     const sourcesMap = new Map<string, SourceWithCredentials>();
     
-    const sourcesWithCreds = await this.GetSourcesWithCredentials(workspaceRoot);
+    const sourcesWithCreds = await this.GetSourcesWithCredentialsAsync(workspaceRoot);
 
     sourcesWithCreds.forEach(s => {
       const entry: SourceWithCredentials = { Name: s.Name, Url: s.Url };
@@ -70,7 +70,7 @@ export default class NuGetConfigResolver {
       if (passwordScriptPath && source.Password) {
         try {
           Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Decoding password for ${source.Name}`);
-          const decodedPassword = await PasswordScriptExecutor.ExecuteScript(
+          const decodedPassword = await PasswordScriptExecutor.ExecuteScriptAsync(
             passwordScriptPath,
             source.Password
           );
@@ -89,7 +89,7 @@ export default class NuGetConfigResolver {
     return sources;
   }
 
-  static async GetSourcesWithCredentials(workspaceRoot?: string): Promise<SourceWithCredentials[]> {
+  static async GetSourcesWithCredentialsAsync(workspaceRoot?: string): Promise<SourceWithCredentials[]> {
     Logger.debug(`NuGetConfigResolver.GetSourcesWithCredentials: Starting resolution (workspaceRoot: ${workspaceRoot})`);
     const sources = new Map<string, SourceWithCredentials>();
     const disabledSources = new Set<string>();
@@ -101,7 +101,7 @@ export default class NuGetConfigResolver {
     for (const configPath of configPaths) {
       try {
         Logger.debug(`NuGetConfigResolver.GetSourcesWithCredentials: Parsing ${configPath}`);
-        const result = await this.ParseConfigFile(configPath);
+        const result = await this.ParseConfigFileAsync(configPath);
         
         if (result.clear) {
           Logger.debug(`NuGetConfigResolver.GetSourcesWithCredentials: 'clear' found in ${configPath}, clearing sources`);
@@ -202,7 +202,7 @@ export default class NuGetConfigResolver {
   }
 
 
-  private static async ParseConfigFile(configPath: string): Promise<{
+  private static async ParseConfigFileAsync(configPath: string): Promise<{
     sources: SourceWithCredentials[];
     credentials: Map<string, { Username?: string; Password?: string }>;
     disabledSources: string[];

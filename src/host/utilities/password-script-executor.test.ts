@@ -51,7 +51,7 @@ suite('PasswordScriptExecutor Tests', () => {
 
     test('ExecuteScript throws if encoded password is empty', async () => {
         await assert.rejects(
-            async () => PasswordScriptExecutor.ExecuteScript('script.bat', ''),
+            async () => PasswordScriptExecutor.ExecuteScriptAsync('script.bat', ''),
             /Encoded password is empty or undefined/
         );
     });
@@ -80,7 +80,7 @@ suite('PasswordScriptExecutor Tests', () => {
             return { dispose: sandbox.stub() } as any;
         });
 
-        const result = await PasswordScriptExecutor.ExecuteScript(scriptPath, encodedPass);
+        const result = await PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, encodedPass);
         assert.strictEqual(result, expectedOutput);
     });
 
@@ -108,7 +108,7 @@ suite('PasswordScriptExecutor Tests', () => {
             return { dispose: sandbox.stub() } as any;
         });
 
-        const result = await PasswordScriptExecutor.ExecuteScript(scriptPath, encodedPass);
+        const result = await PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, encodedPass);
         assert.strictEqual(result, expectedOutput);
     });
 
@@ -131,7 +131,7 @@ suite('PasswordScriptExecutor Tests', () => {
         });
 
         await assert.rejects(
-            async () => PasswordScriptExecutor.ExecuteScript(scriptPath, 'pass'),
+            async () => PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, 'pass'),
             (err: Error) => {
                 return err.message.includes('Script exited with code 1') && 
                        err.message.includes(errorOutput);
@@ -157,7 +157,7 @@ suite('PasswordScriptExecutor Tests', () => {
         });
 
         await assert.rejects(
-            async () => PasswordScriptExecutor.ExecuteScript(scriptPath, 'pass'),
+            async () => PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, 'pass'),
             (err: Error) => err.message.includes('Password script execution failed')
         );
     });
@@ -182,12 +182,12 @@ suite('PasswordScriptExecutor Tests', () => {
         });
 
         // First call
-        const result1 = await PasswordScriptExecutor.ExecuteScript(scriptPath, encodedPass);
+        const result1 = await PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, encodedPass);
         assert.strictEqual(result1, expectedOutput);
         assert.ok(spawnStub.calledOnce);
 
         // Second call should come from cache
-        const result2 = await PasswordScriptExecutor.ExecuteScript(scriptPath, encodedPass);
+        const result2 = await PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, encodedPass);
         assert.strictEqual(result2, expectedOutput);
         assert.ok(spawnStub.calledOnce); // Should still be called only once
     });
@@ -208,12 +208,12 @@ suite('PasswordScriptExecutor Tests', () => {
             return { dispose: sandbox.stub() } as any;
         });
 
-        await PasswordScriptExecutor.ExecuteScript(scriptPath, encodedPass);
+        await PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, encodedPass);
         assert.ok(spawnStub.calledOnce);
 
         PasswordScriptExecutor.ClearCache();
 
-        await PasswordScriptExecutor.ExecuteScript(scriptPath, encodedPass);
+        await PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, encodedPass);
         assert.ok(spawnStub.calledTwice);
     });
 
@@ -238,7 +238,7 @@ suite('PasswordScriptExecutor Tests', () => {
         });
 
         // Run script to cache
-        await PasswordScriptExecutor.ExecuteScript(scriptPath, encodedPass);
+        await PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, encodedPass);
         assert.ok(spawnStub.calledOnce);
 
         // Fast forward 6 minutes (TTL is 5 mins)
@@ -247,7 +247,7 @@ suite('PasswordScriptExecutor Tests', () => {
         PasswordScriptExecutor.ClearExpiredCache();
 
         // Should re-run
-        await PasswordScriptExecutor.ExecuteScript(scriptPath, encodedPass);
+        await PasswordScriptExecutor.ExecuteScriptAsync(scriptPath, encodedPass);
         assert.ok(spawnStub.calledTwice);
     });
 });

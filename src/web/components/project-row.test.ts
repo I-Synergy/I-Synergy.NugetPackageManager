@@ -24,7 +24,7 @@ suite('ProjectRow Component', () => {
         originalHostApi = registrations.hostApi;
 
         mockHostApi = {
-            updateProject: async () => ok({
+            updateProjectAsync: async () => ok({
                 Project: {
                     Name: 'TestProject',
                     Path: 'path/to/project',

@@ -100,8 +100,8 @@ export default class NuGetApi {
     signal?: AbortSignal
   ): Promise<GetPackagesResponse> {
     Logger.debug(`NuGetApi.GetPackagesAsync: Fetching packages (filter: '${filter}', prerelease: ${prerelease}, skip: ${skip}, take: ${take})`);
-    await this.EnsureSearchUrl();
-    const result = await this.ExecuteGet(this._searchUrl, {
+    await this.EnsureSearchUrlAsync();
+    const result = await this.ExecuteGetAsync(this._searchUrl, {
       params: {
         q: filter,
         take: take,
@@ -146,7 +146,7 @@ export default class NuGetApi {
     }
 
     Logger.debug(`NuGetApi.GetPackageAsync: Fetching package info for ${id} (prerelease: ${prerelease})`);
-    await this.EnsureSearchUrl();
+    await this.EnsureSearchUrlAsync();
     const url = new URL([id.toLowerCase(), "index.json"].join("/"), this._packageInfoUrl).href;
     const items: RawCatalogItem[] = [];
     try {
@@ -243,9 +243,9 @@ export default class NuGetApi {
 
   async GetPackageDetailsAsync(packageVersionUrl: string, signal?: AbortSignal): Promise<GetPackageDetailsResponse> {
     try {
-      await this.EnsureSearchUrl();
+      await this.EnsureSearchUrlAsync();
       Logger.debug(`NuGetApi.GetPackageDetailsAsync: Fetching package version from ${packageVersionUrl}`);
-      const packageVersion = await this.ExecuteGet(packageVersionUrl, ...(signal ? [{ signal }] : []));
+      const packageVersion = await this.ExecuteGetAsync(packageVersionUrl, ...(signal ? [{ signal }] : []));
       
       if (!packageVersion.data?.catalogEntry) {
         Logger.debug(`NuGetApi.GetPackageDetailsAsync: No catalogEntry found in package version response`);
@@ -281,7 +281,7 @@ export default class NuGetApi {
           };
         }
         Logger.debug(`NuGetApi.GetPackageDetailsAsync: Fetching catalog from ${catalogUrl}`);
-        const result = await this.ExecuteGet(catalogUrl, ...(signal ? [{ signal }] : []));
+        const result = await this.ExecuteGetAsync(catalogUrl);
         catalogData = result.data;
       }
 
@@ -324,7 +324,7 @@ export default class NuGetApi {
     }
 
     Logger.debug("NuGetApi.GetVulnerabilitiesAsync: Fetching vulnerability data");
-    await this.EnsureSearchUrl();
+    await this.EnsureSearchUrlAsync();
 
     if (!this._vulnerabilityUrl) {
       Logger.debug("NuGetApi.GetVulnerabilitiesAsync: No vulnerability endpoint available");
@@ -334,12 +334,12 @@ export default class NuGetApi {
     const vulnerabilities = new Map<string, VulnerabilityEntry[]>();
 
     try {
-      const indexResponse = await this.ExecuteGet(this._vulnerabilityUrl, ...(signal ? [{ signal }] : []));
+      const indexResponse = await this.ExecuteGetAsync(this._vulnerabilityUrl, ...(signal ? [{ signal }] : []));
       const pages: Array<{ "@name": string; "@id": string; "@updated": string }> = indexResponse.data;
 
       for (const page of pages) {
         if (signal?.aborted) break;
-        const pageResponse = await this.ExecuteGet(page["@id"], ...(signal ? [{ signal }] : []));
+        const pageResponse = await this.ExecuteGetAsync(page["@id"], ...(signal ? [{ signal }] : []));
         const data: Record<string, VulnerabilityEntry[]> = pageResponse.data;
 
         for (const [packageId, entries] of Object.entries(data)) {
@@ -358,13 +358,13 @@ export default class NuGetApi {
     return vulnerabilities;
   }
 
-  private async EnsureSearchUrl() {
+  private async EnsureSearchUrlAsync() {
     if (this._searchUrl !== "" && this._packageInfoUrl !== "") return;
 
     Logger.debug(`NuGetApi.EnsureSearchUrl: resolving service URLs from ${this._url}`);
-    const response = await this.ExecuteGet(this._url);
+    const response = await this.ExecuteGetAsync(this._url);
 
-    this._searchUrl = await this.GetUrlFromNugetDefinition(response, "SearchQueryService");
+    this._searchUrl = await this.GetUrlFromNugetDefinitionAsync(response, "SearchQueryService");
     if (this._searchUrl == "") throw { message: "SearchQueryService couldn't be found" };
     if (!this._searchUrl.endsWith("/")) this._searchUrl += "/";
     this._packageInfoUrl = await this.GetRegistrationsBaseUrl(response);
@@ -373,7 +373,7 @@ export default class NuGetApi {
 
     // Vulnerability endpoint is optional (not all feeds support it)
     if (!this._vulnerabilityUrl) {
-      this._vulnerabilityUrl = await this.GetUrlFromNugetDefinition(response, "VulnerabilityInfo");
+      this._vulnerabilityUrl = await this.GetUrlFromNugetDefinitionAsync(response, "VulnerabilityInfo");
     }
 
     Logger.debug(`NuGetApi.EnsureSearchUrl: SearchUrl=${this._searchUrl}, PackageInfoUrl=${this._packageInfoUrl}, VulnerabilityUrl=${this._vulnerabilityUrl}`);
@@ -395,13 +395,13 @@ export default class NuGetApi {
     return "";
   }
 
-  private async GetUrlFromNugetDefinition(response: AxiosResponse, type: string): Promise<string> {
+  private async GetUrlFromNugetDefinitionAsync(response: AxiosResponse, type: string): Promise<string> {
     const resource = (response.data.resources as Array<{ "@type": string; "@id": string }>).find((x) => x["@type"].includes(type));
     if (resource != null) return resource["@id"];
     else return "";
   }
 
-  private async ExecuteGet(
+  private async ExecuteGetAsync(
     url: string,
     config?: AxiosRequestConfig | undefined
   ): Promise<AxiosResponse> {

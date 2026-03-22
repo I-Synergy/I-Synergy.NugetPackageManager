@@ -5,23 +5,23 @@ import xpath from "xpath";
 import { Logger } from "../../common/logger";
 
 export default class CpmResolver {
-  static async GetPackageVersions(projectPath: string): Promise<Map<string, string> | null> {
-    const cpmFilePath = await this.FindDirectoryPackagesPropsFile(projectPath);
+  static async GetPackageVersionsAsync(projectPath: string): Promise<Map<string, string> | null> {
+    const cpmFilePath = await this.FindDirectoryPackagesPropsFileAsync(projectPath);
     if (!cpmFilePath) {
       return null;
     }
 
     Logger.debug(`CpmResolver.GetPackageVersions: Found CPM file at ${cpmFilePath}`);
 
-    if (!await this.IsCentralPackageManagementEnabled(projectPath, cpmFilePath)) {
+    if (!await this.IsCentralPackageManagementEnabledAsync(projectPath, cpmFilePath)) {
       Logger.debug(`CpmResolver.GetPackageVersions: CPM is disabled for ${projectPath}`);
       return null;
     }
 
-    return this.ParsePackageVersions(cpmFilePath);
+    return this.ParsePackageVersionsAsync(cpmFilePath);
   }
 
-  private static async FindDirectoryPackagesPropsFile(projectPath: string): Promise<string | null> {
+  private static async FindDirectoryPackagesPropsFileAsync(projectPath: string): Promise<string | null> {
     let currentDir = path.dirname(projectPath);
     const root = path.parse(currentDir).root;
 
@@ -44,7 +44,7 @@ export default class CpmResolver {
     return null;
   }
 
-  private static async IsCentralPackageManagementEnabled(projectPath: string, cpmFilePath: string): Promise<boolean> {
+  private static async IsCentralPackageManagementEnabledAsync(projectPath: string, cpmFilePath: string): Promise<boolean> {
     try {
       // Check if Directory.Packages.props has CPM enabled
       const cpmContent = await fs.promises.readFile(cpmFilePath, "utf8");
@@ -71,8 +71,8 @@ export default class CpmResolver {
     }
   }
 
-  static async UpdatePackageVersion(projectPath: string, packageId: string, newVersion: string): Promise<void> {
-    const cpmFilePath = await this.FindDirectoryPackagesPropsFile(projectPath);
+  static async UpdatePackageVersionAsync(projectPath: string, packageId: string, newVersion: string): Promise<void> {
+    const cpmFilePath = await this.FindDirectoryPackagesPropsFileAsync(projectPath);
     if (!cpmFilePath) {
       throw new Error(`Directory.Packages.props not found for ${projectPath}`);
     }
@@ -102,7 +102,7 @@ export default class CpmResolver {
     Logger.info(`CpmResolver.UpdatePackageVersion: Updated ${packageId} to ${newVersion} in ${cpmFilePath}`);
   }
 
-  private static async ParsePackageVersions(cpmFilePath: string): Promise<Map<string, string>> {
+  private static async ParsePackageVersionsAsync(cpmFilePath: string): Promise<Map<string, string>> {
     Logger.debug(`CpmResolver.ParsePackageVersions: Parsing ${cpmFilePath}`);
     const versionMap = new Map<string, string>();
 

@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import codicon from "@/web/styles/codicon.css";
 import { sharedStyles } from "@/web/styles/shared.css";
@@ -20,21 +20,47 @@ const styles = css`
       align-items: center;
       gap: 6px;
 
-      .search-input {
+      .search-input-wrapper {
+        position: relative;
         flex: 1;
         max-width: 340px;
         min-width: 140px;
-        background: var(--vscode-input-background);
-        color: var(--vscode-input-foreground);
-        border: 1px solid var(--vscode-input-border);
-        padding: 4px 8px;
-        font-size: inherit;
-        font-family: inherit;
-        outline: none;
-      }
+        display: flex;
+        align-items: center;
 
-      .search-input:focus {
-        border-color: var(--vscode-focusBorder);
+        .search-input {
+          width: 100%;
+          background: var(--vscode-input-background);
+          color: var(--vscode-input-foreground);
+          border: 1px solid var(--vscode-input-border);
+          padding: 4px 24px 4px 8px;
+          font-size: inherit;
+          font-family: inherit;
+          outline: none;
+        }
+
+        .search-input:focus {
+          border-color: var(--vscode-focusBorder);
+        }
+
+        .search-clear {
+          position: absolute;
+          right: 4px;
+          display: flex;
+          align-items: center;
+          padding: 0;
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--vscode-input-foreground);
+          opacity: 0.6;
+          font-size: 12px;
+          line-height: 1;
+
+          &:hover {
+            opacity: 1;
+          }
+        }
       }
 
       .checkbox-label {
@@ -79,18 +105,18 @@ export class SearchBar extends LitElement {
     this.emitFilterChangedEvent();
   }
 
-  private prereleaseChangedEvent(target: EventTarget): void {
+  private async prereleaseChangedEventAsync(target: EventTarget): Promise<void> {
     this.prerelease = (target as HTMLInputElement).checked;
     this.emitFilterChangedEvent();
-    void this.savePrereleaseToConfiguration();
+    await this.savePrereleaseToConfigurationAsync();
   }
 
-  private async savePrereleaseToConfiguration(): Promise<void> {
+  private async savePrereleaseToConfigurationAsync(): Promise<void> {
     const config = configuration.Configuration;
     if (!config) return;
 
     configuration.UpdateLocalPrerelease(this.prerelease);
-    await hostApi.updateConfiguration({
+    await hostApi.updateConfigurationAsync({
       Configuration: {
         SkipRestore: config.SkipRestore,
         EnablePackageVersionInlineInfo: config.EnablePackageVersionInlineInfo,
@@ -142,6 +168,13 @@ export class SearchBar extends LitElement {
     this.emitFilterChangedEvent();
   }
 
+  private clearSearch(): void {
+    this.filterQuery = "";
+    const input = this.shadowRoot?.querySelector(".search-input") as HTMLInputElement;
+    if (input) input.value = "";
+    this.emitFilterChangedEvent();
+  }
+
   private reloadClicked(): void {
     const forceReload = true;
     this.dispatchEvent(
@@ -173,13 +206,20 @@ export class SearchBar extends LitElement {
     return html`
       <div class="search-bar">
         <div class="search-bar-left">
-          <input
-            type="text"
-            class="search-input"
-            placeholder="Search packages..."
-            aria-label="Search packages"
-            @input=${(e: Event) => this.filterInputEvent(e.target!)}
-          />
+          <div class="search-input-wrapper">
+            <input
+              type="text"
+              class="search-input"
+              placeholder="Search packages..."
+              aria-label="Search packages"
+              @input=${(e: Event) => this.filterInputEvent(e.target!)}
+            />
+            ${this.filterQuery
+              ? html`<button class="search-clear" aria-label="Clear search" title="Clear" @click=${() => this.clearSearch()}>
+                  <span class="codicon codicon-close"></span>
+                </button>`
+              : nothing}
+          </div>
           <button class="icon-btn" aria-label="Reload packages" title="Reload" @click=${() => this.reloadClicked()}>
             <span class="codicon codicon-refresh"></span>
           </button>
@@ -187,7 +227,7 @@ export class SearchBar extends LitElement {
             <input
               type="checkbox"
               .checked=${this.prerelease}
-              @change=${(e: Event) => this.prereleaseChangedEvent(e.target!)}
+              @change=${async (e: Event) => await this.prereleaseChangedEventAsync(e.target!)}
             />
             Prerelease
           </label>
