@@ -175,7 +175,7 @@ export class SettingsView extends LitElement {
     if (!confirm.ok || !confirm.value.Confirmed) return;
 
     this.sources = this.sources.filter((s) => s !== source);
-    this.updateConfigurationAsync();
+    await this.updateConfigurationAsync();
   }
 
   private saveRow(source: SourceViewModel): void {
@@ -269,9 +269,9 @@ export class SettingsView extends LitElement {
               <input
                 type="checkbox"
                 .checked=${this.skipRestore}
-                @change=${(e: Event) => {
+                @change=${async (e: Event) => {
                   this.skipRestore = (e.target as HTMLInputElement).checked;
-                  this.updateConfigurationAsync();
+                  await this.updateConfigurationAsync();
                 }}
               />
               Skip performing a restore preview and compatibility check
@@ -283,9 +283,9 @@ export class SettingsView extends LitElement {
               <input
                 type="checkbox"
                 .checked=${this.enablePackageVersionInlineInfo}
-                @change=${(e: Event) => {
+                @change=${async (e: Event) => {
                   this.enablePackageVersionInlineInfo = (e.target as HTMLInputElement).checked;
-                  this.updateConfigurationAsync();
+                  await this.updateConfigurationAsync();
                 }}
               />
               Show inline information about newer package versions in project files

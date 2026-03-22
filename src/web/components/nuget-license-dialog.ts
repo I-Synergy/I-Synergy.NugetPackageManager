@@ -144,8 +144,8 @@ export class NugetLicenseDialog extends LitElement {
     this.resolvePromise = null;
   }
 
-  private openLicenseUrl(url: string): void {
-    hostApi.openUrlAsync({ Url: url });
+  private async openLicenseUrlAsync(url: string): Promise<void> {
+    await hostApi.openUrlAsync({ Url: url });
   }
 
   override render() {
@@ -170,7 +170,7 @@ export class NugetLicenseDialog extends LitElement {
                       ? html`
                           <a
                             class="license-link"
-                            @click=${(e: Event) => { e.preventDefault(); this.openLicenseUrl(req.licenseUrl); }}
+                            @click=${async (e: Event) => { e.preventDefault(); await this.openLicenseUrlAsync(req.licenseUrl); }}
                             href=${req.licenseUrl}
                           >
                             View License

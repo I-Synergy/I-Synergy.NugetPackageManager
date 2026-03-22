@@ -62,6 +62,24 @@
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
+  /** Semver-aware version comparison. Returns negative/0/positive. */
+  function compareVersions(a, b) {
+    var aParts = (a || '').split('-'), bParts = (b || '').split('-');
+    var aNum = (aParts[0] || '').split('.').map(function(n) { return parseInt(n, 10) || 0; });
+    var bNum = (bParts[0] || '').split('.').map(function(n) { return parseInt(n, 10) || 0; });
+    for (var i = 0; i < Math.max(aNum.length, bNum.length); i++) {
+      var diff = (aNum[i] || 0) - (bNum[i] || 0);
+      if (diff !== 0) return diff;
+    }
+    // release > prerelease per semver
+    var aPre = aParts.length > 1 ? aParts.slice(1).join('-') : null;
+    var bPre = bParts.length > 1 ? bParts.slice(1).join('-') : null;
+    if (aPre === null && bPre !== null) return 1;
+    if (aPre !== null && bPre === null) return -1;
+    if (aPre !== null && bPre !== null) return aPre.localeCompare(bPre);
+    return 0;
+  }
+
   /**
    * Collect all unique installed packages across projects, grouped by ID.
    * For packages installed at different versions, uses the minimum (oldest).
@@ -74,8 +92,8 @@
         if (!byId[pkg.Id]) {
           byId[pkg.Id] = { id: pkg.Id, version: pkg.Version, projects: [] };
         } else {
-          // Keep the lowest installed version for the outdated check
-          if (pkg.Version < byId[pkg.Id].version) {
+          // Keep the lowest installed version for the outdated check (semver-aware)
+          if (compareVersions(pkg.Version, byId[pkg.Id].version) < 0) {
             byId[pkg.Id].version = pkg.Version;
           }
         }
