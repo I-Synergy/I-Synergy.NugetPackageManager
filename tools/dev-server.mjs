@@ -177,10 +177,74 @@ function mapCatalogEntry(item, allItems) {
   };
 }
 
+// ── NuGet source URL validation ───────────────────────────────────────────────
+
+/** Exact hostnames that are permitted as NuGet feed origins. */
+const ALLOWED_NUGET_HOSTS = new Set([
+  'api.nuget.org',
+  'www.nuget.org',
+  'nuget.org',
+  'pkgs.dev.azure.com',
+]);
+
+/**
+ * Suffix-based allowlist for feeds that use tenant/org sub-domains
+ * (e.g. mycompany.myget.org, mycompany.pkgs.visualstudio.com).
+ */
+const ALLOWED_NUGET_HOST_SUFFIXES = [
+  '.nuget.org',
+  '.myget.org',
+  '.pkgs.visualstudio.com',
+];
+
+/**
+ * Validates that a NuGet source URL uses HTTPS and targets a host that is in
+ * the explicit allowlist.  Throws a descriptive Error if validation fails so
+ * the caller can surface a clean message rather than silently proxying an
+ * arbitrary internal URL.
+ *
+ * @param {string} raw - The URL string to validate.
+ * @returns {string} The normalised URL string (from `new URL()`).
+ */
+function validateNugetSourceUrl(raw) {
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`Invalid NuGet source URL: ${raw}`);
+  }
+
+  if (parsed.protocol !== 'https:') {
+    throw new Error(`NuGet source URL must use HTTPS (got "${parsed.protocol}"): ${raw}`);
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  // Use both an exact-match check and an anchored suffix check.
+  // The suffix check verifies that the suffix is either the full hostname
+  // (e.g. "nuget.org" against ".nuget.org") or is immediately preceded by a
+  // dot, preventing bypasses like "evilnuget.org" matching ".nuget.org".
+  const allowed =
+    ALLOWED_NUGET_HOSTS.has(host) ||
+    ALLOWED_NUGET_HOST_SUFFIXES.some(
+      suffix => host === suffix.slice(1) || host.endsWith(suffix),
+    );
+
+  if (!allowed) {
+    const permittedSuffixes = ALLOWED_NUGET_HOST_SUFFIXES.map(s => `*${s}`).join(' / ');
+    throw new Error(
+      `NuGet source host "${parsed.hostname}" is not in the allowed-host list. ` +
+      `Permitted hosts: ${[...ALLOWED_NUGET_HOSTS].join(', ')} and ${permittedSuffixes}`,
+    );
+  }
+
+  return parsed.toString();
+}
+
 // ── NuGet RPC proxy ───────────────────────────────────────────────────────────
 
 async function handleNugetProxy(method, params) {
-  const sourceUrl = params?.Url || 'https://api.nuget.org/v3/index.json';
+  const rawUrl = params?.Url || 'https://api.nuget.org/v3/index.json';
+  const sourceUrl = validateNugetSourceUrl(rawUrl);
   const services = await getNugetServices(sourceUrl);
 
   switch (method) {
