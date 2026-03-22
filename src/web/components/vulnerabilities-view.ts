@@ -141,7 +141,11 @@ export class VulnerabilitiesView extends LitElement {
   async LoadVulnerablePackagesAsync(forceReload: boolean = false): Promise<void> {
     this.packages = [];
     this.statusText = "";
-    await this._loadTask.run([this.projectPaths, forceReload]);
+    try {
+      await this._loadTask.run([this.projectPaths, forceReload]);
+    } catch {
+      // Avoid unhandled promise rejections; rely on TaskStatus.ERROR for rendering.
+    }
   }
 
   private getSeverityColor(severity: number): string {
