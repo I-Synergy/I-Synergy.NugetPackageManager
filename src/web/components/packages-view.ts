@@ -969,8 +969,8 @@ export class PackagesView extends LitElement {
           ? this.filteredProjects.map(
               (project) => html`
                 <project-row
-                  @project-updated=${(e: CustomEvent) =>
-                    this.OnProjectUpdatedAsync(e)}
+                  @project-updated=${async (e: CustomEvent) =>
+                    await this.OnProjectUpdatedAsync(e)}
                   .project=${project}
                   .packageId=${this.selectedPackage?.Name}
                   .packageVersion=${this.selectedVersion}
@@ -1111,21 +1111,21 @@ export class PackagesView extends LitElement {
               .sourceUrl=${this.filters.SourceUrl}
               .filterQuery=${this.filters.Query}
               @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
-              @package-selected=${(e: CustomEvent) => this.onChildPackageSelectedAsync(e)}
+              @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
             ></updates-view>
           </div>
           <div class="tab-content ${this.activeTab === "consolidate" ? "" : "hidden"}" role="tabpanel" aria-label="consolidate tab">
             <consolidate-view
               .projectPaths=${this.effectiveProjectPaths}
               @count-changed=${(e: CustomEvent<number>) => { this.consolidateCount = e.detail; }}
-              @package-selected=${(e: CustomEvent) => this.onChildPackageSelectedAsync(e)}
+              @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
             ></consolidate-view>
           </div>
           <div class="tab-content ${this.activeTab === "vulnerabilities" ? "" : "hidden"}" role="tabpanel" aria-label="vulnerabilities tab">
             <vulnerabilities-view
               .projectPaths=${this.effectiveProjectPaths}
               @count-changed=${(e: CustomEvent<number>) => { this.vulnerabilitiesCount = e.detail; }}
-              @package-selected=${(e: CustomEvent) => this.onChildPackageSelectedAsync(e)}
+              @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
             ></vulnerabilities-view>
           </div>
         </div>
