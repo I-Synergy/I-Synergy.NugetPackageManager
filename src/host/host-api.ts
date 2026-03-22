@@ -19,6 +19,7 @@ import type {
   GetOutdatedPackagesResponse,
   BatchUpdateRequest,
   BatchUpdateResponse,
+  RestoreProjectsRequest,
   GetInconsistentPackagesRequest,
   GetInconsistentPackagesResponse,
   ConsolidateRequest,
@@ -87,7 +88,7 @@ function formatApiError(err: unknown): string {
 
 export function createHostAPI(): HostAPI {
   return {
-    async getProjects(request: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>> {
+    async getProjectsAsync(request: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>> {
       Logger.info("getProjects: Handling request");
 
       const projectFiles = await vscode.workspace.findFiles(
@@ -100,8 +101,8 @@ export function createHostAPI(): HostAPI {
       const parseResults = await Promise.allSettled(
         projectFiles.map(async (file) => {
           if (signal?.aborted) throw new Error("cancelled");
-          const cpmVersions = await CpmResolver.GetPackageVersions(file.fsPath);
-          const project = await ProjectParser.Parse(file.fsPath, cpmVersions);
+          const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+          const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
           project.CpmEnabled = cpmVersions !== null;
           return project;
         })
@@ -123,7 +124,7 @@ export function createHostAPI(): HostAPI {
       return ok({ Projects: sorted });
     },
 
-    async getPackages(request: GetPackagesRequest, signal?: AbortSignal): Promise<Result<GetPackagesResponse>> {
+    async getPackagesAsync(request: GetPackagesRequest, signal?: AbortSignal): Promise<Result<GetPackagesResponse>> {
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       StatusBarUtils.show(0, "Loading packages...");
 
@@ -133,7 +134,7 @@ export function createHostAPI(): HostAPI {
         }
 
         if (request.Url === "") {
-          const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
+          const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
 
           if (!request.Filter) {
             if (sources.length > 0) {
@@ -145,7 +146,7 @@ export function createHostAPI(): HostAPI {
             let completed = 0;
             const promises = sources.map(async (source) => {
               try {
-                const api = await nugetApiFactory.GetSourceApi(source.Url);
+                const api = await nugetApiFactory.GetSourceApiAsync(source.Url);
                 return await api.GetPackagesAsync(
                   request.Filter,
                   request.Prerelease,
@@ -180,7 +181,7 @@ export function createHostAPI(): HostAPI {
         }
 
         Logger.info(`getPackages: Fetching from ${request.Url} with filter '${request.Filter}'`);
-        const api = await nugetApiFactory.GetSourceApi(request.Url);
+        const api = await nugetApiFactory.GetSourceApiAsync(request.Url);
         const packages = await api.GetPackagesAsync(
           request.Filter,
           request.Prerelease,
@@ -199,14 +200,14 @@ export function createHostAPI(): HostAPI {
       }
     },
 
-    async getPackage(request: GetPackageRequest, signal?: AbortSignal): Promise<Result<GetPackageResponse>> {
+    async getPackageAsync(request: GetPackageRequest, signal?: AbortSignal): Promise<Result<GetPackageResponse>> {
       if (request.Url === "") {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
+        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
 
         for (const source of sources) {
           try {
-            const api = await nugetApiFactory.GetSourceApi(source.Url);
+            const api = await nugetApiFactory.GetSourceApiAsync(source.Url);
             if (request.ForceReload) {
               api.ClearPackageCache(request.Id);
             }
@@ -225,7 +226,7 @@ export function createHostAPI(): HostAPI {
       }
 
       try {
-        const api = await nugetApiFactory.GetSourceApi(request.Url);
+        const api = await nugetApiFactory.GetSourceApiAsync(request.Url);
         if (request.ForceReload) {
           api.ClearPackageCache(request.Id);
         }
@@ -244,12 +245,12 @@ export function createHostAPI(): HostAPI {
       }
     },
 
-    async getPackageDetails(request: GetPackageDetailsRequest, signal?: AbortSignal): Promise<Result<GetPackageDetailsResponse>> {
+    async getPackageDetailsAsync(request: GetPackageDetailsRequest, signal?: AbortSignal): Promise<Result<GetPackageDetailsResponse>> {
       if (!request.Url) return fail("SourceUrl is empty");
       if (!request.PackageVersionUrl) return fail("PackageVersionUrl is empty");
 
       try {
-        const api = await nugetApiFactory.GetSourceApi(request.Url);
+        const api = await nugetApiFactory.GetSourceApiAsync(request.Url);
         const details = await api.GetPackageDetailsAsync(request.PackageVersionUrl, signal);
         return ok({ Package: details.data });
       } catch (err) {
@@ -259,7 +260,7 @@ export function createHostAPI(): HostAPI {
       }
     },
 
-    async updateProject(request: UpdateProjectRequest): Promise<Result<UpdateProjectResponse>> {
+    async updateProjectAsync(request: UpdateProjectRequest): Promise<Result<UpdateProjectResponse>> {
       Logger.info(`updateProject: ${request.Type} ${request.PackageId} in ${request.ProjectPath}`);
 
       const workspacePaths = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath);
@@ -276,7 +277,7 @@ export function createHostAPI(): HostAPI {
       }
 
       const skipRestoreConfig = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") ?? "";
-      const cpmVersionsBefore = await CpmResolver.GetPackageVersions(request.ProjectPath);
+      const cpmVersionsBefore = await CpmResolver.GetPackageVersionsAsync(request.ProjectPath);
       const isCpmEnabled = cpmVersionsBefore !== null;
       const skipRestore = !!skipRestoreConfig && !isCpmEnabled;
 
@@ -284,16 +285,12 @@ export function createHostAPI(): HostAPI {
         if (request.Type === "UNINSTALL") {
           await executeRemovePackage(request.PackageId, request.ProjectPath, request.OperationId);
         } else if (isCpmEnabled && cpmVersionsBefore!.has(request.PackageId)) {
-          if (!request.Version || request.Version.trim() === "") {
-            return fail("Version is required when updating a CPM-managed package.");
+          if (!request.Version || !request.Version.trim()) {
+            return fail("An explicit version is required when updating a Centrally Managed (CPM) package.");
           }
-          await CpmResolver.UpdatePackageVersion(request.ProjectPath, request.PackageId, request.Version);
+          await CpmResolver.UpdatePackageVersionAsync(request.ProjectPath, request.PackageId, request.Version);
           if (!skipRestore) {
-            await TaskExecutor.ExecuteCommand(
-              "dotnet",
-              ["restore", request.ProjectPath.replace(/\\/g, "/")],
-              request.OperationId ?? `restore-${request.PackageId}`,
-            );
+            await TaskExecutor.ExecuteCommandAsync("dotnet", ["restore", request.ProjectPath.replace(/\\/g, "/")], request.OperationId ?? `restore-${request.PackageId}`);
           }
         } else {
           await executeAddPackage(
@@ -314,18 +311,18 @@ export function createHostAPI(): HostAPI {
 
       nugetApiFactory.ClearCache();
 
-      const cpmVersions = await CpmResolver.GetPackageVersions(request.ProjectPath);
-      const updatedProject = await ProjectParser.Parse(request.ProjectPath, cpmVersions);
+      const cpmVersions = await CpmResolver.GetPackageVersionsAsync(request.ProjectPath);
+      const updatedProject = await ProjectParser.ParseAsync(request.ProjectPath, cpmVersions);
 
       return ok({ Project: updatedProject, IsCpmEnabled: isCpmEnabled });
     },
 
-    async getConfiguration(): Promise<Result<GetConfigurationResponse>> {
+    async getConfigurationAsync(): Promise<Result<GetConfigurationResponse>> {
       Logger.info("getConfiguration: Retrieving configuration");
       const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
 
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-      const sourcesWithCreds = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
+      const sourcesWithCreds = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
 
       const sources: Source[] = sourcesWithCreds.map((s) => ({
         Name: s.Name,
@@ -361,7 +358,7 @@ export function createHostAPI(): HostAPI {
       });
     },
 
-    async updateConfiguration(request: UpdateConfigurationRequest): Promise<Result<void>> {
+    async updateConfigurationAsync(request: UpdateConfigurationRequest): Promise<Result<void>> {
       Logger.info("updateConfiguration: Updating configuration");
       const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
 
@@ -391,13 +388,13 @@ export function createHostAPI(): HostAPI {
       return ok(undefined as void);
     },
 
-    async openUrl(request: OpenUrlRequest): Promise<Result<void>> {
+    async openUrlAsync(request: OpenUrlRequest): Promise<Result<void>> {
       Logger.info(`openUrl: Opening ${request.Url}`);
       vscode.env.openExternal(vscode.Uri.parse(request.Url));
       return ok(undefined as void);
     },
 
-    async updateStatusBar(request: UpdateStatusBarRequest): Promise<Result<void>> {
+    async updateStatusBarAsync(request: UpdateStatusBarRequest): Promise<Result<void>> {
       if (request.Percentage === null) {
         StatusBarUtils.hide();
       } else {
@@ -406,7 +403,7 @@ export function createHostAPI(): HostAPI {
       return ok(undefined as void);
     },
 
-    async getOutdatedPackages(request: GetOutdatedPackagesRequest, signal?: AbortSignal): Promise<Result<GetOutdatedPackagesResponse>> {
+    async getOutdatedPackagesAsync(request: GetOutdatedPackagesRequest, signal?: AbortSignal): Promise<Result<GetOutdatedPackagesResponse>> {
       Logger.info("getOutdatedPackages: Checking for outdated packages");
       StatusBarUtils.show(0, "Checking for updates...");
 
@@ -416,7 +413,7 @@ export function createHostAPI(): HostAPI {
 
       try {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        let sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
+        let sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
 
         if (request.SourceUrl) {
           sources = sources.filter((s) => s.Url === request.SourceUrl);
@@ -437,8 +434,8 @@ export function createHostAPI(): HostAPI {
 
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
-            const cpmVersions = await CpmResolver.GetPackageVersions(file.fsPath);
-            const project = await ProjectParser.Parse(file.fsPath, cpmVersions);
+            const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+            const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmVersions !== null;
             return project;
           })
@@ -520,10 +517,12 @@ export function createHostAPI(): HostAPI {
       }
     },
 
-    async batchUpdatePackages(request: BatchUpdateRequest): Promise<Result<BatchUpdateResponse>> {
+    async batchUpdatePackagesAsync(request: BatchUpdateRequest): Promise<Result<BatchUpdateResponse>> {
       Logger.info(`batchUpdatePackages: Updating ${request.Updates.length} packages`);
 
       const results: Array<{ PackageId: string; Success: boolean; Error?: string }> = [];
+      const configSkipRestore = !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore");
+      const skipRestore = request.SkipRestore === true || configSkipRestore;
 
       for (const [i, update] of request.Updates.entries()) {
         StatusBarUtils.ShowText(
@@ -532,16 +531,14 @@ export function createHostAPI(): HostAPI {
 
         try {
           for (const projectPath of update.ProjectPaths) {
-            const cpmVersions = await CpmResolver.GetPackageVersions(projectPath);
+            const cpmVersions = await CpmResolver.GetPackageVersionsAsync(projectPath);
             const isCpm = cpmVersions !== null;
-            const skipRestore =
-              !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") && !isCpm;
 
             if (isCpm && cpmVersions!.has(update.PackageId)) {
-              await CpmResolver.UpdatePackageVersion(projectPath, update.PackageId, update.Version);
-              if (!skipRestore) {
-                await TaskExecutor.ExecuteCommand("dotnet", ["restore", projectPath.replace(/\\/g, "/")], `restore-${update.PackageId}-${i}`);
+              if (!update.Version) {
+                throw new Error(`Version is required for CPM package update: ${update.PackageId}`);
               }
+              await CpmResolver.UpdatePackageVersionAsync(projectPath, update.PackageId, update.Version);
             } else {
               await executeAddPackage(update.PackageId, projectPath, update.Version, skipRestore);
             }
@@ -560,7 +557,31 @@ export function createHostAPI(): HostAPI {
       return ok({ Results: results });
     },
 
-    async getInconsistentPackages(request: GetInconsistentPackagesRequest, signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>> {
+    async restoreProjectsAsync(request: RestoreProjectsRequest): Promise<Result<void>> {
+      const configSkipRestore = !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore");
+      if (configSkipRestore) {
+        Logger.info("restoreProjects: skipped (skipRestore setting is enabled)");
+        return ok(undefined);
+      }
+
+      const uniquePaths = [...new Set(request.ProjectPaths)];
+      Logger.info(`restoreProjects: Restoring ${uniquePaths.length} project(s)`);
+      StatusBarUtils.ShowText("Restoring packages...");
+      try {
+        for (const projectPath of uniquePaths) {
+          await TaskExecutor.ExecuteCommandAsync(
+            "dotnet",
+            ["restore", projectPath.replace(/\\/g, "/")],
+            `restore-${projectPath}`
+          );
+        }
+      } finally {
+        StatusBarUtils.hide();
+      }
+      return ok(undefined);
+    },
+
+    async getInconsistentPackagesAsync(request: GetInconsistentPackagesRequest, _signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>> {
       Logger.info("getInconsistentPackages: Checking for version inconsistencies");
 
       try {
@@ -575,8 +596,8 @@ export function createHostAPI(): HostAPI {
 
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
-            const cpmVersions = await CpmResolver.GetPackageVersions(file.fsPath);
-            const project = await ProjectParser.Parse(file.fsPath, cpmVersions);
+            const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+            const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmVersions !== null;
             return project;
           })
@@ -636,17 +657,17 @@ export function createHostAPI(): HostAPI {
       }
     },
 
-    async getVulnerablePackages(request: GetVulnerablePackagesRequest, signal?: AbortSignal): Promise<Result<GetVulnerablePackagesResponse>> {
+    async getVulnerablePackagesAsync(request: GetVulnerablePackagesRequest, signal?: AbortSignal): Promise<Result<GetVulnerablePackagesResponse>> {
       Logger.info("getVulnerablePackages: Scanning for vulnerable packages");
       StatusBarUtils.show(0, "Scanning for vulnerabilities...");
 
       try {
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceRoot);
+        const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
 
         if (request.ForceReload) {
           for (const source of sources) {
-            const api = await nugetApiFactory.GetSourceApi(source.Url);
+            const api = await nugetApiFactory.GetSourceApiAsync(source.Url);
             api.ClearVulnerabilityCache();
           }
         }
@@ -666,8 +687,8 @@ export function createHostAPI(): HostAPI {
 
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
-            const cpmVersions = await CpmResolver.GetPackageVersions(file.fsPath);
-            return ProjectParser.Parse(file.fsPath, cpmVersions);
+            const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+            return ProjectParser.ParseAsync(file.fsPath, cpmVersions);
           })
         );
         const projects: Project[] = [];
@@ -707,7 +728,7 @@ export function createHostAPI(): HostAPI {
         const allVulnerabilities = new Map<string, VulnerabilityEntry[]>();
         const vulnResults = await Promise.allSettled(
           sources.map(async (source) => {
-            const api = await nugetApiFactory.GetSourceApi(source.Url);
+            const api = await nugetApiFactory.GetSourceApiAsync(source.Url);
             return { source, vulns: await api.GetVulnerabilitiesAsync(signal) };
           })
         );
@@ -769,7 +790,7 @@ export function createHostAPI(): HostAPI {
       }
     },
 
-    async showConfirmation(request: ShowConfirmationRequest): Promise<Result<ShowConfirmationResponse>> {
+    async showConfirmationAsync(request: ShowConfirmationRequest): Promise<Result<ShowConfirmationResponse>> {
       const opts: vscode.MessageOptions = { modal: true };
       if (request.Detail !== undefined) opts.detail = request.Detail;
       const answer = await vscode.window.showWarningMessage(
@@ -780,7 +801,7 @@ export function createHostAPI(): HostAPI {
       return ok({ Confirmed: answer === "Yes" });
     },
 
-    async getOperationProgress(request: GetOperationProgressRequest): Promise<Result<GetOperationProgressResponse>> {
+    async getOperationProgressAsync(request: GetOperationProgressRequest): Promise<Result<GetOperationProgressResponse>> {
       const progress = TaskExecutor.GetProgress(request.OperationId);
       if (progress === null) {
         return ok({ Stage: "", Percent: 0, Active: false });
@@ -788,7 +809,7 @@ export function createHostAPI(): HostAPI {
       return ok({ Stage: progress.stage, Percent: progress.percent, Active: true });
     },
 
-    async consolidatePackages(request: ConsolidateRequest): Promise<Result<void>> {
+    async consolidatePackagesAsync(request: ConsolidateRequest): Promise<Result<void>> {
       Logger.info(
         `consolidatePackages: ${request.PackageId} to ${request.TargetVersion} across ${request.ProjectPaths.length} projects`
       );
@@ -799,15 +820,15 @@ export function createHostAPI(): HostAPI {
             `Consolidating ${request.PackageId} (${i + 1}/${request.ProjectPaths.length})...`
           );
 
-          const cpmVersions = await CpmResolver.GetPackageVersions(projectPath);
+          const cpmVersions = await CpmResolver.GetPackageVersionsAsync(projectPath);
           const isCpm = cpmVersions !== null;
           const skipRestore =
             !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") && !isCpm;
 
           if (isCpm && cpmVersions!.has(request.PackageId)) {
-            await CpmResolver.UpdatePackageVersion(projectPath, request.PackageId, request.TargetVersion);
+            await CpmResolver.UpdatePackageVersionAsync(projectPath, request.PackageId, request.TargetVersion);
             if (!skipRestore) {
-              await TaskExecutor.ExecuteCommand("dotnet", ["restore", projectPath.replace(/\\/g, "/")], `restore-${request.PackageId}`);
+              await TaskExecutor.ExecuteCommandAsync("dotnet", ["restore", projectPath.replace(/\\/g, "/")], `restore-${request.PackageId}`);
             }
           } else {
             await executeAddPackage(request.PackageId, projectPath, request.TargetVersion, skipRestore);
@@ -834,7 +855,7 @@ export function createHostAPI(): HostAPI {
 async function executeRemovePackage(packageId: string, projectPath: string, operationId?: string): Promise<void> {
   StatusBarUtils.ShowText(`Removing package ${packageId}...`);
   const args = ["remove", projectPath.replace(/\\/g, "/"), "package", packageId];
-  await TaskExecutor.ExecuteCommand("dotnet", args, operationId ?? `remove-${packageId}`);
+  await TaskExecutor.ExecuteCommandAsync("dotnet", args, operationId ?? `remove-${packageId}`);
 }
 
 async function executeAddPackage(
@@ -858,7 +879,7 @@ async function executeAddPackage(
     args.push("-s", sourceUrl);
   }
 
-  await TaskExecutor.ExecuteCommand("dotnet", args, operationId ?? `add-${packageId}`);
+  await TaskExecutor.ExecuteCommandAsync("dotnet", args, operationId ?? `add-${packageId}`);
 }
 
 async function getLatestVersion(
@@ -871,7 +892,7 @@ async function getLatestVersion(
 
   const promises = sources.map(async (source) => {
     try {
-      const api = await nugetApiFactory.GetSourceApi(source.Url);
+      const api = await nugetApiFactory.GetSourceApiAsync(source.Url);
       const result = await api.GetPackagesAsync(packageId, prerelease, 0, 1, signal);
       const pkg = result.data.find((p) => p.Name.toLowerCase() === packageId.toLowerCase());
       if (pkg) {

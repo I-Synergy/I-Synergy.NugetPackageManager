@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import type { PropertyValues } from "lit";
+import { Task, TaskStatus } from "@lit/task";
 import type { GetPackageDetailsRequest } from "@/common/rpc/types";
 import { PackageViewModel } from "../types";
 import codicon from "@/web/styles/codicon.css";
@@ -125,6 +125,15 @@ export class PackageDetailsComponent extends LitElement {
         }
       }
 
+      .error {
+        margin-top: 8px;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        color: var(--vscode-errorForeground);
+        font-size: 12px;
+      }
+
       .versions-list {
         font-size: 12px;
         max-height: 300px;
@@ -182,37 +191,32 @@ export class PackageDetailsComponent extends LitElement {
   @property() selectedVersion: string = "";
 
   @state() packageDetailsLoading: boolean = false;
-  @state() packageDetails?: PackageDetails;
+  @state() packageDetails: PackageDetails | undefined;
   @state() activeTab: DetailTab = "description";
 
-  protected override updated(changedProps: PropertyValues): void {
-    if (changedProps.has("source") || changedProps.has("packageVersionUrl")) {
-      this.reloadDependencies();
-    }
-  }
+  private _detailsTask = new Task(this, {
+    task: async ([packageVersionUrl, source, passwordScriptPath], { signal }) => {
+      this.packageDetails = undefined;
+      if (!packageVersionUrl || !source) return;
+      this.packageDetailsLoading = true;
 
-  private async reloadDependencies(): Promise<void> {
-    this.packageDetails = undefined as unknown as PackageDetails;
+      try {
+        const request: GetPackageDetailsRequest = {
+          PackageVersionUrl: packageVersionUrl,
+          Url: source,
+          ...(passwordScriptPath !== undefined && { PasswordScriptPath: passwordScriptPath }),
+        };
 
-    if (!this.source) return;
-    if (!this.packageVersionUrl) return;
-    this.packageDetailsLoading = true;
+        const result = await hostApi.getPackageDetailsAsync(request, signal);
+        if (signal.aborted) return;
 
-    const request: GetPackageDetailsRequest = {
-      PackageVersionUrl: this.packageVersionUrl,
-      Url: this.source,
-      ...(this.passwordScriptPath !== undefined && { PasswordScriptPath: this.passwordScriptPath }),
-    };
-
-    const result = await hostApi.getPackageDetails(request);
-
-    if (request.PackageVersionUrl !== this.packageVersionUrl) return;
-
-    if (result.ok) {
-      this.packageDetails = result.value.Package;
-    }
-    this.packageDetailsLoading = false;
-  }
+        if (result.ok) this.packageDetails = result.value.Package;
+      } finally {
+        this.packageDetailsLoading = false;
+      }
+    },
+    args: () => [this.packageVersionUrl, this.source, this.passwordScriptPath] as const,
+  });
 
   private formatDownloads(count: number): string {
     if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
@@ -220,8 +224,8 @@ export class PackageDetailsComponent extends LitElement {
     return count.toString();
   }
 
-  private openUrl(url: string): void {
-    hostApi.openUrl({ Url: url });
+  private async openUrlAsync(url: string): Promise<void> {
+    await hostApi.openUrlAsync({ Url: url });
   }
 
   private renderDescriptionTab(): unknown {
@@ -246,14 +250,14 @@ export class PackageDetailsComponent extends LitElement {
         ${this.package.LicenseUrl
           ? html`
               <span class="label">License</span>
-              <a href=${this.package.LicenseUrl} @click=${(e: Event) => { e.preventDefault(); this.openUrl(this.package!.LicenseUrl); }}>View License</a>
+              <a href=${this.package.LicenseUrl} @click=${async (e: Event) => { e.preventDefault(); await this.openUrlAsync(this.package!.LicenseUrl); }}>View License</a>
             `
           : nothing}
 
         ${this.package.ProjectUrl
           ? html`
               <span class="label">Project URL</span>
-              <a href=${this.package.ProjectUrl} @click=${(e: Event) => { e.preventDefault(); this.openUrl(this.package!.ProjectUrl); }}>View Project</a>
+              <a href=${this.package.ProjectUrl} @click=${async (e: Event) => { e.preventDefault(); await this.openUrlAsync(this.package!.ProjectUrl); }}>View Project</a>
             `
           : nothing}
       </div>
@@ -273,6 +277,15 @@ export class PackageDetailsComponent extends LitElement {
   private renderDependenciesTab(): unknown {
     if (this.packageDetailsLoading) {
       return html`<span class="spinner large loader"></span>`;
+    }
+
+    if (this._detailsTask.status === TaskStatus.ERROR) {
+      return html`
+        <div class="error" role="alert">
+          <span class="codicon codicon-error"></span>
+          Failed to load package details
+        </div>
+      `;
     }
 
     const frameworks = this.packageDetails?.dependencies?.frameworks ?? {};

@@ -47,7 +47,7 @@ export class NuGetPackageManager extends LitElement {
     configuration.addEventListener("configuration-changed", this.onConfigChanged);
     router.addEventListener("route-changed", this.onRouteChanged);
     window.addEventListener("message", this.onMessage);
-    configuration.Reload();
+    void configuration.ReloadAsync();
   }
 
   override disconnectedCallback() {
@@ -61,17 +61,17 @@ export class NuGetPackageManager extends LitElement {
     switch (cmd.command) {
       case "search": {
         router.Navigate("BROWSE");
-        void this.updateComplete.then(() => {
+        void this.updateComplete.then(async () => {
           const packagesView = this.shadowRoot?.querySelector("packages-view") as PackagesView | null;
-          packagesView?.setSearchQuery(cmd.query);
+          await packagesView?.setSearchQueryAsync(cmd.query);
         });
         break;
       }
       case "navigate-tab": {
         router.Navigate("BROWSE");
-        void this.updateComplete.then(() => {
+        void this.updateComplete.then(async () => {
           const packagesView = this.shadowRoot?.querySelector("packages-view") as PackagesView | null;
-          packagesView?.setTab(cmd.tab as "browse" | "installed" | "updates" | "consolidate" | "vulnerabilities");
+          await packagesView?.setTabAsync(cmd.tab as "browse" | "installed" | "updates" | "consolidate" | "vulnerabilities");
         });
         break;
       }
@@ -80,7 +80,7 @@ export class NuGetPackageManager extends LitElement {
         break;
       }
       case "reload-configuration": {
-        void configuration.Reload();
+        void configuration.ReloadAsync();
         break;
       }
     }

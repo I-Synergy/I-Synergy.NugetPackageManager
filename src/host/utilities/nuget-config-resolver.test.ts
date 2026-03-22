@@ -33,7 +33,7 @@ suite('NuGetConfigResolver Tests', () => {
         // Node's os.homedir() reads HOME on POSIX and USERPROFILE on Windows.
 
         vscodeGetConfigurationStub = sandbox.stub(vscode.workspace, 'getConfiguration');
-        executeScriptStub = sandbox.stub(PasswordScriptExecutor, 'ExecuteScript');
+        executeScriptStub = sandbox.stub(PasswordScriptExecutor, 'ExecuteScriptAsync');
         credentialsCacheSetStub = sandbox.stub(CredentialsCache, 'set');
         sandbox.stub(Logger, 'debug');
         sandbox.stub(Logger, 'error');
@@ -162,7 +162,7 @@ suite('NuGetConfigResolver Tests', () => {
             `;
             const configFile = writeConfig(tempDir, 'test.config', xml);
 
-            const result = await (NuGetConfigResolver as any).ParseConfigFile(configFile);
+            const result = await (NuGetConfigResolver as any).ParseConfigFileAsync(configFile);
             assert.strictEqual(result.sources.length, 2);
             assert.strictEqual(result.sources[0].Name, 'Source1');
             assert.strictEqual(result.sources[0].Url, 'http://source1');
@@ -183,7 +183,7 @@ suite('NuGetConfigResolver Tests', () => {
             `;
             const configFile = writeConfig(tempDir, 'creds.config', xml);
 
-            const result = await (NuGetConfigResolver as any).ParseConfigFile(configFile);
+            const result = await (NuGetConfigResolver as any).ParseConfigFileAsync(configFile);
             assert.strictEqual(result.credentials.get('Source1').Username, 'user1');
             assert.strictEqual(result.credentials.get('Source1').Password, 'pass1');
         });
@@ -198,7 +198,7 @@ suite('NuGetConfigResolver Tests', () => {
             `;
             const configFile = writeConfig(tempDir, 'disabled.config', xml);
 
-             const result = await (NuGetConfigResolver as any).ParseConfigFile(configFile);
+             const result = await (NuGetConfigResolver as any).ParseConfigFileAsync(configFile);
              assert.ok(result.disabledSources.includes('Source1'));
         });
 
@@ -213,7 +213,7 @@ suite('NuGetConfigResolver Tests', () => {
             `;
              const configFile = writeConfig(tempDir, 'clear.config', xml);
 
-             const result = await (NuGetConfigResolver as any).ParseConfigFile(configFile);
+             const result = await (NuGetConfigResolver as any).ParseConfigFileAsync(configFile);
              assert.strictEqual(result.clear, true);
         });
 
@@ -221,14 +221,14 @@ suite('NuGetConfigResolver Tests', () => {
              const xml = `<configuration><packageSources><add key="`;
              const configFile = writeConfig(tempDir, 'malformed.config', xml);
 
-             const result = await (NuGetConfigResolver as any).ParseConfigFile(configFile);
+             const result = await (NuGetConfigResolver as any).ParseConfigFileAsync(configFile);
              assert.ok(result);
         });
     });
 
     suite('GetSourcesWithCredentials', () => {
         test('Returns empty list if no config files found', async () => {
-            const sources = await NuGetConfigResolver.GetSourcesWithCredentials(workspaceDir);
+            const sources = await NuGetConfigResolver.GetSourcesWithCredentialsAsync(workspaceDir);
             // It might pick up user/machine configs if homedir spoofing failed and real ones exist.
             // But usually in CI/test env there are none.
             // If there are, we can't easily assert empty.
@@ -255,7 +255,7 @@ suite('NuGetConfigResolver Tests', () => {
             `;
             writeConfig(workspaceDir, 'nuget.config', xml);
 
-            const sources = await NuGetConfigResolver.GetSourcesWithCredentials(workspaceDir);
+            const sources = await NuGetConfigResolver.GetSourcesWithCredentialsAsync(workspaceDir);
             const source1 = sources.find(s => s.Name === 'Source1');
             assert.ok(source1);
 
@@ -279,7 +279,7 @@ suite('NuGetConfigResolver Tests', () => {
             `;
             writeConfig(workspaceDir, 'nuget.config', xml);
 
-            const sources = await NuGetConfigResolver.GetSourcesWithCredentials(workspaceDir);
+            const sources = await NuGetConfigResolver.GetSourcesWithCredentialsAsync(workspaceDir);
             const source1 = sources.find(s => s.Name === 'Source1');
             assert.ok(source1);
             assert.strictEqual(source1?.Username, 'user');
@@ -308,7 +308,7 @@ suite('NuGetConfigResolver Tests', () => {
                 </configuration>
             `);
 
-            const sources = await NuGetConfigResolver.GetSourcesWithCredentials(workspaceDir);
+            const sources = await NuGetConfigResolver.GetSourcesWithCredentialsAsync(workspaceDir);
 
             const source2 = sources.find(s => s.Name === 'Source2');
             assert.ok(source2);
@@ -326,7 +326,7 @@ suite('NuGetConfigResolver Tests', () => {
              const badPath = path.join(workspaceDir, 'nuget.config');
              fs.mkdirSync(badPath);
 
-             const sources = await NuGetConfigResolver.GetSourcesWithCredentials(workspaceDir);
+             const sources = await NuGetConfigResolver.GetSourcesWithCredentialsAsync(workspaceDir);
 
              // Should not throw
              assert.ok(Array.isArray(sources));
@@ -337,7 +337,7 @@ suite('NuGetConfigResolver Tests', () => {
     suite('GetSourcesAndDecodePasswords', () => {
         test('Uses VS Code configuration sources', async () => {
             // Mock empty file sources
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentials').resolves([]);
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([]);
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
@@ -350,13 +350,13 @@ suite('NuGetConfigResolver Tests', () => {
                 }
             });
 
-            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceDir);
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
             assert.ok(sources.find(s => s.Name === 'VSSource'));
         });
 
         test('Decodes password when passwordScriptPath is provided', async () => {
             const source = { Name: 'SecureSource', Url: 'http://secure', Password: 'Encrypted' };
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentials').resolves([source]);
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([source]);
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
@@ -371,7 +371,7 @@ suite('NuGetConfigResolver Tests', () => {
 
             executeScriptStub.withArgs('/path/to/script.sh', 'Encrypted').resolves('Decrypted');
 
-            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceDir);
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
 
             assert.strictEqual(sources[0]!.Password, 'Decrypted');
             assert.ok(credentialsCacheSetStub.calledWith('SecureSource', undefined, 'Decrypted'));
@@ -379,7 +379,7 @@ suite('NuGetConfigResolver Tests', () => {
 
         test('Handles password decoding failure', async () => {
             const source = { Name: 'SecureSource', Url: 'http://secure', Password: 'Encrypted' };
-            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentials').resolves([source]);
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([source]);
 
             vscodeGetConfigurationStub.returns({
                 get: (key: string) => {
@@ -394,7 +394,7 @@ suite('NuGetConfigResolver Tests', () => {
 
             executeScriptStub.rejects(new Error('Script failed'));
 
-            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceDir);
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
 
             // Should keep original password
             assert.strictEqual(sources[0]!.Password, 'Encrypted');
@@ -405,10 +405,10 @@ suite('NuGetConfigResolver Tests', () => {
 
         test('Caches credentials even without script', async () => {
              const source = { Name: 'PlainSource', Url: 'http://plain', Username: 'user', Password: 'password' };
-             sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentials').resolves([source]);
+             sandbox.stub(NuGetConfigResolver, 'GetSourcesWithCredentialsAsync').resolves([source]);
              vscodeGetConfigurationStub.returns({ get: () => [] });
 
-             await NuGetConfigResolver.GetSourcesAndDecodePasswords(workspaceDir);
+             await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
 
              assert.ok(credentialsCacheSetStub.calledWith('PlainSource', 'user', 'password'));
         });

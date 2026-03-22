@@ -94,7 +94,7 @@ export default class PasswordScriptExecutor {
   public static _spawn = spawn;
   // END: Test Hook
 
-  static async ExecuteScript(scriptPath: string, encodedPassword: string): Promise<string> {
+  static async ExecuteScriptAsync(scriptPath: string, encodedPassword: string): Promise<string> {
     if (!encodedPassword || encodedPassword.trim() === '') {
       throw new Error('Encoded password is empty or undefined');
     }
@@ -114,7 +114,7 @@ export default class PasswordScriptExecutor {
     }
 
     // Create and store the pending execution promise
-    const executionPromise = this.executeScriptInternal(scriptPath, encodedPassword, cacheKey);
+    const executionPromise = this.executeScriptInternalAsync(scriptPath, encodedPassword, cacheKey);
     this.pendingExecutions.set(cacheKey, executionPromise);
 
     try {
@@ -125,7 +125,7 @@ export default class PasswordScriptExecutor {
     }
   }
 
-  private static async executeScriptInternal(scriptPath: string, encodedPassword: string, cacheKey: string): Promise<string> {
+  private static async executeScriptInternalAsync(scriptPath: string, encodedPassword: string, cacheKey: string): Promise<string> {
     try {
       const pty = new PasswordScriptTerminal(scriptPath, encodedPassword, this._spawn);
       

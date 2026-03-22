@@ -52,18 +52,13 @@ export class CustomDropdown extends LitElement {
       }
 
       .dropdown-menu {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        min-width: 100%;
+        position: fixed;
         max-height: 200px;
         overflow-y: auto;
-        z-index: 100;
-        background-color: var(--vscode-dropdown-background);
+        z-index: 9999;
+        background-color: var(--vscode-dropdown-listBackground, var(--vscode-dropdown-background));
         border: 1px solid var(--vscode-dropdown-border);
-        border-top: none;
-        border-radius: 0 0 2px 2px;
+        border-radius: 2px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
       }
 
@@ -71,8 +66,6 @@ export class CustomDropdown extends LitElement {
         padding: 4px 8px;
         cursor: pointer;
         white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
         font-size: inherit;
         color: var(--vscode-dropdown-foreground);
       }
@@ -93,21 +86,38 @@ export class CustomDropdown extends LitElement {
   @property() override ariaLabel: string = "";
 
   @state() private open: boolean = false;
+  @state() private _menuTop: number = 0;
+  @state() private _menuRight: number = 0;
+  @state() private _menuMinWidth: number = 0;
 
   private get selectedLabel(): string {
     return this.options.find((o) => o.value === this.value)?.label ?? this.value;
   }
 
+  private computeMenuPosition(): void {
+    const trigger = this.shadowRoot?.querySelector(".dropdown-trigger");
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    this._menuTop = rect.bottom;
+    this._menuRight = window.innerWidth - rect.right;
+    this._menuMinWidth = rect.width;
+  }
+
   private toggle(): void {
     this.open = !this.open;
     if (this.open) {
+      this.computeMenuPosition();
       this.addOutsideClickListener();
+      window.addEventListener("scroll", this._closeHandler, true);
+      window.addEventListener("resize", this._closeHandler);
+    } else {
+      this.removeListeners();
     }
   }
 
   private select(value: string): void {
     this.open = false;
-    this.removeOutsideClickListener();
+    this.removeListeners();
     if (value !== this.value) {
       this.value = value;
       this.dispatchEvent(
@@ -123,37 +133,47 @@ export class CustomDropdown extends LitElement {
   private onKeydown(e: KeyboardEvent): void {
     if (e.key === "Escape") {
       this.open = false;
-      this.removeOutsideClickListener();
+      this.removeListeners();
       e.preventDefault();
     } else if (e.key === "Enter" || e.key === " ") {
       this.toggle();
       e.preventDefault();
     } else if (!this.open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       this.open = true;
+      this.computeMenuPosition();
       this.addOutsideClickListener();
+      window.addEventListener("scroll", this._closeHandler, true);
+      window.addEventListener("resize", this._closeHandler);
       e.preventDefault();
     }
   }
 
-  private outsideClickHandler = (e: MouseEvent) => {
+  private _closeHandler = () => {
+    this.open = false;
+    this.removeListeners();
+  };
+
+  private _outsideClickHandler = (e: MouseEvent) => {
     const path = e.composedPath();
     if (!path.includes(this)) {
       this.open = false;
-      this.removeOutsideClickListener();
+      this.removeListeners();
     }
   };
 
   private addOutsideClickListener(): void {
-    document.addEventListener("click", this.outsideClickHandler, true);
+    document.addEventListener("click", this._outsideClickHandler, true);
   }
 
-  private removeOutsideClickListener(): void {
-    document.removeEventListener("click", this.outsideClickHandler, true);
+  private removeListeners(): void {
+    document.removeEventListener("click", this._outsideClickHandler, true);
+    window.removeEventListener("scroll", this._closeHandler, true);
+    window.removeEventListener("resize", this._closeHandler);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.removeOutsideClickListener();
+    this.removeListeners();
   }
 
   override render(): unknown {
@@ -172,7 +192,11 @@ export class CustomDropdown extends LitElement {
       </button>
       ${this.open
         ? html`
-            <div class="dropdown-menu" role="listbox">
+            <div
+              class="dropdown-menu"
+              role="listbox"
+              style="top:${this._menuTop}px; right:${this._menuRight}px; min-width:${this._menuMinWidth}px;"
+            >
               ${this.options.map(
                 (opt) => html`
                   <div

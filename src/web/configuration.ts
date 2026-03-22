@@ -13,8 +13,8 @@ export default class ConfigurationService extends EventTarget {
     return this.configuration;
   }
 
-  async Reload() {
-    const result = await this.hostApi.getConfiguration();
+  async ReloadAsync() {
+    const result = await this.hostApi.getConfigurationAsync();
     if (result.ok) {
       this.configuration = result.value.Configuration;
     }
