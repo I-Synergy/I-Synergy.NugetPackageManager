@@ -40,6 +40,7 @@ type ProjectPackage = {
   Version: string;
   IsPinned: boolean;
   VersionSource: VersionSource;
+  CpmFramework?: string;  // framework label if from a conditional CPM group, e.g. "net8.0"
 };
 
 type Project = {
@@ -70,6 +71,8 @@ type OutdatedPackage = {
   Projects: Array<{ Name: string; Path: string; Version: string }>;
   SourceUrl: string;
   SourceName: string;
+  CpmCondition?: string;   // raw XML Condition string; absent = unconditional
+  CpmFramework?: string;   // parsed label e.g. "net8.0"; absent = unconditional
 };
 
 type InconsistentPackage = {
@@ -77,6 +80,7 @@ type InconsistentPackage = {
   Versions: Array<{
     Version: string;
     Projects: Array<{ Name: string; Path: string }>;
+    CpmFramework?: string;  // framework label if version is framework-conditional
   }>;
   LatestInstalledVersion: string;
   CpmManaged: boolean;

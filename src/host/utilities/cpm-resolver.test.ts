@@ -331,4 +331,160 @@ suite('CpmResolver Tests', () => {
         assert.ok(updated.includes('Include="Package.B"'), 'Package.B Include attribute should remain');
         assert.ok(updated.includes('Version="2.0.0"'), 'Package.B version should be unchanged');
     });
+
+    // ─── GetFrameworkPackageMapAsync ────────────────────────────────────────────
+
+    test('GetFrameworkPackageMapAsync returns null when no Directory.Packages.props exists', async () => {
+        const result = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+        assert.strictEqual(result, null);
+    });
+
+    test('GetFrameworkPackageMapAsync returns null when CPM is disabled', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Pkg.A" Version="1.0.0" />
+  </ItemGroup>
+</Project>`);
+        const result = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+        assert.strictEqual(result, null);
+    });
+
+    test('GetFrameworkPackageMapAsync returns only unconditional entries when no Condition attributes', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Pkg.A" Version="1.0.0" />
+    <PackageVersion Include="Pkg.B" Version="2.0.0" />
+  </ItemGroup>
+</Project>`);
+        const result = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+        assert.ok(result !== null);
+        assert.strictEqual(result.unconditional.size, 2);
+        assert.strictEqual(result.conditional.length, 0);
+        assert.strictEqual(result.unconditional.get('Pkg.A'), '1.0.0');
+        assert.strictEqual(result.unconditional.get('Pkg.B'), '2.0.0');
+    });
+
+    test('GetFrameworkPackageMapAsync separates conditional and unconditional entries', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Pkg.Common" Version="1.0.0" />
+  </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net8.0'))">
+    <PackageVersion Include="Pkg.Net8" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net9.0'))">
+    <PackageVersion Include="Pkg.Net9" Version="9.0.0" />
+  </ItemGroup>
+</Project>`);
+        const result = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+        assert.ok(result !== null);
+        assert.strictEqual(result.unconditional.size, 1);
+        assert.strictEqual(result.unconditional.get('Pkg.Common'), '1.0.0');
+        assert.strictEqual(result.conditional.length, 2);
+
+        const net8 = result.conditional.find((e) => e.framework === 'net8.0');
+        assert.ok(net8, 'net8.0 entry should exist');
+        assert.strictEqual(net8!.versions.get('Pkg.Net8'), '8.0.0');
+
+        const net9 = result.conditional.find((e) => e.framework === 'net9.0');
+        assert.ok(net9, 'net9.0 entry should exist');
+        assert.strictEqual(net9!.versions.get('Pkg.Net9'), '9.0.0');
+    });
+
+    test('GetFrameworkPackageMapAsync parses framework label from condition', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup Condition="$(TargetFramework.StartsWith('netstandard2.0'))">
+    <PackageVersion Include="Pkg.Std" Version="3.0.0" />
+  </ItemGroup>
+</Project>`);
+        const result = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+        assert.ok(result !== null);
+        assert.strictEqual(result.conditional.length, 1);
+        assert.strictEqual(result.conditional[0]!.framework, 'netstandard2.0');
+    });
+
+    // ─── UpdatePackageVersionAsync with condition ────────────────────────────────
+
+    test('UpdatePackageVersion with condition updates only within matching ItemGroup', async () => {
+        const condition = "$(TargetFramework.StartsWith('net8.0'))";
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Pkg.Common" Version="1.0.0" />
+  </ItemGroup>
+  <ItemGroup Condition="${condition}">
+    <PackageVersion Include="Pkg.Net8" Version="8.0.0" />
+  </ItemGroup>
+</Project>`);
+        await CpmResolver.UpdatePackageVersionAsync(projectPath, 'Pkg.Net8', '8.1.0', condition);
+
+        const updated = fs.readFileSync(cpmPath, 'utf8');
+        assert.ok(updated.includes('Version="8.1.0"'), 'Pkg.Net8 version should be updated');
+        assert.ok(updated.includes('Version="1.0.0"'), 'Pkg.Common version should be unchanged');
+    });
+
+    test('UpdatePackageVersion with condition does not touch same package in unconditional group', async () => {
+        const condition = "$(TargetFramework.StartsWith('net8.0'))";
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Pkg.A" Version="1.0.0" />
+  </ItemGroup>
+  <ItemGroup Condition="${condition}">
+    <PackageVersion Include="Pkg.A" Version="8.0.0" />
+  </ItemGroup>
+</Project>`);
+        await CpmResolver.UpdatePackageVersionAsync(projectPath, 'Pkg.A', '8.1.0', condition);
+
+        const updated = fs.readFileSync(cpmPath, 'utf8');
+        // The unconditional version should remain 1.0.0
+        assert.ok(updated.includes('Version="1.0.0"'), 'unconditional Pkg.A version should be unchanged');
+        assert.ok(updated.includes('Version="8.1.0"'), 'conditional Pkg.A version should be updated');
+    });
+
+    test('UpdatePackageVersion with condition throws when package not in that ItemGroup', async () => {
+        const condition = "$(TargetFramework.StartsWith('net8.0'))";
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup Condition="${condition}">
+    <PackageVersion Include="Pkg.Net8" Version="8.0.0" />
+  </ItemGroup>
+</Project>`);
+        await assert.rejects(
+            async () => await CpmResolver.UpdatePackageVersionAsync(projectPath, 'Pkg.NotThere', '1.0.0', condition),
+            (err: Error) => {
+                assert.ok(err.message.includes('Pkg.NotThere'), 'Error should mention the package');
+                return true;
+            }
+        );
+    });
+
+    test('UpdatePackageVersion with condition throws when ItemGroup not found', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Pkg.A" Version="1.0.0" />
+  </ItemGroup>
+</Project>`);
+        const condition = "$(TargetFramework.StartsWith('net8.0'))";
+        await assert.rejects(
+            async () => await CpmResolver.UpdatePackageVersionAsync(projectPath, 'Pkg.A', '2.0.0', condition),
+            (err: Error) => {
+                assert.ok(err.message.includes('ItemGroup'), 'Error should mention ItemGroup');
+                return true;
+            }
+        );
+    });
 });

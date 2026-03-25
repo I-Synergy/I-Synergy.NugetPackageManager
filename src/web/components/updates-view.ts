@@ -51,6 +51,7 @@ export class UpdatesView extends LitElement {
             flex-shrink: 0;
           }
         }
+
       }
     `,
   ];
@@ -58,6 +59,7 @@ export class UpdatesView extends LitElement {
   @state() packages: OutdatedPackageViewModel[] = [];
   @state() isUpdating: boolean = false;
   @state() statusText: string = "";
+  @property() selectedFramework: string = "";
   @property({ type: Boolean }) prerelease: boolean = false;
   @property({ attribute: false }) projectPaths: string[] = [];
   @property() sourceUrl: string = "";
@@ -88,23 +90,41 @@ export class UpdatesView extends LitElement {
         bubbles: true,
         composed: true,
       }));
+      this.dispatchEvent(new CustomEvent("framework-options-changed", {
+        detail: this.frameworkOptions,
+        bubbles: true,
+        composed: true,
+      }));
     },
   });
 
+  get frameworkOptions(): Array<{ value: string; label: string }> {
+    const frameworks = new Set(this.packages.map((p) => p.CpmFramework).filter(Boolean));
+    if (frameworks.size === 0) return [];
+    return [
+      { value: "", label: "All frameworks" },
+      ...[...frameworks].sort().map((f) => ({ value: f, label: f })),
+    ];
+  }
+
   private get visiblePackages(): OutdatedPackageViewModel[] {
-    if (!this.filterQuery) return this.packages;
+    let list = this.packages;
+    if (this.selectedFramework !== "" && this.frameworkOptions.length > 0) {
+      list = list.filter((p) => p.CpmFramework === this.selectedFramework || p.CpmFramework === "");
+    }
+    if (!this.filterQuery) return list;
     const q = this.filterQuery.toLowerCase();
-    return this.packages.filter((p) => p.Id.toLowerCase().includes(q));
+    return list.filter((p) => p.Id.toLowerCase().includes(q));
   }
 
   private get allVisibleSelected(): boolean {
-    const all = this.packages;
-    return all.length > 0 && all.every((p) => p.Selected);
+    const visible = this.visiblePackages;
+    return visible.length > 0 && visible.every((p) => p.Selected);
   }
 
   private toggleSelectAll(): void {
     const selectAll = !this.allVisibleSelected;
-    this.packages.forEach((p) => { p.Selected = selectAll; });
+    this.visiblePackages.forEach((p) => { p.Selected = selectAll; });
     this.requestUpdate();
   }
 
@@ -129,12 +149,15 @@ export class UpdatesView extends LitElement {
             PackageId: pkg.Id,
             Version: pkg.LatestVersion,
             ProjectPaths: pkg.Projects.map((p) => p.Path),
+            ...(pkg.CpmCondition ? { CpmCondition: pkg.CpmCondition } : {}),
           },
         ],
       });
       const succeeded = result.ok && result.value.Results.every((r) => r.Success);
       if (succeeded) {
-        this.packages = this.packages.filter((p) => p.Id !== pkg.Id);
+        // Use CpmCondition as the unique key so updating net8.0 doesn't also
+        // remove the net9.0 entry for the same package ID.
+        this.packages = this.packages.filter((p) => !(p.Id === pkg.Id && p.CpmCondition === pkg.CpmCondition));
         this.dispatchEvent(new CustomEvent<number>("count-changed", {
           detail: this.packages.length,
           bubbles: true,
@@ -155,7 +178,7 @@ export class UpdatesView extends LitElement {
   }
 
   private async updateAllSelectedAsync(): Promise<void> {
-    const selected = this.packages.filter((p) => p.Selected);
+    const selected = this.visiblePackages.filter((p) => p.Selected);
     if (selected.length === 0) return;
 
     const confirm = await hostApi.showConfirmationAsync({
@@ -228,6 +251,9 @@ export class UpdatesView extends LitElement {
             composed: true,
           }))}
         ></package-row>
+        ${pkg.CpmFramework && !this.selectedFramework
+          ? html`<span class="framework-badge">${pkg.CpmFramework}</span>`
+          : nothing}
         <div class="row-actions">
           <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" ?disabled=${pkg.IsUpdating} @click=${async () => await this.updateSingleAsync(pkg)}>
             <span class="codicon codicon-arrow-circle-up"></span>
@@ -241,10 +267,9 @@ export class UpdatesView extends LitElement {
     const isLoading = this._loadTask.status === TaskStatus.PENDING;
     const hasError = this._loadTask.status === TaskStatus.ERROR;
     const visible = this.visiblePackages;
-    const totalSelectedCount = this.packages.filter((p) => p.Selected).length;
-    const allPackagesSelected =
-      this.packages.length > 0 && this.packages.every((p) => p.Selected);
-    const updateBtnLabel = allPackagesSelected ? "Update All" : "Update Selected";
+    const totalSelectedCount = visible.filter((p) => p.Selected).length;
+    const allVisibleSelected = this.allVisibleSelected;
+    const updateBtnLabel = allVisibleSelected ? "Update All" : "Update Selected";
 
     return html`
       <div class="updates-container" aria-busy=${isLoading}>
@@ -253,8 +278,8 @@ export class UpdatesView extends LitElement {
           <div class="toolbar-right">
             ${visible.length > 0
               ? html`
-                  <button class="icon-btn" title="${allPackagesSelected ? "Deselect all" : "Select all"}" aria-label="${allPackagesSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
-                    <span class="codicon ${allPackagesSelected ? "codicon-check-all" : "codicon-circle-large-outline"}"></span>
+                  <button class="icon-btn" title="${allVisibleSelected ? "Deselect all" : "Select all"}" aria-label="${allVisibleSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
+                    <span class="codicon ${allVisibleSelected ? "codicon-check-all" : "codicon-circle-large-outline"}"></span>
                   </button>
                   <button class="primary-btn" ?disabled=${this.isUpdating || totalSelectedCount === 0} @click=${async () => await this.updateAllSelectedAsync()}>
                     ${updateBtnLabel}

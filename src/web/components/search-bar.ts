@@ -233,6 +233,7 @@ export class SearchBar extends LitElement {
           </label>
         </div>
         <div class="search-bar-right">
+          <slot name="extra-right"></slot>
           <custom-dropdown
             .options=${this.sortOptions}
             .value=${this.sortBy}

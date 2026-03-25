@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as fs from "fs/promises";
+import * as path from "path";
 import type {
   HostAPI,
   GetProjectsRequest,
@@ -33,13 +35,59 @@ import type {
 import type { Result } from "@/common/rpc/result";
 import { ok, fail } from "@/common/rpc/result";
 import ProjectParser from "./utilities/project-parser";
-import CpmResolver from "./utilities/cpm-resolver";
+import CpmResolver, { type CpmPackageMap } from "./utilities/cpm-resolver";
 import nugetApiFactory from "./nuget/api-factory";
 import NuGetConfigResolver from "./utilities/nuget-config-resolver";
 import TaskExecutor, { DotnetError } from "./utilities/task-executor";
 import StatusBarUtils from "./utilities/status-bar-utils";
 import { Logger } from "../common/logger";
 import { AxiosError } from "axios";
+
+/**
+ * Parses a .sln or .slnx file and returns the absolute paths of all project files it references.
+ * Returns null if the file cannot be read or parsed.
+ */
+async function parseSolutionProjectPathsAsync(slnPath: string): Promise<string[] | null> {
+  try {
+    const content = await fs.readFile(slnPath, "utf-8");
+    const slnDir = path.dirname(slnPath);
+    const projectPaths: string[] = [];
+    const ext = path.extname(slnPath).toLowerCase();
+
+    if (ext === ".slnx") {
+      // .slnx is XML: <Project Path="relative/path/to/Project.csproj" />
+      const re = /<Project\s[^>]*\bPath="([^"]+\.(?:csproj|fsproj|vbproj))"/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(content)) !== null) {
+        const rel = m[1]!.replace(/\\/g, path.sep);
+        projectPaths.push(path.resolve(slnDir, rel));
+      }
+    } else {
+      // .sln text format: Project("...") = "Name", "relative\path.csproj", "{GUID}"
+      const re = /^Project\([^)]+\)\s*=\s*"[^"]+",\s*"([^"]+\.(?:csproj|fsproj|vbproj))"/gm;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(content)) !== null) {
+        const rel = m[1]!.replace(/\\/g, path.sep);
+        projectPaths.push(path.resolve(slnDir, rel));
+      }
+    }
+
+    return projectPaths;
+  } catch {
+    return null;
+  }
+}
+
+/** Merges all CPM groups into a single flat map for ProjectParser (which expects a flat map). */
+function buildFlatCpmMap(cpmMap: CpmPackageMap): Map<string, string> {
+  const flat = new Map(cpmMap.unconditional);
+  for (const entry of cpmMap.conditional) {
+    for (const [id, version] of entry.versions) {
+      if (!flat.has(id)) flat.set(id, version);
+    }
+  }
+  return flat;
+}
 
 function extractResponseDetail(data: unknown): string {
   if (!data) return "";
@@ -91,19 +139,47 @@ export function createHostAPI(): HostAPI {
     async getProjectsAsync(request: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>> {
       Logger.info("getProjects: Handling request");
 
-      const projectFiles = await vscode.workspace.findFiles(
+      // Discover solution files (.sln / .slnx) in workspace roots (non-recursive).
+      // If any exist, restrict project discovery to only the projects they reference.
+      const slnFiles = await vscode.workspace.findFiles("*.{sln,slnx}", "**/node_modules/**");
+      let solutionProjectPaths: Set<string> | null = null;
+
+      if (slnFiles.length > 0) {
+        const allPaths = (
+          await Promise.all(slnFiles.map((f) => parseSolutionProjectPathsAsync(f.fsPath)))
+        ).flat().filter((p): p is string => p !== null);
+        if (allPaths.length > 0) {
+          solutionProjectPaths = new Set(allPaths.map((p) => path.normalize(p)));
+          Logger.info(`getProjects: Found ${slnFiles.length} solution file(s), ${solutionProjectPaths.size} project(s) referenced`);
+        }
+      }
+
+      let projectFiles = await vscode.workspace.findFiles(
         "**/*.{csproj,fsproj,vbproj}",
         "**/node_modules/**"
       );
+
+      if (solutionProjectPaths !== null) {
+        projectFiles = projectFiles.filter((f) => solutionProjectPaths!.has(path.normalize(f.fsPath)));
+      }
 
       Logger.info(`getProjects: Found ${projectFiles.length} project files`);
 
       const parseResults = await Promise.allSettled(
         projectFiles.map(async (file) => {
           if (signal?.aborted) throw new Error("cancelled");
-          const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+          const cpmMap = await CpmResolver.GetFrameworkPackageMapAsync(file.fsPath);
+          const cpmVersions = cpmMap ? buildFlatCpmMap(cpmMap) : null;
           const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
-          project.CpmEnabled = cpmVersions !== null;
+          project.CpmEnabled = cpmMap !== null;
+          if (cpmMap) {
+            for (const pkg of project.Packages) {
+              if (!cpmMap.unconditional.has(pkg.Id)) {
+                const entry = cpmMap.conditional.find((e) => e.versions.has(pkg.Id));
+                if (entry) pkg.CpmFramework = entry.framework;
+              }
+            }
+          }
           return project;
         })
       );
@@ -432,42 +508,80 @@ export function createHostAPI(): HostAPI {
           projectFiles = projectFiles.filter((f) => request.ProjectPaths!.includes(f.fsPath));
         }
 
+        // Cache CpmPackageMap by resolved Directory.Packages.props path so that multiple
+        // projects sharing the same file are parsed only once. Store Promises to prevent
+        // redundant concurrent reads when projects are processed in parallel.
+        const cpmMapPromiseCache = new Map<string, Promise<CpmPackageMap>>();
+
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
-            const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+            // Resolve the CPM file path (includes CPM-enabled check for this project).
+            const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(file.fsPath);
+
+            let cpmMap: CpmPackageMap | null = null;
+            if (cpmFilePath) {
+              if (!cpmMapPromiseCache.has(cpmFilePath)) {
+                cpmMapPromiseCache.set(cpmFilePath, CpmResolver.ParseCpmFileAsync(cpmFilePath));
+              }
+              const promise = cpmMapPromiseCache.get(cpmFilePath);
+              if (promise) {
+                cpmMap = await promise;
+              }
+            }
+
+            const cpmVersions = cpmMap ? buildFlatCpmMap(cpmMap) : null;
             const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmVersions !== null;
-            return project;
+
+            return { project, cpmMap };
           })
         );
         const projects: Project[] = [];
+        const projectCpmMaps = new Map<string, CpmPackageMap | null>();
         parseResults.forEach((r, i) => {
           if (r.status === "fulfilled") {
-            projects.push(r.value);
+            projects.push(r.value.project);
+            projectCpmMaps.set(r.value.project.Path, r.value.cpmMap);
           } else {
             Logger.error(`getOutdatedPackages: Failed to parse ${projectFiles[i]?.fsPath ?? "?"}`, r.reason);
           }
         });
 
         const installedMap = new Map<
-          string,
-          { version: string; projects: Array<{ Name: string; Path: string; Version: string }> }
+          string,  // composite key: packageId + "\0" + condition
+          { version: string; condition: string; framework: string; projects: Array<{ Name: string; Path: string; Version: string }> }
         >();
 
         for (const project of projects) {
+          const cpmMap = projectCpmMaps.get(project.Path) ?? null;
+
           for (const pkg of project.Packages) {
             if (!pkg.Version || pkg.IsPinned) continue;
 
-            const existing = installedMap.get(pkg.Id);
+            // Determine which condition (if any) this package belongs to
+            let condition = "";
+            let framework = "";
+            if (cpmMap) {
+              if (!cpmMap.unconditional.has(pkg.Id)) {
+                const entry = cpmMap.conditional.find((e) => e.versions.has(pkg.Id));
+                if (entry) {
+                  condition = entry.condition;
+                  framework = entry.framework;
+                }
+              }
+            }
+
+            const key = `${pkg.Id}\0${condition}`;
+            const existing = installedMap.get(key);
             const projectInfo = { Name: project.Name, Path: project.Path, Version: pkg.Version };
 
             if (existing) {
               existing.projects.push(projectInfo);
-              if (compareVersions(pkg.Version, existing.version) > 0) {
+              if (compareVersions(pkg.Version, existing.version) < 0) {
                 existing.version = pkg.Version;
               }
             } else {
-              installedMap.set(pkg.Id, { version: pkg.Version, projects: [projectInfo] });
+              installedMap.set(key, { version: pkg.Version, condition, framework, projects: [projectInfo] });
             }
           }
         }
@@ -475,30 +589,35 @@ export function createHostAPI(): HostAPI {
         Logger.info(`getOutdatedPackages: ${installedMap.size} unique packages to check`);
 
         const outdated: OutdatedPackage[] = [];
-        const packageIds = Array.from(installedMap.keys());
+        const installedKeys = Array.from(installedMap.keys());
         const batchSize = 5;
 
-        for (let i = 0; i < packageIds.length; i += batchSize) {
+        for (let i = 0; i < installedKeys.length; i += batchSize) {
           if (signal?.aborted) break;
-          const batch = packageIds.slice(i, i + batchSize);
-          const progress = Math.round(((i + batch.length) / packageIds.length) * 100);
-          StatusBarUtils.show(progress, `Checking updates (${i + batch.length}/${packageIds.length})...`);
+          const batch = installedKeys.slice(i, i + batchSize);
+          const progress = Math.round(((i + batch.length) / installedKeys.length) * 100);
+          StatusBarUtils.show(progress, `Checking updates (${i + batch.length}/${installedKeys.length})...`);
 
-          const promises = batch.map(async (packageId) => {
+          const promises = batch.map(async (key) => {
             if (signal?.aborted) return;
-            const installed = installedMap.get(packageId)!;
+            const installed = installedMap.get(key)!;
+            // Extract the real package ID from the composite key (before the null-byte separator)
+            const packageId = key.split("\0")[0]!;
             const latest = await getLatestVersion(packageId, request.Prerelease, sources, signal);
 
             if (signal?.aborted) return;
             if (latest && compareVersions(latest.version, installed.version) > 0) {
-              outdated.push({
+              const outdatedEntry: OutdatedPackage = {
                 Id: packageId,
                 InstalledVersion: installed.version,
                 LatestVersion: latest.version,
                 Projects: installed.projects,
                 SourceUrl: latest.sourceUrl,
                 SourceName: latest.sourceName,
-              });
+              };
+              if (installed.condition) outdatedEntry.CpmCondition = installed.condition;
+              if (installed.framework) outdatedEntry.CpmFramework = installed.framework;
+              outdated.push(outdatedEntry);
             }
           });
 
@@ -538,7 +657,7 @@ export function createHostAPI(): HostAPI {
               if (!update.Version) {
                 throw new Error(`Version is required for CPM package update: ${update.PackageId}`);
               }
-              await CpmResolver.UpdatePackageVersionAsync(projectPath, update.PackageId, update.Version);
+              await CpmResolver.UpdatePackageVersionAsync(projectPath, update.PackageId, update.Version, update.CpmCondition);
             } else {
               await executeAddPackage(update.PackageId, projectPath, update.Version, skipRestore);
             }
@@ -601,9 +720,18 @@ export function createHostAPI(): HostAPI {
 
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
-            const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+            const cpmMap = await CpmResolver.GetFrameworkPackageMapAsync(file.fsPath);
+            const cpmVersions = cpmMap ? buildFlatCpmMap(cpmMap) : null;
             const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
-            project.CpmEnabled = cpmVersions !== null;
+            project.CpmEnabled = cpmMap !== null;
+            if (cpmMap) {
+              for (const pkg of project.Packages) {
+                if (!cpmMap.unconditional.has(pkg.Id)) {
+                  const entry = cpmMap.conditional.find((e) => e.versions.has(pkg.Id));
+                  if (entry) pkg.CpmFramework = entry.framework;
+                }
+              }
+            }
             return project;
           })
         );
@@ -618,30 +746,39 @@ export function createHostAPI(): HostAPI {
           }
         });
 
-        const packageMap = new Map<string, Map<string, Array<{ Name: string; Path: string }>>>();
+        // Key: "packageId\0cpmFramework" — framework-scoped packages are checked for
+        // consistency only within the same framework group, not across frameworks.
+        const packageMap = new Map<string, { framework: string; versions: Map<string, Array<{ Name: string; Path: string }>> }>();
 
         for (const project of projects) {
           for (const pkg of project.Packages) {
             if (!pkg.Version) continue;
+            const framework = pkg.CpmFramework ?? "";
+            const compositeKey = framework ? `${pkg.Id}\0${framework}` : pkg.Id;
 
-            if (!packageMap.has(pkg.Id)) {
-              packageMap.set(pkg.Id, new Map());
+            if (!packageMap.has(compositeKey)) {
+              packageMap.set(compositeKey, { framework, versions: new Map() });
             }
-            const versionMap = packageMap.get(pkg.Id)!;
-            if (!versionMap.has(pkg.Version)) {
-              versionMap.set(pkg.Version, []);
+            const entry = packageMap.get(compositeKey)!;
+            if (!entry.versions.has(pkg.Version)) {
+              entry.versions.set(pkg.Version, []);
             }
-            versionMap.get(pkg.Version)!.push({ Name: project.Name, Path: project.Path });
+            entry.versions.get(pkg.Version)!.push({ Name: project.Name, Path: project.Path });
           }
         }
 
         const inconsistent: InconsistentPackage[] = [];
 
-        for (const [packageId, versionMap] of packageMap) {
+        for (const [compositeKey, { framework, versions: versionMap }] of packageMap) {
           if (versionMap.size <= 1) continue;
+          const packageId = compositeKey.split("\0")[0]!;
 
           const versions = Array.from(versionMap.entries())
-            .map(([version, projects]) => ({ Version: version, Projects: projects }))
+            .map(([version, projs]) => ({
+              Version: version,
+              Projects: projs,
+              ...(framework ? { CpmFramework: framework } : {}),
+            }))
             .sort((a, b) => compareVersions(b.Version, a.Version));
 
           inconsistent.push({
@@ -869,8 +1006,8 @@ function parseNu1605Conflicts(output: string): Nu1605Conflict[] {
   const regex = /error NU1605: Detected package downgrade: (.+?) from (.+?) to /g;
   let match;
   while ((match = regex.exec(output)) !== null) {
-    const packageId = match[1].trim();
-    const requiredVersion = match[2].trim();
+    const packageId = match[1]!.trim();
+    const requiredVersion = match[2]!.trim();
     if (!seen.has(packageId)) {
       seen.add(packageId);
       conflicts.push({ packageId, requiredVersion });
@@ -996,29 +1133,51 @@ async function getLatestVersion(
 }
 
 function compareVersions(a: string, b: string): number {
-  const cleanA = a.replace(/[[\]()]/g, "");
-  const cleanB = b.replace(/[[\]()]/g, "");
+  // Strip NuGet version range brackets/parentheses and build metadata (+...).
+  const stripOuter = (v: string) => v.replace(/[[\]()]/g, "").split("+")[0] ?? v;
+  const cleanA = stripOuter(a);
+  const cleanB = stripOuter(b);
 
-  const partsA = cleanA.split(/[.\-+]/).map((p) => {
-    const n = parseInt(p, 10);
-    return isNaN(n) ? p : n;
-  });
-  const partsB = cleanB.split(/[.\-+]/).map((p) => {
-    const n = parseInt(p, 10);
-    return isNaN(n) ? p : n;
-  });
+  // Separate release tuple from prerelease label on the FIRST hyphen only.
+  // NuGet follows SemVer: 1.0.0-beta is a prerelease of 1.0.0.
+  const firstDashA = cleanA.indexOf("-");
+  const firstDashB = cleanB.indexOf("-");
+  const releaseA = firstDashA >= 0 ? cleanA.substring(0, firstDashA) : cleanA;
+  const releaseB = firstDashB >= 0 ? cleanB.substring(0, firstDashB) : cleanB;
+  const prereleaseA = firstDashA >= 0 ? cleanA.substring(firstDashA + 1) : "";
+  const prereleaseB = firstDashB >= 0 ? cleanB.substring(firstDashB + 1) : "";
 
-  const maxLen = Math.max(partsA.length, partsB.length);
+  // Compare numeric release components (major.minor.patch[.revision]).
+  const toNumParts = (s: string) =>
+    s.split(".").map((p) => { const n = parseInt(p, 10); return isNaN(n) ? 0 : n; });
+  const numA = toNumParts(releaseA);
+  const numB = toNumParts(releaseB);
+  const maxLen = Math.max(numA.length, numB.length);
   for (let i = 0; i < maxLen; i++) {
-    const pA = partsA[i] ?? 0;
-    const pB = partsB[i] ?? 0;
+    const pA = numA[i] ?? 0;
+    const pB = numB[i] ?? 0;
+    if (pA !== pB) return pA - pB;
+  }
 
-    if (typeof pA === "number" && typeof pB === "number") {
-      if (pA !== pB) return pA - pB;
-    } else {
-      const cmp = String(pA).localeCompare(String(pB));
-      if (cmp !== 0) return cmp;
-    }
+  // Numeric parts are equal — apply NuGet prerelease precedence:
+  // a stable release (no prerelease label) is always greater than any prerelease.
+  if (prereleaseA === "" && prereleaseB === "") return 0;
+  if (prereleaseA === "") return 1;   // a is stable, b is prerelease → a > b
+  if (prereleaseB === "") return -1;  // a is prerelease, b is stable  → a < b
+
+  // Both have prerelease labels: compare dot-separated identifiers.
+  // Numeric identifiers are compared numerically; alphanumeric ones lexicographically.
+  const preA = prereleaseA.split(".");
+  const preB = prereleaseB.split(".");
+  const preLen = Math.max(preA.length, preB.length);
+  for (let i = 0; i < preLen; i++) {
+    const pA = preA[i] ?? "";
+    const pB = preB[i] ?? "";
+    if (pA === pB) continue;
+    const nA = parseInt(pA, 10);
+    const nB = parseInt(pB, 10);
+    if (!isNaN(nA) && !isNaN(nB)) return nA - nB;
+    return pA.localeCompare(pB);
   }
   return 0;
 }
