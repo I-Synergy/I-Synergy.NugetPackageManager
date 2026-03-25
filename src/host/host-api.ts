@@ -508,26 +508,40 @@ export function createHostAPI(): HostAPI {
           projectFiles = projectFiles.filter((f) => request.ProjectPaths!.includes(f.fsPath));
         }
 
-        // Cache CpmPackageMap per project path to avoid re-reading shared Directory.Packages.props
-        const cpmMapCache = new Map<string, CpmPackageMap | null>();
+        // Cache CpmPackageMap by resolved Directory.Packages.props path so that multiple
+        // projects sharing the same file are parsed only once. Store Promises to prevent
+        // redundant concurrent reads when projects are processed in parallel.
+        const cpmMapPromiseCache = new Map<string, Promise<CpmPackageMap>>();
 
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
-            const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+            // Resolve the CPM file path (includes CPM-enabled check for this project).
+            const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(file.fsPath);
+
+            let cpmMap: CpmPackageMap | null = null;
+            if (cpmFilePath) {
+              if (!cpmMapPromiseCache.has(cpmFilePath)) {
+                cpmMapPromiseCache.set(cpmFilePath, CpmResolver.ParseCpmFileAsync(cpmFilePath));
+              }
+              const promise = cpmMapPromiseCache.get(cpmFilePath);
+              if (promise) {
+                cpmMap = await promise;
+              }
+            }
+
+            const cpmVersions = cpmMap ? buildFlatCpmMapAsync(cpmMap) : null;
             const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmVersions !== null;
 
-            if (project.CpmEnabled && !cpmMapCache.has(file.fsPath)) {
-              cpmMapCache.set(file.fsPath, await CpmResolver.GetFrameworkPackageMapAsync(file.fsPath));
-            }
-
-            return project;
+            return { project, cpmMap };
           })
         );
         const projects: Project[] = [];
+        const projectCpmMaps = new Map<string, CpmPackageMap | null>();
         parseResults.forEach((r, i) => {
           if (r.status === "fulfilled") {
-            projects.push(r.value);
+            projects.push(r.value.project);
+            projectCpmMaps.set(r.value.project.Path, r.value.cpmMap);
           } else {
             Logger.error(`getOutdatedPackages: Failed to parse ${projectFiles[i]?.fsPath ?? "?"}`, r.reason);
           }
@@ -539,7 +553,7 @@ export function createHostAPI(): HostAPI {
         >();
 
         for (const project of projects) {
-          const cpmMap = cpmMapCache.get(project.Path) ?? null;
+          const cpmMap = projectCpmMaps.get(project.Path) ?? null;
 
           for (const pkg of project.Packages) {
             if (!pkg.Version || pkg.IsPinned) continue;

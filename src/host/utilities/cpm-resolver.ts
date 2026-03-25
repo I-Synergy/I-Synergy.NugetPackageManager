@@ -48,6 +48,33 @@ export default class CpmResolver {
     return this.ParseFrameworkPackageMapAsync(cpmFilePath);
   }
 
+  /**
+   * Resolves the `Directory.Packages.props` path for a project if CPM is enabled,
+   * or returns `null` if CPM is not applicable. Use the returned path as a cache key
+   * so that multiple projects sharing the same props file can reuse a single parse.
+   */
+  static async FindCpmFilePathAsync(projectPath: string): Promise<string | null> {
+    const cpmFilePath = await this.FindDirectoryPackagesPropsFileAsync(projectPath);
+    if (!cpmFilePath) {
+      return null;
+    }
+
+    if (!await this.IsCentralPackageManagementEnabledAsync(projectPath, cpmFilePath)) {
+      return null;
+    }
+
+    return cpmFilePath;
+  }
+
+  /**
+   * Parses a `Directory.Packages.props` file directly (without project-path look-up)
+   * and returns its full framework-aware package map. Callers should cache the result
+   * by `cpmFilePath` to avoid re-reading a shared file for each project.
+   */
+  static async ParseCpmFileAsync(cpmFilePath: string): Promise<CpmPackageMap> {
+    return this.ParseFrameworkPackageMapAsync(cpmFilePath);
+  }
+
   private static async FindDirectoryPackagesPropsFileAsync(projectPath: string): Promise<string | null> {
     let currentDir = path.dirname(projectPath);
     const root = path.parse(currentDir).root;
