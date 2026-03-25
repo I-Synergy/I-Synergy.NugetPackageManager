@@ -79,7 +79,7 @@ async function parseSolutionProjectPathsAsync(slnPath: string): Promise<string[]
 }
 
 /** Merges all CPM groups into a single flat map for ProjectParser (which expects a flat map). */
-function buildFlatCpmMapAsync(cpmMap: CpmPackageMap): Map<string, string> {
+function buildFlatCpmMap(cpmMap: CpmPackageMap): Map<string, string> {
   const flat = new Map(cpmMap.unconditional);
   for (const entry of cpmMap.conditional) {
     for (const [id, version] of entry.versions) {
