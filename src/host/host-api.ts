@@ -508,26 +508,40 @@ export function createHostAPI(): HostAPI {
           projectFiles = projectFiles.filter((f) => request.ProjectPaths!.includes(f.fsPath));
         }
 
-        // Cache CpmPackageMap per project path to avoid re-reading shared Directory.Packages.props
-        const cpmMapCache = new Map<string, CpmPackageMap | null>();
+        // Cache CpmPackageMap by resolved Directory.Packages.props path so that multiple
+        // projects sharing the same file are parsed only once. Store Promises to prevent
+        // redundant concurrent reads when projects are processed in parallel.
+        const cpmMapPromiseCache = new Map<string, Promise<CpmPackageMap>>();
 
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
-            const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+            // Resolve the CPM file path (includes CPM-enabled check for this project).
+            const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(file.fsPath);
+
+            let cpmMap: CpmPackageMap | null = null;
+            if (cpmFilePath) {
+              if (!cpmMapPromiseCache.has(cpmFilePath)) {
+                cpmMapPromiseCache.set(cpmFilePath, CpmResolver.ParseCpmFileAsync(cpmFilePath));
+              }
+              const promise = cpmMapPromiseCache.get(cpmFilePath);
+              if (promise) {
+                cpmMap = await promise;
+              }
+            }
+
+            const cpmVersions = cpmMap ? buildFlatCpmMapAsync(cpmMap) : null;
             const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmVersions !== null;
 
-            if (project.CpmEnabled && !cpmMapCache.has(file.fsPath)) {
-              cpmMapCache.set(file.fsPath, await CpmResolver.GetFrameworkPackageMapAsync(file.fsPath));
-            }
-
-            return project;
+            return { project, cpmMap };
           })
         );
         const projects: Project[] = [];
+        const projectCpmMaps = new Map<string, CpmPackageMap | null>();
         parseResults.forEach((r, i) => {
           if (r.status === "fulfilled") {
-            projects.push(r.value);
+            projects.push(r.value.project);
+            projectCpmMaps.set(r.value.project.Path, r.value.cpmMap);
           } else {
             Logger.error(`getOutdatedPackages: Failed to parse ${projectFiles[i]?.fsPath ?? "?"}`, r.reason);
           }
@@ -539,7 +553,7 @@ export function createHostAPI(): HostAPI {
         >();
 
         for (const project of projects) {
-          const cpmMap = cpmMapCache.get(project.Path) ?? null;
+          const cpmMap = projectCpmMaps.get(project.Path) ?? null;
 
           for (const pkg of project.Packages) {
             if (!pkg.Version || pkg.IsPinned) continue;
@@ -563,7 +577,7 @@ export function createHostAPI(): HostAPI {
 
             if (existing) {
               existing.projects.push(projectInfo);
-              if (compareVersions(pkg.Version, existing.version) > 0) {
+              if (compareVersions(pkg.Version, existing.version) < 0) {
                 existing.version = pkg.Version;
               }
             } else {
@@ -1119,29 +1133,51 @@ async function getLatestVersion(
 }
 
 function compareVersions(a: string, b: string): number {
-  const cleanA = a.replace(/[[\]()]/g, "");
-  const cleanB = b.replace(/[[\]()]/g, "");
+  // Strip NuGet version range brackets/parentheses and build metadata (+...).
+  const stripOuter = (v: string) => v.replace(/[[\]()]/g, "").split("+")[0] ?? v;
+  const cleanA = stripOuter(a);
+  const cleanB = stripOuter(b);
 
-  const partsA = cleanA.split(/[.\-+]/).map((p) => {
-    const n = parseInt(p, 10);
-    return isNaN(n) ? p : n;
-  });
-  const partsB = cleanB.split(/[.\-+]/).map((p) => {
-    const n = parseInt(p, 10);
-    return isNaN(n) ? p : n;
-  });
+  // Separate release tuple from prerelease label on the FIRST hyphen only.
+  // NuGet follows SemVer: 1.0.0-beta is a prerelease of 1.0.0.
+  const firstDashA = cleanA.indexOf("-");
+  const firstDashB = cleanB.indexOf("-");
+  const releaseA = firstDashA >= 0 ? cleanA.substring(0, firstDashA) : cleanA;
+  const releaseB = firstDashB >= 0 ? cleanB.substring(0, firstDashB) : cleanB;
+  const prereleaseA = firstDashA >= 0 ? cleanA.substring(firstDashA + 1) : "";
+  const prereleaseB = firstDashB >= 0 ? cleanB.substring(firstDashB + 1) : "";
 
-  const maxLen = Math.max(partsA.length, partsB.length);
+  // Compare numeric release components (major.minor.patch[.revision]).
+  const toNumParts = (s: string) =>
+    s.split(".").map((p) => { const n = parseInt(p, 10); return isNaN(n) ? 0 : n; });
+  const numA = toNumParts(releaseA);
+  const numB = toNumParts(releaseB);
+  const maxLen = Math.max(numA.length, numB.length);
   for (let i = 0; i < maxLen; i++) {
-    const pA = partsA[i] ?? 0;
-    const pB = partsB[i] ?? 0;
+    const pA = numA[i] ?? 0;
+    const pB = numB[i] ?? 0;
+    if (pA !== pB) return pA - pB;
+  }
 
-    if (typeof pA === "number" && typeof pB === "number") {
-      if (pA !== pB) return pA - pB;
-    } else {
-      const cmp = String(pA).localeCompare(String(pB));
-      if (cmp !== 0) return cmp;
-    }
+  // Numeric parts are equal — apply NuGet prerelease precedence:
+  // a stable release (no prerelease label) is always greater than any prerelease.
+  if (prereleaseA === "" && prereleaseB === "") return 0;
+  if (prereleaseA === "") return 1;   // a is stable, b is prerelease → a > b
+  if (prereleaseB === "") return -1;  // a is prerelease, b is stable  → a < b
+
+  // Both have prerelease labels: compare dot-separated identifiers.
+  // Numeric identifiers are compared numerically; alphanumeric ones lexicographically.
+  const preA = prereleaseA.split(".");
+  const preB = prereleaseB.split(".");
+  const preLen = Math.max(preA.length, preB.length);
+  for (let i = 0; i < preLen; i++) {
+    const pA = preA[i] ?? "";
+    const pB = preB[i] ?? "";
+    if (pA === pB) continue;
+    const nA = parseInt(pA, 10);
+    const nB = parseInt(pB, 10);
+    if (!isNaN(nA) && !isNaN(nB)) return nA - nB;
+    return pA.localeCompare(pB);
   }
   return 0;
 }
