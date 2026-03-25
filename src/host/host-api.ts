@@ -141,7 +141,6 @@ export function createHostAPI(): HostAPI {
 
       // Discover solution files (.sln / .slnx) in workspace roots (non-recursive).
       // If any exist, restrict project discovery to only the projects they reference.
-      const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
       const slnFiles = await vscode.workspace.findFiles("*.{sln,slnx}", "**/node_modules/**");
       let solutionProjectPaths: Set<string> | null = null;
 
