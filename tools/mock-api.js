@@ -335,13 +335,14 @@
           // Compute current installed versions from PROJECTS so that updates
           // made via the project-row (or batch update) are reflected here.
           var current = MOCK_OUTDATED.map(function(outdated) {
-            var framework = outdated.CpmFramework || '';
             var versions = [];
             outdated.Projects.forEach(function(p) {
               var project = PROJECTS.find(function(proj) { return proj.Path === p.Path; });
               if (!project) return;
+              // Match by package Id only, to stay consistent with the mock
+              // batchUpdatePackagesAsync behavior.
               var pkg = project.Packages.find(function(pk) {
-                return pk.Id === outdated.Id && (pk.CpmFramework || '') === framework;
+                return pk.Id === outdated.Id;
               });
               if (pkg) versions.push(pkg.Version);
             });
