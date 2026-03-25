@@ -936,9 +936,9 @@ export class PackagesView extends LitElement {
             `
           : packages.map(
               (pkg) => html`
-                <div style="display:flex;align-items:center;gap:4px;">
+                <div class="installed-package-row-wrapper">
                   <package-row
-                    style="flex:1;min-width:0;"
+                    class="installed-package-row"
                     .showInstalledVersion=${true}
                     .package=${pkg}
                     .revision=${pkg.Revision}
