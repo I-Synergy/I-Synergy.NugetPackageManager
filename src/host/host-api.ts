@@ -36,7 +36,7 @@ import ProjectParser from "./utilities/project-parser";
 import CpmResolver from "./utilities/cpm-resolver";
 import nugetApiFactory from "./nuget/api-factory";
 import NuGetConfigResolver from "./utilities/nuget-config-resolver";
-import TaskExecutor from "./utilities/task-executor";
+import TaskExecutor, { DotnetError } from "./utilities/task-executor";
 import StatusBarUtils from "./utilities/status-bar-utils";
 import { Logger } from "../common/logger";
 import { AxiosError } from "axios";
@@ -567,16 +567,21 @@ export function createHostAPI(): HostAPI {
       const uniquePaths = [...new Set(request.ProjectPaths)];
       Logger.info(`restoreProjects: Restoring ${uniquePaths.length} project(s)`);
       StatusBarUtils.ShowText("Restoring packages...");
+      const failedPaths: string[] = [];
       try {
         for (const projectPath of uniquePaths) {
-          await TaskExecutor.ExecuteCommandAsync(
-            "dotnet",
-            ["restore", projectPath.replace(/\\/g, "/")],
-            `restore-${projectPath}`
-          );
+          try {
+            await restoreWithConflictResolutionAsync(projectPath);
+          } catch (err) {
+            Logger.error(`restoreProjects: Failed to restore ${projectPath}`, err);
+            failedPaths.push(projectPath);
+          }
         }
       } finally {
         StatusBarUtils.hide();
+      }
+      if (failedPaths.length > 0) {
+        return fail(`Restore failed for ${failedPaths.length} project(s). There may be version conflicts — try updating all related packages together.`);
       }
       return ok(undefined);
     },
@@ -851,6 +856,79 @@ export function createHostAPI(): HostAPI {
 // ============================================================
 // Shared Helpers
 // ============================================================
+
+interface Nu1605Conflict {
+  packageId: string;
+  requiredVersion: string;
+}
+
+function parseNu1605Conflicts(output: string): Nu1605Conflict[] {
+  const seen = new Set<string>();
+  const conflicts: Nu1605Conflict[] = [];
+  // Example line: "error NU1605: Detected package downgrade: Foo.Bar from 2.0.0 to 1.0.0-preview."
+  const regex = /error NU1605: Detected package downgrade: (.+?) from (.+?) to /g;
+  let match;
+  while ((match = regex.exec(output)) !== null) {
+    const packageId = match[1].trim();
+    const requiredVersion = match[2].trim();
+    if (!seen.has(packageId)) {
+      seen.add(packageId);
+      conflicts.push({ packageId, requiredVersion });
+    }
+  }
+  return conflicts;
+}
+
+async function restoreWithConflictResolutionAsync(projectPath: string, attempt = 0): Promise<void> {
+  const MAX_ATTEMPTS = 2;
+  try {
+    await TaskExecutor.ExecuteCommandAsync(
+      "dotnet",
+      ["restore", projectPath.replace(/\\/g, "/")],
+      `restore-${projectPath}`
+    );
+  } catch (err) {
+    if (!(err instanceof DotnetError) || attempt >= MAX_ATTEMPTS) {
+      throw err;
+    }
+
+    const conflicts = parseNu1605Conflicts(err.output);
+    if (conflicts.length === 0) {
+      throw err;
+    }
+
+    Logger.info(`restoreWithConflictResolution: Detected ${conflicts.length} NU1605 conflict(s) in ${projectPath}, applying fixes`);
+
+    const cpmVersions = await CpmResolver.GetPackageVersionsAsync(projectPath);
+    let fixedAny = false;
+
+    for (const { packageId, requiredVersion } of conflicts) {
+      if (cpmVersions && cpmVersions.has(packageId)) {
+        Logger.info(`restoreWithConflictResolution: Updating CPM ${packageId} to ${requiredVersion}`);
+        await CpmResolver.UpdatePackageVersionAsync(projectPath, packageId, requiredVersion);
+        fixedAny = true;
+      } else {
+        const project = await ProjectParser.ParseAsync(projectPath, null);
+        const hasDirectRef = project.Packages.some((p) => p.Id === packageId);
+        if (hasDirectRef) {
+          Logger.info(`restoreWithConflictResolution: Updating direct reference ${packageId} to ${requiredVersion} in ${projectPath}`);
+          await TaskExecutor.ExecuteCommandAsync(
+            "dotnet",
+            ["add", projectPath.replace(/\\/g, "/"), "package", packageId, "--version", requiredVersion, "--no-restore"],
+            `fix-conflict-${packageId}`
+          );
+          fixedAny = true;
+        }
+      }
+    }
+
+    if (!fixedAny) {
+      throw err;
+    }
+
+    await restoreWithConflictResolutionAsync(projectPath, attempt + 1);
+  }
+}
 
 async function executeRemovePackage(packageId: string, projectPath: string, operationId?: string): Promise<void> {
   StatusBarUtils.ShowText(`Removing package ${packageId}...`);

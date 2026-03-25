@@ -173,7 +173,10 @@ export class UpdatesView extends LitElement {
       // package is removed from the list immediately, clearing progressively.
       await Promise.allSettled(selected.map((pkg) => this.updateSingleAsync(pkg, true)));
       // Run dotnet restore once for all affected projects after all writes are done.
-      await hostApi.restoreProjectsAsync({ ProjectPaths: projectPaths });
+      const restoreResult = await hostApi.restoreProjectsAsync({ ProjectPaths: projectPaths });
+      if (!restoreResult.ok) {
+        this.statusText = restoreResult.error;
+      }
     } finally {
       this.isUpdating = false;
       this.requestUpdate();
