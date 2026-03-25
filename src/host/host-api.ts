@@ -529,7 +529,7 @@ export function createHostAPI(): HostAPI {
               }
             }
 
-            const cpmVersions = cpmMap ? buildFlatCpmMapAsync(cpmMap) : null;
+            const cpmVersions = cpmMap ? buildFlatCpmMap(cpmMap) : null;
             const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmVersions !== null;
 
