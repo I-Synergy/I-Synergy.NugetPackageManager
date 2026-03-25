@@ -22,6 +22,7 @@ export class PackageViewModel {
   SourceUrl: string = "";
   AllowsUpdate: boolean = true;
   Revision: number = 0;
+  CpmFramework: string = "";
 
   constructor(model: Package, status: PackageViewModelStatus = "Detailed") {
     this._authors = model.Authors;
@@ -97,12 +98,14 @@ export class ProjectPackageViewModel {
   Version: string;
   IsPinned: boolean;
   VersionSource: VersionSource;
+  CpmFramework: string;
 
   constructor(model: ProjectPackage) {
     this.Id = model.Id;
     this.Version = model.Version;
     this.IsPinned = model.IsPinned;
     this.VersionSource = model.VersionSource;
+    this.CpmFramework = model.CpmFramework ?? "";
   }
 }
 
@@ -113,6 +116,8 @@ export class OutdatedPackageViewModel {
   Projects: Array<{ Name: string; Path: string; Version: string }>;
   SourceUrl: string;
   SourceName: string;
+  CpmCondition: string;
+  CpmFramework: string;
   IsUpdating: boolean = false;
   Selected: boolean = false;
 
@@ -123,12 +128,14 @@ export class OutdatedPackageViewModel {
     this.Projects = model.Projects;
     this.SourceUrl = model.SourceUrl;
     this.SourceName = model.SourceName;
+    this.CpmCondition = model.CpmCondition ?? "";
+    this.CpmFramework = model.CpmFramework ?? "";
   }
 }
 
 export class InconsistentPackageViewModel {
   Id: string;
-  Versions: Array<{ Version: string; Projects: Array<{ Name: string; Path: string }> }>;
+  Versions: Array<{ Version: string; Projects: Array<{ Name: string; Path: string }>; CpmFramework: string }>;
   LatestInstalledVersion: string;
   CpmManaged: boolean;
   TargetVersion: string;
@@ -136,7 +143,7 @@ export class InconsistentPackageViewModel {
 
   constructor(model: InconsistentPackage) {
     this.Id = model.Id;
-    this.Versions = model.Versions;
+    this.Versions = model.Versions.map((v) => ({ ...v, CpmFramework: v.CpmFramework ?? "" }));
     this.LatestInstalledVersion = model.LatestInstalledVersion;
     this.CpmManaged = model.CpmManaged;
     this.TargetVersion = model.LatestInstalledVersion;

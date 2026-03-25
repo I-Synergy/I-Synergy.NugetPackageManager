@@ -1,8 +1,8 @@
 # NuGet Package Manager — Session Context
 
-**Last Updated:** 2026-03-17
-**Project Version:** 1.0.0
-**Branch:** main
+**Last Updated:** 2026-03-25
+**Project Version:** 1.1.0
+**Branch:** feature/framework-aware-cpm-updates
 
 ---
 
@@ -16,6 +16,20 @@
 ---
 
 ## Recent Work (this session and last)
+
+### Completed: Framework-aware CPM updates (feature/framework-aware-cpm-updates)
+- `CpmResolver`: new `CpmFrameworkEntry`/`CpmPackageMap` types; `GetFrameworkPackageMapAsync` reads conditional ItemGroups; `UpdatePackageVersionAsync` accepts optional `condition` for scoped regex updates
+- `OutdatedPackage`/`OutdatedPackageViewModel`: optional `CpmCondition`/`CpmFramework` fields
+- `BatchUpdateRequest.Updates`: optional `CpmCondition` field forwarded to `CpmResolver.UpdatePackageVersionAsync`
+- `host-api.ts`: composite key `"packageId\0condition"` in `getOutdatedPackagesAsync`; per-project `CpmPackageMap` cached; `CpmCondition`/`CpmFramework` emitted on `OutdatedPackage`
+- `updates-view.ts`: `_selectedFramework` state; `frameworkOptions` getter (empty → no selector shown); `visiblePackages` filters by framework + text query; `toggleSelectAll`/`allVisibleSelected` scoped to visible; framework `<select>` dropdown (only when conditional packages exist); framework badge on each row in "All" view; `CpmCondition` passed in update calls; reset on load
+- Tests: 9 new tests in `cpm-resolver.test.ts` covering `GetFrameworkPackageMapAsync` + condition-scoped updates; 226 total passing
+
+### Completed: NU1605 Batch Update Fixes (v1.1.0, released)
+- `DotnetError` class with `output: string` carrying full stdout
+- `restoreProjectsAsync`: per-project error isolation, collects all failures
+- `restoreWithConflictResolutionAsync`: auto-fixes NU1605 transitive conflicts, retries (max 2 attempts)
+- `parseNu1605Conflicts`: regex parser for NU1605 error lines
 
 ### Completed: Real-time Progress Bar
 - Migrated `executeAddPackage` / `executeRemovePackage` from `vscode.Task` → `child_process.spawn`

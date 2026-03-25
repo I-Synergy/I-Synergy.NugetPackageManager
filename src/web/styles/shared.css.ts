@@ -123,4 +123,17 @@ export const sharedStyles = css`
     overflow-y: auto;
     flex: 1;
   }
+
+  /* --- Framework badge (CPM multi-framework) --- */
+  .framework-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 `;

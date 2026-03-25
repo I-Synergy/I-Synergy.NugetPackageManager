@@ -28,30 +28,37 @@
     {
       Name: 'MyApp.csproj',
       Path: '/workspace/MyApp/MyApp.csproj',
-      CpmEnabled: false,
+      CpmEnabled: true,
       Packages: [
-        { Id: 'Newtonsoft.Json', Version: '12.0.3', IsPinned: false, VersionSource: 'project' },
-        { Id: 'Serilog', Version: '2.11.0', IsPinned: false, VersionSource: 'project' },
-        { Id: 'AutoMapper', Version: '11.0.1', IsPinned: false, VersionSource: 'project' },
+        { Id: 'Newtonsoft.Json', Version: '12.0.3', IsPinned: false, VersionSource: 'central' },
+        { Id: 'Serilog', Version: '2.11.0', IsPinned: false, VersionSource: 'central' },
+        { Id: 'AutoMapper', Version: '11.0.1', IsPinned: false, VersionSource: 'central' },
+        // framework-conditional packages
+        { Id: 'Microsoft.Extensions.Http', Version: '8.0.0', IsPinned: false, VersionSource: 'central', CpmFramework: 'net8.0' },
+        { Id: 'Microsoft.AspNetCore.OpenApi', Version: '8.0.4', IsPinned: false, VersionSource: 'central', CpmFramework: 'net8.0' },
+        { Id: 'Microsoft.Extensions.Http', Version: '9.0.0', IsPinned: false, VersionSource: 'central', CpmFramework: 'net9.0' },
+        { Id: 'Microsoft.AspNetCore.OpenApi', Version: '9.0.0', IsPinned: false, VersionSource: 'central', CpmFramework: 'net9.0' },
       ],
     },
     {
       Name: 'MyApp.Tests.csproj',
       Path: '/workspace/MyApp/MyApp.Tests.csproj',
-      CpmEnabled: false,
+      CpmEnabled: true,
       Packages: [
-        { Id: 'Newtonsoft.Json', Version: '13.0.1', IsPinned: false, VersionSource: 'project' },
-        { Id: 'Microsoft.NET.Test.Sdk', Version: '17.0.0', IsPinned: false, VersionSource: 'project' },
+        { Id: 'Newtonsoft.Json', Version: '13.0.1', IsPinned: false, VersionSource: 'central' },
+        { Id: 'Microsoft.NET.Test.Sdk', Version: '17.0.0', IsPinned: false, VersionSource: 'central' },
+        { Id: 'Microsoft.Extensions.Http', Version: '8.0.1', IsPinned: false, VersionSource: 'central', CpmFramework: 'net8.0' },
       ],
     },
     {
       Name: 'MyApp.Core.csproj',
       Path: '/workspace/MyApp/MyApp.Core.csproj',
-      CpmEnabled: false,
+      CpmEnabled: true,
       Packages: [
-        { Id: 'AutoMapper', Version: '11.0.1', IsPinned: false, VersionSource: 'project' },
-        { Id: 'MediatR', Version: '10.0.0', IsPinned: false, VersionSource: 'project' },
-        { Id: 'Microsoft.Extensions.Logging', Version: '7.0.0', IsPinned: false, VersionSource: 'project' },
+        { Id: 'AutoMapper', Version: '11.0.1', IsPinned: false, VersionSource: 'central' },
+        { Id: 'MediatR', Version: '10.0.0', IsPinned: false, VersionSource: 'central' },
+        { Id: 'Microsoft.Extensions.Logging', Version: '8.0.0', IsPinned: false, VersionSource: 'central', CpmFramework: 'net8.0' },
+        { Id: 'Microsoft.Extensions.Logging', Version: '9.0.0', IsPinned: false, VersionSource: 'central', CpmFramework: 'net9.0' },
       ],
     },
   ];
@@ -108,26 +115,34 @@
    * Returns the same shape as InconsistentPackage[].
    */
   function computeInconsistencies() {
-    var byId = {};
+    // Group by "id\0framework" so framework-scoped packages are only compared
+    // within the same framework group, not across net8.0 vs net9.0.
+    var byKey = {};
     PROJECTS.forEach(function (project) {
       project.Packages.forEach(function (pkg) {
-        if (!byId[pkg.Id]) byId[pkg.Id] = {};
-        if (!byId[pkg.Id][pkg.Version]) byId[pkg.Id][pkg.Version] = [];
-        byId[pkg.Id][pkg.Version].push({ Name: project.Name, Path: project.Path });
+        var framework = pkg.CpmFramework || '';
+        var key = framework ? (pkg.Id + '\0' + framework) : pkg.Id;
+        if (!byKey[key]) byKey[key] = { id: pkg.Id, framework: framework, versions: {} };
+        if (!byKey[key].versions[pkg.Version]) byKey[key].versions[pkg.Version] = [];
+        byKey[key].versions[pkg.Version].push({ Name: project.Name, Path: project.Path });
       });
     });
 
     var result = [];
-    Object.keys(byId).forEach(function (id) {
-      var versionMap = byId[id];
-      var versions = Object.keys(versionMap);
+    Object.keys(byKey).forEach(function (key) {
+      var entry = byKey[key];
+      var versions = Object.keys(entry.versions);
       if (versions.length > 1) {
-        var sorted = versions.slice().sort().reverse(); // rough desc sort
+        var sorted = versions.slice().sort().reverse();
         result.push({
-          Id: id,
-          Versions: versions.map(function (v) { return { Version: v, Projects: versionMap[v] }; }),
+          Id: entry.id,
+          Versions: versions.map(function (v) {
+            var versionEntry = { Version: v, Projects: entry.versions[v] };
+            if (entry.framework) versionEntry.CpmFramework = entry.framework;
+            return versionEntry;
+          }),
           LatestInstalledVersion: sorted[0],
-          CpmManaged: false,
+          CpmManaged: true,
         });
       }
     });
@@ -136,11 +151,127 @@
 
   // ── NuGet proxy call ───────────────────────────────────────────────────────
 
+  // ── Mock outdated packages (CPM multi-framework demo) ─────────────────────
+  // Includes unconditional packages + net8.0 and net9.0 framework-scoped
+  // packages so the framework filter dropdown is visible in the Updates tab.
+
+  var NET8_CONDITION = "$(TargetFramework.StartsWith('net8.0'))";
+  var NET9_CONDITION = "$(TargetFramework.StartsWith('net9.0'))";
+
+  var MOCK_OUTDATED = [
+    // Unconditional (no framework scope)
+    {
+      Id: 'Newtonsoft.Json',
+      InstalledVersion: '12.0.3',
+      LatestVersion: '13.0.3',
+      Projects: [
+        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '12.0.3' },
+      ],
+      SourceUrl: 'https://api.nuget.org/v3/index.json',
+      SourceName: 'nuget.org',
+    },
+    {
+      Id: 'Serilog',
+      InstalledVersion: '2.11.0',
+      LatestVersion: '4.2.0',
+      Projects: [
+        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '2.11.0' },
+        { Name: 'MyApp.Core.csproj', Path: '/workspace/MyApp/MyApp.Core.csproj', Version: '2.11.0' },
+      ],
+      SourceUrl: 'https://api.nuget.org/v3/index.json',
+      SourceName: 'nuget.org',
+    },
+    {
+      Id: 'AutoMapper',
+      InstalledVersion: '11.0.1',
+      LatestVersion: '13.0.1',
+      Projects: [
+        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '11.0.1' },
+        { Name: 'MyApp.Core.csproj', Path: '/workspace/MyApp/MyApp.Core.csproj', Version: '11.0.1' },
+      ],
+      SourceUrl: 'https://api.nuget.org/v3/index.json',
+      SourceName: 'nuget.org',
+    },
+    // net8.0-scoped packages
+    {
+      Id: 'Microsoft.Extensions.Http',
+      InstalledVersion: '8.0.0',
+      LatestVersion: '9.0.5',
+      Projects: [
+        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '8.0.0' },
+      ],
+      SourceUrl: 'https://api.nuget.org/v3/index.json',
+      SourceName: 'nuget.org',
+      CpmCondition: NET8_CONDITION,
+      CpmFramework: 'net8.0',
+    },
+    {
+      Id: 'Microsoft.Extensions.Logging',
+      InstalledVersion: '8.0.0',
+      LatestVersion: '9.0.5',
+      Projects: [
+        { Name: 'MyApp.Core.csproj', Path: '/workspace/MyApp/MyApp.Core.csproj', Version: '8.0.0' },
+      ],
+      SourceUrl: 'https://api.nuget.org/v3/index.json',
+      SourceName: 'nuget.org',
+      CpmCondition: NET8_CONDITION,
+      CpmFramework: 'net8.0',
+    },
+    {
+      Id: 'Microsoft.AspNetCore.OpenApi',
+      InstalledVersion: '8.0.4',
+      LatestVersion: '8.0.15',
+      Projects: [
+        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '8.0.4' },
+      ],
+      SourceUrl: 'https://api.nuget.org/v3/index.json',
+      SourceName: 'nuget.org',
+      CpmCondition: NET8_CONDITION,
+      CpmFramework: 'net8.0',
+    },
+    // net9.0-scoped packages
+    {
+      Id: 'Microsoft.Extensions.Http',
+      InstalledVersion: '9.0.0',
+      LatestVersion: '9.0.5',
+      Projects: [
+        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '9.0.0' },
+      ],
+      SourceUrl: 'https://api.nuget.org/v3/index.json',
+      SourceName: 'nuget.org',
+      CpmCondition: NET9_CONDITION,
+      CpmFramework: 'net9.0',
+    },
+    {
+      Id: 'Microsoft.Extensions.Logging',
+      InstalledVersion: '9.0.0',
+      LatestVersion: '9.0.5',
+      Projects: [
+        { Name: 'MyApp.Core.csproj', Path: '/workspace/MyApp/MyApp.Core.csproj', Version: '9.0.0' },
+      ],
+      SourceUrl: 'https://api.nuget.org/v3/index.json',
+      SourceName: 'nuget.org',
+      CpmCondition: NET9_CONDITION,
+      CpmFramework: 'net9.0',
+    },
+    {
+      Id: 'Microsoft.AspNetCore.OpenApi',
+      InstalledVersion: '9.0.0',
+      LatestVersion: '9.0.5',
+      Projects: [
+        { Name: 'MyApp.csproj', Path: '/workspace/MyApp/MyApp.csproj', Version: '9.0.0' },
+      ],
+      SourceUrl: 'https://api.nuget.org/v3/index.json',
+      SourceName: 'nuget.org',
+      CpmCondition: NET9_CONDITION,
+      CpmFramework: 'net9.0',
+    },
+  ];
+
   var NUGET_PROXY_METHODS = [
     'getPackagesAsync',
     'getPackageAsync',
     'getPackageDetailsAsync',
-    'getOutdatedPackagesAsync',
     'getVulnerablePackagesAsync',
   ];
 
@@ -197,6 +328,33 @@
       case 'getProjectsAsync':
         window.__mockState.projectsDone = true;
         return { ok: true, value: { Projects: PROJECTS } };
+
+      case 'getOutdatedPackagesAsync':
+        window.__mockState.outdatedDone = true;
+        return delay(600).then(function () {
+          // Compute current installed versions from PROJECTS so that updates
+          // made via the project-row (or batch update) are reflected here.
+          var current = MOCK_OUTDATED.map(function(outdated) {
+            var versions = [];
+            outdated.Projects.forEach(function(p) {
+              var project = PROJECTS.find(function(proj) { return proj.Path === p.Path; });
+              if (!project) return;
+              // Match by package Id only, to stay consistent with the mock
+              // batchUpdatePackagesAsync behavior.
+              var pkg = project.Packages.find(function(pk) {
+                return pk.Id === outdated.Id;
+              });
+              if (pkg) versions.push(pkg.Version);
+            });
+            if (versions.length === 0) return null;
+            versions.sort(compareVersions);
+            var minVersion = versions[0];
+            // Package is up-to-date — remove from list
+            if (compareVersions(outdated.LatestVersion, minVersion) <= 0) return null;
+            return Object.assign({}, outdated, { InstalledVersion: minVersion });
+          }).filter(Boolean);
+          return { ok: true, value: { Packages: current } };
+        });
 
       case 'getInconsistentPackagesAsync':
         window.__mockState.inconsistentDone = true;
