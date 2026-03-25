@@ -413,7 +413,10 @@ export class PackagesView extends LitElement {
   private static readonly _emptyPaths: string[] = [];
 
   private get effectiveProjectPaths(): string[] {
-    return this.showProjectTree ? this.selectedProjectPaths : PackagesView._emptyPaths;
+    if (this.showProjectTree) return this.selectedProjectPaths;
+    // When the project tree is hidden, still scope to the solution-filtered project list
+    // so that updates/consolidate/vulnerabilities don't scan non-solution projects.
+    return this.projects.map(p => p.Path);
   }
 
   private get filteredProjects(): Array<ProjectViewModel> {
