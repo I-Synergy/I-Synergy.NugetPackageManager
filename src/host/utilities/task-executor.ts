@@ -7,6 +7,13 @@ export interface OperationProgress {
   percent: number;
 }
 
+export class DotnetError extends Error {
+  constructor(message: string, public readonly output: string) {
+    super(message);
+    this.name = "DotnetError";
+  }
+}
+
 export class TaskExecutor {
   private globalMutex: Mutex = new Mutex();
   private progress = new Map<string, OperationProgress>();
@@ -21,10 +28,12 @@ export class TaskExecutor {
       const child = spawn(command, args);
       let stdoutBuf = "";
       let stderrBuf = "";
+      const allLines: string[] = [];
 
       const parseLine = (line: string): void => {
         const l = line.toLowerCase().trim();
         if (!l) return;
+        allLines.push(line.trim());
         Logger.debug(`TaskExecutor [${operationId}]: ${line.trim()}`);
 
         let next: OperationProgress | null = null;
@@ -63,12 +72,8 @@ export class TaskExecutor {
           Logger.info(`TaskExecutor.ExecuteCommandAsync: Completed successfully`);
           resolve();
         } else {
-          const detail = stderrBuf.trim() || stdoutBuf.trim();
-          const message = detail
-            ? `dotnet exited with code ${code}: ${detail.split("\n").slice(-3).join(" ").trim()}`
-            : `dotnet exited with code ${code}`;
           Logger.error(`TaskExecutor.ExecuteCommandAsync: Exited with code ${code}`);
-          reject(new Error(message));
+          reject(new DotnetError(`dotnet exited with code ${code}`, allLines.join("\n")));
         }
       });
 
