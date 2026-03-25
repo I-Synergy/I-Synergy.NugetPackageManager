@@ -288,11 +288,17 @@ export default class NuGetConfigResolver {
     return { sources, credentials, disabledSources, clear };
   }
 
+  // NuGet encodes characters that are invalid in XML element names using _xHHHH_ notation,
+  // e.g. "rfh/nuget" is stored as "rfh_x002F_nuget". Decode back to the original source name.
+  private static DecodeNuGetXmlName(name: string): string {
+    return name.replace(/_x([0-9A-Fa-f]{4})_/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  }
+
   private static ParseCredentialNode(sourceNode: Node & { nodeName: string }): {
     name: string;
     cred: { Username?: string; [key: string]: string | undefined };
   } | null {
-    const sourceName = sourceNode.nodeName;
+    const sourceName = this.DecodeNuGetXmlName(sourceNode.nodeName);
     const user = xpath.select("string(add[@key='Username']/@value)", sourceNode) as string;
 
     // NuGet configs use "ClearTextPassword" for plain text and "Password" for encrypted values
