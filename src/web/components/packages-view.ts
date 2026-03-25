@@ -306,6 +306,11 @@ export class PackagesView extends LitElement {
   @state() packagesLoadingErrorMessage: string = "";
   @state() selectedProjectPaths: string[] = [];
   @state() showProjectTree: boolean = false;
+  @state() private _installedFramework = "";
+  @state() private _updatesFrameworkOptions: Array<{ value: string; label: string }> = [];
+  @state() private _updatesFramework = "";
+  @state() private _consolidateFrameworkOptions: Array<{ value: string; label: string }> = [];
+  @state() private _consolidateFramework = "";
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -529,6 +534,7 @@ export class PackagesView extends LitElement {
 
   async LoadProjectsPackagesAsync(forceReload: boolean = false, _signal?: AbortSignal): Promise<void> {
     this._projectsPackagesAc?.abort();
+    this._installedFramework = "";
     const ac = new AbortController();
     this._projectsPackagesAc = ac;
     const projectsToUse =
@@ -547,22 +553,26 @@ export class PackagesView extends LitElement {
     const grouped = packages.reduce(
       (
         acc: {
-          [key: string]: { versions: string[]; allowsUpdate: boolean };
+          [key: string]: { id: string; framework: string; versions: string[]; allowsUpdate: boolean };
         },
         item
       ) => {
-        const { Id, Version, IsPinned } = item;
+        const { Id, Version, IsPinned, CpmFramework } = item;
+        const framework = CpmFramework ?? "";
+        // Separate by framework so net8.0 and net9.0 versions of the same package
+        // show as distinct rows rather than collapsing into "Multiple"
+        const key = framework ? `${Id}\0${framework}` : Id;
 
-        if (!acc[Id]) {
-          acc[Id] = { versions: [], allowsUpdate: false };
+        if (!acc[key]) {
+          acc[key] = { id: Id, framework, versions: [], allowsUpdate: false };
         }
 
-        if (acc[Id].versions.indexOf(Version) < 0) {
-          acc[Id].versions.push(Version);
+        if (acc[key].versions.indexOf(Version) < 0) {
+          acc[key].versions.push(Version);
         }
 
         if (!IsPinned) {
-          acc[Id].allowsUpdate = true;
+          acc[key].allowsUpdate = true;
         }
 
         return acc;
@@ -570,11 +580,11 @@ export class PackagesView extends LitElement {
       {}
     );
 
-    this.projectsPackages = Object.entries(grouped).map(([Id, data]) => {
+    this.projectsPackages = Object.entries(grouped).map(([_key, data]) => {
       const pkg = new PackageViewModel(
         {
-          Id: Id,
-          Name: Id,
+          Id: data.id,
+          Name: data.id,
           IconUrl: "",
           Versions: data.versions.map((x) => ({
             Id: "",
@@ -597,6 +607,7 @@ export class PackagesView extends LitElement {
         "MissingDetails"
       );
       pkg.AllowsUpdate = data.allowsUpdate;
+      pkg.CpmFramework = data.framework;
       return pkg;
     });
 
@@ -864,12 +875,52 @@ export class PackagesView extends LitElement {
     `;
   }
 
+  private get installedFrameworkOptions(): Array<{ value: string; label: string }> {
+    const frameworks = new Set(this.projectsPackages.map((p) => p.CpmFramework).filter(Boolean));
+    if (frameworks.size === 0) return [];
+    return [
+      { value: "", label: "All frameworks" },
+      ...[...frameworks].sort().map((f) => ({ value: f, label: f })),
+    ];
+  }
+
   private get filteredInstalledPackages(): PackageViewModel[] {
     return this.projectsPackages.filter((pkg) => {
       const version = pkg.InstalledVersion;
       const isPrerelease = version.includes("-");
-      return this.filters.Prerelease ? isPrerelease : !isPrerelease;
+      if (!(this.filters.Prerelease ? isPrerelease : !isPrerelease)) return false;
+      if (this._installedFramework !== "" && this.installedFrameworkOptions.length > 0) {
+        return pkg.CpmFramework === this._installedFramework || pkg.CpmFramework === "";
+      }
+      return true;
     });
+  }
+
+  private renderFrameworkSlot(): unknown {
+    let options: Array<{ value: string; label: string }> = [];
+    let value = "";
+    let onChange: (e: Event) => void = () => {};
+
+    if (this.activeTab === "installed" && this.installedFrameworkOptions.length > 0) {
+      options = this.installedFrameworkOptions;
+      value = this._installedFramework;
+      onChange = (e: Event) => { this._installedFramework = (e.target as HTMLSelectElement).value; };
+    } else if (this.activeTab === "updates" && this._updatesFrameworkOptions.length > 0) {
+      options = this._updatesFrameworkOptions;
+      value = this._updatesFramework;
+      onChange = (e: Event) => { this._updatesFramework = (e.target as HTMLSelectElement).value; };
+    } else if (this.activeTab === "consolidate" && this._consolidateFrameworkOptions.length > 0) {
+      options = this._consolidateFrameworkOptions;
+      value = this._consolidateFramework;
+      onChange = (e: Event) => { this._consolidateFramework = (e.target as HTMLSelectElement).value; };
+    }
+
+    if (options.length === 0) return nothing;
+    return html`
+      <select slot="extra-right" aria-label="Filter by framework" .value=${value} @change=${onChange}>
+        ${options.map((o) => html`<option value=${o.value}>${o.label}</option>`)}
+      </select>
+    `;
   }
 
   private renderInstalledTab(): unknown {
@@ -885,12 +936,18 @@ export class PackagesView extends LitElement {
             `
           : packages.map(
               (pkg) => html`
-                <package-row
-                  .showInstalledVersion=${true}
-                  .package=${pkg}
-                  .revision=${pkg.Revision}
-                  @click=${async () => await this.SelectPackageAsync(pkg)}
-                ></package-row>
+                <div style="display:flex;align-items:center;gap:4px;">
+                  <package-row
+                    style="flex:1;min-width:0;"
+                    .showInstalledVersion=${true}
+                    .package=${pkg}
+                    .revision=${pkg.Revision}
+                    @click=${async () => await this.SelectPackageAsync(pkg)}
+                  ></package-row>
+                  ${pkg.CpmFramework && !this._installedFramework
+                    ? html`<span class="framework-badge">${pkg.CpmFramework}</span>`
+                    : nothing}
+                </div>
               `
             )}
       </div>
@@ -1097,7 +1154,7 @@ export class PackagesView extends LitElement {
               await this.ReloadInvokedAsync(e.detail)}
             @filter-changed=${async (e: CustomEvent<FilterEvent>) =>
               await this.UpdatePackagesFiltersAsync(e.detail)}
-          ></search-bar>
+          >${this.renderFrameworkSlot()}</search-bar>
           <div class="tab-content ${this.activeTab === "browse" ? "" : "hidden"}" role="tabpanel" aria-label="browse tab">
             ${this.renderBrowseTab()}
           </div>
@@ -1110,15 +1167,25 @@ export class PackagesView extends LitElement {
               .projectPaths=${this.effectiveProjectPaths}
               .sourceUrl=${this.filters.SourceUrl}
               .filterQuery=${this.filters.Query}
+              .selectedFramework=${this._updatesFramework}
               @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
               @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
+              @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
+                this._updatesFrameworkOptions = e.detail;
+                this._updatesFramework = "";
+              }}
             ></updates-view>
           </div>
           <div class="tab-content ${this.activeTab === "consolidate" ? "" : "hidden"}" role="tabpanel" aria-label="consolidate tab">
             <consolidate-view
               .projectPaths=${this.effectiveProjectPaths}
+              .selectedFramework=${this._consolidateFramework}
               @count-changed=${(e: CustomEvent<number>) => { this.consolidateCount = e.detail; }}
               @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
+              @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
+                this._consolidateFrameworkOptions = e.detail;
+                this._consolidateFramework = "";
+              }}
             ></consolidate-view>
           </div>
           <div class="tab-content ${this.activeTab === "vulnerabilities" ? "" : "hidden"}" role="tabpanel" aria-label="vulnerabilities tab">

@@ -108,6 +108,7 @@ export class ConsolidateView extends LitElement {
   @state() packages: InconsistentPackageViewModel[] = [];
   @state() isConsolidating: boolean = false;
   @state() statusText: string = "";
+  @property() selectedFramework: string = "";
   @property({ attribute: false }) projectPaths: string[] = [];
 
   private _loadTask = new Task(this, {
@@ -131,8 +132,31 @@ export class ConsolidateView extends LitElement {
         bubbles: true,
         composed: true,
       }));
+      this.dispatchEvent(new CustomEvent("framework-options-changed", {
+        detail: this.frameworkOptions,
+        bubbles: true,
+        composed: true,
+      }));
     },
   });
+
+  get frameworkOptions(): Array<{ value: string; label: string }> {
+    const frameworks = new Set(
+      this.packages.flatMap((p) => p.Versions.map((v) => v.CpmFramework)).filter(Boolean)
+    );
+    if (frameworks.size === 0) return [];
+    return [
+      { value: "", label: "All frameworks" },
+      ...[...frameworks].sort().map((f) => ({ value: f, label: f })),
+    ];
+  }
+
+  private get visiblePackages(): InconsistentPackageViewModel[] {
+    if (this.selectedFramework === "" || this.frameworkOptions.length === 0) return this.packages;
+    return this.packages.filter((p) =>
+      p.Versions.some((v) => v.CpmFramework === this.selectedFramework || v.CpmFramework === "")
+    );
+  }
 
   async LoadInconsistentPackagesAsync(forceReload: boolean = false): Promise<void> {
     this.packages = [];
@@ -232,6 +256,7 @@ export class ConsolidateView extends LitElement {
             (v) => html`
               <div class="version-row">
                 <span class="version">${v.Version}</span>
+                ${v.CpmFramework && !this.selectedFramework ? html`<span class="framework-badge">${v.CpmFramework}</span>` : nothing}
                 <span class="projects">${v.Projects.map((p) => p.Name).join(", ")}</span>
               </div>
             `
@@ -244,6 +269,7 @@ export class ConsolidateView extends LitElement {
   override render(): unknown {
     const isLoading = this._loadTask.status === TaskStatus.PENDING;
     const hasError = this._loadTask.status === TaskStatus.ERROR;
+    const visible = this.visiblePackages;
 
     return html`
       <div class="consolidate-container" aria-busy=${isLoading}>
@@ -272,7 +298,7 @@ export class ConsolidateView extends LitElement {
               </div>
             `
           : nothing}
-        ${!isLoading && this.packages.length === 0 && !hasError
+        ${!isLoading && visible.length === 0 && !hasError
           ? html`
               <div class="empty">
                 <span class="codicon codicon-check"></span>
@@ -288,10 +314,10 @@ export class ConsolidateView extends LitElement {
               </div>
             `
           : nothing}
-        ${!isLoading && this.packages.length > 0
+        ${!isLoading && visible.length > 0
           ? html`
               <div class="package-list" role="list" aria-label="Inconsistent packages">
-                ${this.packages.map((pkg) => this.renderPackageRow(pkg))}
+                ${visible.map((pkg) => this.renderPackageRow(pkg))}
               </div>
             `
           : nothing}

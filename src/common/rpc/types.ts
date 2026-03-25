@@ -88,6 +88,7 @@ export type BatchUpdateRequest = {
     PackageId: string;
     Version: string;
     ProjectPaths: string[];
+    CpmCondition?: string;  // raw XML Condition for framework-scoped CPM updates
   }>;
   SkipRestore?: boolean;
 };

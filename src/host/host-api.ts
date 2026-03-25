@@ -33,13 +33,24 @@ import type {
 import type { Result } from "@/common/rpc/result";
 import { ok, fail } from "@/common/rpc/result";
 import ProjectParser from "./utilities/project-parser";
-import CpmResolver from "./utilities/cpm-resolver";
+import CpmResolver, { type CpmPackageMap } from "./utilities/cpm-resolver";
 import nugetApiFactory from "./nuget/api-factory";
 import NuGetConfigResolver from "./utilities/nuget-config-resolver";
 import TaskExecutor, { DotnetError } from "./utilities/task-executor";
 import StatusBarUtils from "./utilities/status-bar-utils";
 import { Logger } from "../common/logger";
 import { AxiosError } from "axios";
+
+/** Merges all CPM groups into a single flat map for ProjectParser (which expects a flat map). */
+function buildFlatCpmMapAsync(cpmMap: CpmPackageMap): Map<string, string> {
+  const flat = new Map(cpmMap.unconditional);
+  for (const entry of cpmMap.conditional) {
+    for (const [id, version] of entry.versions) {
+      if (!flat.has(id)) flat.set(id, version);
+    }
+  }
+  return flat;
+}
 
 function extractResponseDetail(data: unknown): string {
   if (!data) return "";
@@ -101,9 +112,18 @@ export function createHostAPI(): HostAPI {
       const parseResults = await Promise.allSettled(
         projectFiles.map(async (file) => {
           if (signal?.aborted) throw new Error("cancelled");
-          const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+          const cpmMap = await CpmResolver.GetFrameworkPackageMapAsync(file.fsPath);
+          const cpmVersions = cpmMap ? buildFlatCpmMapAsync(cpmMap) : null;
           const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
-          project.CpmEnabled = cpmVersions !== null;
+          project.CpmEnabled = cpmMap !== null;
+          if (cpmMap) {
+            for (const pkg of project.Packages) {
+              if (!cpmMap.unconditional.has(pkg.Id)) {
+                const entry = cpmMap.conditional.find((e) => e.versions.has(pkg.Id));
+                if (entry) pkg.CpmFramework = entry.framework;
+              }
+            }
+          }
           return project;
         })
       );
@@ -432,11 +452,19 @@ export function createHostAPI(): HostAPI {
           projectFiles = projectFiles.filter((f) => request.ProjectPaths!.includes(f.fsPath));
         }
 
+        // Cache CpmPackageMap per project path to avoid re-reading shared Directory.Packages.props
+        const cpmMapCache = new Map<string, CpmPackageMap | null>();
+
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
             const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
             const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmVersions !== null;
+
+            if (project.CpmEnabled && !cpmMapCache.has(file.fsPath)) {
+              cpmMapCache.set(file.fsPath, await CpmResolver.GetFrameworkPackageMapAsync(file.fsPath));
+            }
+
             return project;
           })
         );
@@ -450,15 +478,31 @@ export function createHostAPI(): HostAPI {
         });
 
         const installedMap = new Map<
-          string,
-          { version: string; projects: Array<{ Name: string; Path: string; Version: string }> }
+          string,  // composite key: packageId + "\0" + condition
+          { version: string; condition: string; framework: string; projects: Array<{ Name: string; Path: string; Version: string }> }
         >();
 
         for (const project of projects) {
+          const cpmMap = cpmMapCache.get(project.Path) ?? null;
+
           for (const pkg of project.Packages) {
             if (!pkg.Version || pkg.IsPinned) continue;
 
-            const existing = installedMap.get(pkg.Id);
+            // Determine which condition (if any) this package belongs to
+            let condition = "";
+            let framework = "";
+            if (cpmMap) {
+              if (!cpmMap.unconditional.has(pkg.Id)) {
+                const entry = cpmMap.conditional.find((e) => e.versions.has(pkg.Id));
+                if (entry) {
+                  condition = entry.condition;
+                  framework = entry.framework;
+                }
+              }
+            }
+
+            const key = `${pkg.Id}\0${condition}`;
+            const existing = installedMap.get(key);
             const projectInfo = { Name: project.Name, Path: project.Path, Version: pkg.Version };
 
             if (existing) {
@@ -467,7 +511,7 @@ export function createHostAPI(): HostAPI {
                 existing.version = pkg.Version;
               }
             } else {
-              installedMap.set(pkg.Id, { version: pkg.Version, projects: [projectInfo] });
+              installedMap.set(key, { version: pkg.Version, condition, framework, projects: [projectInfo] });
             }
           }
         }
@@ -475,30 +519,35 @@ export function createHostAPI(): HostAPI {
         Logger.info(`getOutdatedPackages: ${installedMap.size} unique packages to check`);
 
         const outdated: OutdatedPackage[] = [];
-        const packageIds = Array.from(installedMap.keys());
+        const installedKeys = Array.from(installedMap.keys());
         const batchSize = 5;
 
-        for (let i = 0; i < packageIds.length; i += batchSize) {
+        for (let i = 0; i < installedKeys.length; i += batchSize) {
           if (signal?.aborted) break;
-          const batch = packageIds.slice(i, i + batchSize);
-          const progress = Math.round(((i + batch.length) / packageIds.length) * 100);
-          StatusBarUtils.show(progress, `Checking updates (${i + batch.length}/${packageIds.length})...`);
+          const batch = installedKeys.slice(i, i + batchSize);
+          const progress = Math.round(((i + batch.length) / installedKeys.length) * 100);
+          StatusBarUtils.show(progress, `Checking updates (${i + batch.length}/${installedKeys.length})...`);
 
-          const promises = batch.map(async (packageId) => {
+          const promises = batch.map(async (key) => {
             if (signal?.aborted) return;
-            const installed = installedMap.get(packageId)!;
+            const installed = installedMap.get(key)!;
+            // Extract the real package ID from the composite key (before the null-byte separator)
+            const packageId = key.split("\0")[0]!;
             const latest = await getLatestVersion(packageId, request.Prerelease, sources, signal);
 
             if (signal?.aborted) return;
             if (latest && compareVersions(latest.version, installed.version) > 0) {
-              outdated.push({
+              const outdatedEntry: OutdatedPackage = {
                 Id: packageId,
                 InstalledVersion: installed.version,
                 LatestVersion: latest.version,
                 Projects: installed.projects,
                 SourceUrl: latest.sourceUrl,
                 SourceName: latest.sourceName,
-              });
+              };
+              if (installed.condition) outdatedEntry.CpmCondition = installed.condition;
+              if (installed.framework) outdatedEntry.CpmFramework = installed.framework;
+              outdated.push(outdatedEntry);
             }
           });
 
@@ -538,7 +587,7 @@ export function createHostAPI(): HostAPI {
               if (!update.Version) {
                 throw new Error(`Version is required for CPM package update: ${update.PackageId}`);
               }
-              await CpmResolver.UpdatePackageVersionAsync(projectPath, update.PackageId, update.Version);
+              await CpmResolver.UpdatePackageVersionAsync(projectPath, update.PackageId, update.Version, update.CpmCondition);
             } else {
               await executeAddPackage(update.PackageId, projectPath, update.Version, skipRestore);
             }
@@ -601,9 +650,18 @@ export function createHostAPI(): HostAPI {
 
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
-            const cpmVersions = await CpmResolver.GetPackageVersionsAsync(file.fsPath);
+            const cpmMap = await CpmResolver.GetFrameworkPackageMapAsync(file.fsPath);
+            const cpmVersions = cpmMap ? buildFlatCpmMapAsync(cpmMap) : null;
             const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
-            project.CpmEnabled = cpmVersions !== null;
+            project.CpmEnabled = cpmMap !== null;
+            if (cpmMap) {
+              for (const pkg of project.Packages) {
+                if (!cpmMap.unconditional.has(pkg.Id)) {
+                  const entry = cpmMap.conditional.find((e) => e.versions.has(pkg.Id));
+                  if (entry) pkg.CpmFramework = entry.framework;
+                }
+              }
+            }
             return project;
           })
         );
@@ -618,30 +676,39 @@ export function createHostAPI(): HostAPI {
           }
         });
 
-        const packageMap = new Map<string, Map<string, Array<{ Name: string; Path: string }>>>();
+        // Key: "packageId\0cpmFramework" — framework-scoped packages are checked for
+        // consistency only within the same framework group, not across frameworks.
+        const packageMap = new Map<string, { framework: string; versions: Map<string, Array<{ Name: string; Path: string }>> }>();
 
         for (const project of projects) {
           for (const pkg of project.Packages) {
             if (!pkg.Version) continue;
+            const framework = pkg.CpmFramework ?? "";
+            const compositeKey = framework ? `${pkg.Id}\0${framework}` : pkg.Id;
 
-            if (!packageMap.has(pkg.Id)) {
-              packageMap.set(pkg.Id, new Map());
+            if (!packageMap.has(compositeKey)) {
+              packageMap.set(compositeKey, { framework, versions: new Map() });
             }
-            const versionMap = packageMap.get(pkg.Id)!;
-            if (!versionMap.has(pkg.Version)) {
-              versionMap.set(pkg.Version, []);
+            const entry = packageMap.get(compositeKey)!;
+            if (!entry.versions.has(pkg.Version)) {
+              entry.versions.set(pkg.Version, []);
             }
-            versionMap.get(pkg.Version)!.push({ Name: project.Name, Path: project.Path });
+            entry.versions.get(pkg.Version)!.push({ Name: project.Name, Path: project.Path });
           }
         }
 
         const inconsistent: InconsistentPackage[] = [];
 
-        for (const [packageId, versionMap] of packageMap) {
+        for (const [compositeKey, { framework, versions: versionMap }] of packageMap) {
           if (versionMap.size <= 1) continue;
+          const packageId = compositeKey.split("\0")[0]!;
 
           const versions = Array.from(versionMap.entries())
-            .map(([version, projects]) => ({ Version: version, Projects: projects }))
+            .map(([version, projs]) => ({
+              Version: version,
+              Projects: projs,
+              ...(framework ? { CpmFramework: framework } : {}),
+            }))
             .sort((a, b) => compareVersions(b.Version, a.Version));
 
           inconsistent.push({
@@ -869,8 +936,8 @@ function parseNu1605Conflicts(output: string): Nu1605Conflict[] {
   const regex = /error NU1605: Detected package downgrade: (.+?) from (.+?) to /g;
   let match;
   while ((match = regex.exec(output)) !== null) {
-    const packageId = match[1].trim();
-    const requiredVersion = match[2].trim();
+    const packageId = match[1]!.trim();
+    const requiredVersion = match[2]!.trim();
     if (!seen.has(packageId)) {
       seen.add(packageId);
       conflicts.push({ packageId, requiredVersion });
