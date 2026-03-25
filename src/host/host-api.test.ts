@@ -5,6 +5,7 @@ import { createHostAPI } from './host-api';
 import ProjectParser from './utilities/project-parser';
 import nugetApiFactory from './nuget/api-factory';
 import NuGetConfigResolver from './utilities/nuget-config-resolver';
+import CpmResolver from './utilities/cpm-resolver';
 import TaskExecutorDefault from './utilities/task-executor';
 import { Logger } from '../common/logger';
 
@@ -221,6 +222,103 @@ suite('HostAPI Tests', () => {
             assert.ok(result.ok);
             assert.strictEqual(result.value.Packages.length, 1);
             assert.strictEqual(result.value.Packages[0]!.Id, 'Newtonsoft.Json');
+        });
+    });
+
+    // ----------------------------------------------------------------
+    // getOutdatedPackages
+    // ----------------------------------------------------------------
+    suite('getOutdatedPackages', () => {
+        function makeProjectUri(fsPath: string): vscode.Uri {
+            return { fsPath } as vscode.Uri;
+        }
+
+        function makeProject(name: string, pkgPath: string, pkgVersion: string): Project {
+            return {
+                Name: name,
+                Path: pkgPath,
+                CpmEnabled: false,
+                Packages: [{ Id: 'Newtonsoft.Json', Version: pkgVersion, IsPinned: false }],
+            } as unknown as Project;
+        }
+
+        function setupNugetApi(latestVersion: string) {
+            const mockApi = {
+                GetPackagesAsync: sandbox.stub().resolves({
+                    data: [{ Name: 'Newtonsoft.Json', Id: 'Newtonsoft.Json', Version: latestVersion }],
+                }),
+            };
+            sandbox.stub(nugetApiFactory, 'GetSourceApiAsync').resolves(
+                mockApi as unknown as Awaited<ReturnType<typeof nugetApiFactory.GetSourceApiAsync>>
+            );
+        }
+
+        setup(() => {
+            sandbox.stub(vscode.workspace, 'workspaceFolders').value([{ uri: { fsPath: '/ws' } }]);
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync').resolves([
+                { Name: 'nuget.org', Url: 'https://api.nuget.org/v3/index.json' },
+            ]);
+            // No CPM for these tests
+            sandbox.stub(CpmResolver, 'GetPackageVersionsAsync').resolves(null);
+        });
+
+        test('reports package as outdated when one project is behind latest (min-version aggregation)', async () => {
+            // Project A has 1.0.0, Project B has 2.0.0, latest is 2.0.0.
+            // With min-version tracking the entry version should be 1.0.0, which IS older than 2.0.0.
+            const uriA = makeProjectUri('/ws/A.csproj');
+            const uriB = makeProjectUri('/ws/B.csproj');
+            sandbox.stub(vscode.workspace, 'findFiles').resolves([uriA, uriB]);
+
+            const parseStub = sandbox.stub(ProjectParser, 'ParseAsync');
+            parseStub.onFirstCall().resolves(makeProject('A', '/ws/A.csproj', '1.0.0'));
+            parseStub.onSecondCall().resolves(makeProject('B', '/ws/B.csproj', '2.0.0'));
+
+            setupNugetApi('2.0.0');
+
+            const api = createHostAPI();
+            const result = await api.getOutdatedPackagesAsync({ ForceReload: false, Prerelease: false });
+
+            assert.ok(result.ok);
+            assert.strictEqual(result.value.Packages.length, 1);
+            assert.strictEqual(result.value.Packages[0]!.Id, 'Newtonsoft.Json');
+            assert.strictEqual(result.value.Packages[0]!.InstalledVersion, '1.0.0');
+            assert.strictEqual(result.value.Packages[0]!.LatestVersion, '2.0.0');
+            assert.strictEqual(result.value.Packages[0]!.Projects.length, 2);
+        });
+
+        test('does not report package as outdated when all projects are already at latest', async () => {
+            const uriA = makeProjectUri('/ws/A.csproj');
+            sandbox.stub(vscode.workspace, 'findFiles').resolves([uriA]);
+
+            const parseStub = sandbox.stub(ProjectParser, 'ParseAsync');
+            parseStub.resolves(makeProject('A', '/ws/A.csproj', '2.0.0'));
+
+            setupNugetApi('2.0.0');
+
+            const api = createHostAPI();
+            const result = await api.getOutdatedPackagesAsync({ ForceReload: false, Prerelease: false });
+
+            assert.ok(result.ok);
+            assert.strictEqual(result.value.Packages.length, 0);
+        });
+
+        test('reports package as outdated when installed version is prerelease and latest is stable', async () => {
+            // 1.0.0-beta should be treated as less than 1.0.0 (NuGet SemVer)
+            const uri = makeProjectUri('/ws/A.csproj');
+            sandbox.stub(vscode.workspace, 'findFiles').resolves([uri]);
+
+            const parseStub = sandbox.stub(ProjectParser, 'ParseAsync');
+            parseStub.resolves(makeProject('A', '/ws/A.csproj', '1.0.0-beta'));
+
+            setupNugetApi('1.0.0');
+
+            const api = createHostAPI();
+            const result = await api.getOutdatedPackagesAsync({ ForceReload: false, Prerelease: false });
+
+            assert.ok(result.ok);
+            assert.strictEqual(result.value.Packages.length, 1);
+            assert.strictEqual(result.value.Packages[0]!.InstalledVersion, '1.0.0-beta');
+            assert.strictEqual(result.value.Packages[0]!.LatestVersion, '1.0.0');
         });
     });
 });

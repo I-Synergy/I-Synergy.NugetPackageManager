@@ -577,7 +577,7 @@ export function createHostAPI(): HostAPI {
 
             if (existing) {
               existing.projects.push(projectInfo);
-              if (compareVersions(pkg.Version, existing.version) > 0) {
+              if (compareVersions(pkg.Version, existing.version) < 0) {
                 existing.version = pkg.Version;
               }
             } else {
@@ -1133,29 +1133,51 @@ async function getLatestVersion(
 }
 
 function compareVersions(a: string, b: string): number {
-  const cleanA = a.replace(/[[\]()]/g, "");
-  const cleanB = b.replace(/[[\]()]/g, "");
+  // Strip NuGet version range brackets/parentheses and build metadata (+...).
+  const stripOuter = (v: string) => v.replace(/[[\]()]/g, "").split("+")[0] ?? v;
+  const cleanA = stripOuter(a);
+  const cleanB = stripOuter(b);
 
-  const partsA = cleanA.split(/[.\-+]/).map((p) => {
-    const n = parseInt(p, 10);
-    return isNaN(n) ? p : n;
-  });
-  const partsB = cleanB.split(/[.\-+]/).map((p) => {
-    const n = parseInt(p, 10);
-    return isNaN(n) ? p : n;
-  });
+  // Separate release tuple from prerelease label on the FIRST hyphen only.
+  // NuGet follows SemVer: 1.0.0-beta is a prerelease of 1.0.0.
+  const firstDashA = cleanA.indexOf("-");
+  const firstDashB = cleanB.indexOf("-");
+  const releaseA = firstDashA >= 0 ? cleanA.substring(0, firstDashA) : cleanA;
+  const releaseB = firstDashB >= 0 ? cleanB.substring(0, firstDashB) : cleanB;
+  const prereleaseA = firstDashA >= 0 ? cleanA.substring(firstDashA + 1) : "";
+  const prereleaseB = firstDashB >= 0 ? cleanB.substring(firstDashB + 1) : "";
 
-  const maxLen = Math.max(partsA.length, partsB.length);
+  // Compare numeric release components (major.minor.patch[.revision]).
+  const toNumParts = (s: string) =>
+    s.split(".").map((p) => { const n = parseInt(p, 10); return isNaN(n) ? 0 : n; });
+  const numA = toNumParts(releaseA);
+  const numB = toNumParts(releaseB);
+  const maxLen = Math.max(numA.length, numB.length);
   for (let i = 0; i < maxLen; i++) {
-    const pA = partsA[i] ?? 0;
-    const pB = partsB[i] ?? 0;
+    const pA = numA[i] ?? 0;
+    const pB = numB[i] ?? 0;
+    if (pA !== pB) return pA - pB;
+  }
 
-    if (typeof pA === "number" && typeof pB === "number") {
-      if (pA !== pB) return pA - pB;
-    } else {
-      const cmp = String(pA).localeCompare(String(pB));
-      if (cmp !== 0) return cmp;
-    }
+  // Numeric parts are equal — apply NuGet prerelease precedence:
+  // a stable release (no prerelease label) is always greater than any prerelease.
+  if (prereleaseA === "" && prereleaseB === "") return 0;
+  if (prereleaseA === "") return 1;   // a is stable, b is prerelease → a > b
+  if (prereleaseB === "") return -1;  // a is prerelease, b is stable  → a < b
+
+  // Both have prerelease labels: compare dot-separated identifiers.
+  // Numeric identifiers are compared numerically; alphanumeric ones lexicographically.
+  const preA = prereleaseA.split(".");
+  const preB = prereleaseB.split(".");
+  const preLen = Math.max(preA.length, preB.length);
+  for (let i = 0; i < preLen; i++) {
+    const pA = preA[i] ?? "";
+    const pB = preB[i] ?? "";
+    if (pA === pB) continue;
+    const nA = parseInt(pA, 10);
+    const nB = parseInt(pB, 10);
+    if (!isNaN(nA) && !isNaN(nB)) return nA - nB;
+    return pA.localeCompare(pB);
   }
   return 0;
 }
