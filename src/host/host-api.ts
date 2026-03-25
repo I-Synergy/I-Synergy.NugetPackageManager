@@ -79,7 +79,7 @@ async function parseSolutionProjectPathsAsync(slnPath: string): Promise<string[]
 }
 
 /** Merges all CPM groups into a single flat map for ProjectParser (which expects a flat map). */
-function buildFlatCpmMapAsync(cpmMap: CpmPackageMap): Map<string, string> {
+function buildFlatCpmMap(cpmMap: CpmPackageMap): Map<string, string> {
   const flat = new Map(cpmMap.unconditional);
   for (const entry of cpmMap.conditional) {
     for (const [id, version] of entry.versions) {
@@ -169,7 +169,7 @@ export function createHostAPI(): HostAPI {
         projectFiles.map(async (file) => {
           if (signal?.aborted) throw new Error("cancelled");
           const cpmMap = await CpmResolver.GetFrameworkPackageMapAsync(file.fsPath);
-          const cpmVersions = cpmMap ? buildFlatCpmMapAsync(cpmMap) : null;
+          const cpmVersions = cpmMap ? buildFlatCpmMap(cpmMap) : null;
           const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
           project.CpmEnabled = cpmMap !== null;
           if (cpmMap) {
@@ -707,7 +707,7 @@ export function createHostAPI(): HostAPI {
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => {
             const cpmMap = await CpmResolver.GetFrameworkPackageMapAsync(file.fsPath);
-            const cpmVersions = cpmMap ? buildFlatCpmMapAsync(cpmMap) : null;
+            const cpmVersions = cpmMap ? buildFlatCpmMap(cpmMap) : null;
             const project = await ProjectParser.ParseAsync(file.fsPath, cpmVersions);
             project.CpmEnabled = cpmMap !== null;
             if (cpmMap) {
