@@ -563,7 +563,7 @@ export function createHostAPI(): HostAPI {
 
             if (existing) {
               existing.projects.push(projectInfo);
-              if (compareVersions(pkg.Version, existing.version) > 0) {
+              if (compareVersions(pkg.Version, existing.version) < 0) {
                 existing.version = pkg.Version;
               }
             } else {
