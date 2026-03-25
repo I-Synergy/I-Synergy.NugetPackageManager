@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as fs from "fs/promises";
+import * as path from "path";
 import type {
   HostAPI,
   GetProjectsRequest,
@@ -40,6 +42,41 @@ import TaskExecutor, { DotnetError } from "./utilities/task-executor";
 import StatusBarUtils from "./utilities/status-bar-utils";
 import { Logger } from "../common/logger";
 import { AxiosError } from "axios";
+
+/**
+ * Parses a .sln or .slnx file and returns the absolute paths of all project files it references.
+ * Returns null if the file cannot be read or parsed.
+ */
+async function parseSolutionProjectPathsAsync(slnPath: string): Promise<string[] | null> {
+  try {
+    const content = await fs.readFile(slnPath, "utf-8");
+    const slnDir = path.dirname(slnPath);
+    const projectPaths: string[] = [];
+    const ext = path.extname(slnPath).toLowerCase();
+
+    if (ext === ".slnx") {
+      // .slnx is XML: <Project Path="relative/path/to/Project.csproj" />
+      const re = /<Project\s[^>]*\bPath="([^"]+\.(?:csproj|fsproj|vbproj))"/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(content)) !== null) {
+        const rel = m[1]!.replace(/\\/g, path.sep);
+        projectPaths.push(path.resolve(slnDir, rel));
+      }
+    } else {
+      // .sln text format: Project("...") = "Name", "relative\path.csproj", "{GUID}"
+      const re = /^Project\([^)]+\)\s*=\s*"[^"]+",\s*"([^"]+\.(?:csproj|fsproj|vbproj))"/gm;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(content)) !== null) {
+        const rel = m[1]!.replace(/\\/g, path.sep);
+        projectPaths.push(path.resolve(slnDir, rel));
+      }
+    }
+
+    return projectPaths;
+  } catch {
+    return null;
+  }
+}
 
 /** Merges all CPM groups into a single flat map for ProjectParser (which expects a flat map). */
 function buildFlatCpmMapAsync(cpmMap: CpmPackageMap): Map<string, string> {
@@ -102,10 +139,30 @@ export function createHostAPI(): HostAPI {
     async getProjectsAsync(request: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>> {
       Logger.info("getProjects: Handling request");
 
-      const projectFiles = await vscode.workspace.findFiles(
+      // Discover solution files (.sln / .slnx) in workspace roots (non-recursive).
+      // If any exist, restrict project discovery to only the projects they reference.
+      const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+      const slnFiles = await vscode.workspace.findFiles("*.{sln,slnx}", "**/node_modules/**");
+      let solutionProjectPaths: Set<string> | null = null;
+
+      if (slnFiles.length > 0) {
+        const allPaths = (
+          await Promise.all(slnFiles.map((f) => parseSolutionProjectPathsAsync(f.fsPath)))
+        ).flat().filter((p): p is string => p !== null);
+        if (allPaths.length > 0) {
+          solutionProjectPaths = new Set(allPaths.map((p) => path.normalize(p)));
+          Logger.info(`getProjects: Found ${slnFiles.length} solution file(s), ${solutionProjectPaths.size} project(s) referenced`);
+        }
+      }
+
+      let projectFiles = await vscode.workspace.findFiles(
         "**/*.{csproj,fsproj,vbproj}",
         "**/node_modules/**"
       );
+
+      if (solutionProjectPaths !== null) {
+        projectFiles = projectFiles.filter((f) => solutionProjectPaths!.has(path.normalize(f.fsPath)));
+      }
 
       Logger.info(`getProjects: Found ${projectFiles.length} project files`);
 
