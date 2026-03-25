@@ -1183,8 +1183,10 @@ export class PackagesView extends LitElement {
               @count-changed=${(e: CustomEvent<number>) => { this.consolidateCount = e.detail; }}
               @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
               @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
+                const previousFramework = this._consolidateFramework;
                 this._consolidateFrameworkOptions = e.detail;
-                this._consolidateFramework = "";
+                const isStillValid = !!previousFramework && e.detail.some(option => option.value === previousFramework);
+                this._consolidateFramework = isStillValid ? previousFramework : "";
               }}
             ></consolidate-view>
           </div>
