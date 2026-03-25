@@ -1,3 +1,4 @@
-- fix: Toggling prerelease no longer causes a ~15 s delay — switching prerelease no longer clears the NuGet API factory cache (only source changes do); the package cache key already includes the prerelease flag so a new state is a natural cache miss
-- fix: ClearPackageCache(id) now correctly removes all cache variants (id::true, id::false) instead of silently failing due to a key format mismatch
-- docs: Remove three settings (defaultSource, pageSize, showOutputOnError) from README that are defined in package.json but never read by the extension
+- fix: Batch package updates no longer abort restore on the first failure — all projects are now attempted and errors are collected
+- fix: Restore errors after "Update All Selected" are now shown in the UI instead of silently going to the output log only
+- fix: NU1605 transitive version conflicts are now automatically resolved during restore — when a downgrade is detected, the conflicting package is updated to the required minimum version (in `Directory.Packages.props` for CPM projects, or via `dotnet add package` for direct references) and restore is retried
+- refactor: `TaskExecutor` now exposes full dotnet output on failure via `DotnetError` instead of only the last partial line, enabling precise conflict parsing
