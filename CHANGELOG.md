@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.1.0 (2026-03-25)
+
 - fix: Batch package updates no longer abort restore on the first failure — all projects are now attempted and errors are collected
 - fix: Restore errors after "Update All Selected" are now shown in the UI instead of silently going to the output log only
 - fix: NU1605 transitive version conflicts are now automatically resolved during restore — when a downgrade is detected, the conflicting package is updated to the required minimum version (in `Directory.Packages.props` for CPM projects, or via `dotnet add package` for direct references) and restore is retried
