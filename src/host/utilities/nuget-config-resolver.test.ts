@@ -361,7 +361,7 @@ suite('NuGetConfigResolver Tests', () => {
             assert.strictEqual(source?.Password, 'mytoken');
         });
 
-        test('Decodes NuGet XML-encoded source names in credentials (e.g. rfh/nuget → rfh_x002F_nuget)', async () => {
+        test('Decodes NuGet XML-encoded source names in credentials (e.g. rfh_x002F_nuget → rfh/nuget)', async () => {
             // Mirrors the real-world setup: source key contains "/" which NuGet encodes as _x002F_ in XML
             Object.defineProperty(process, 'platform', { value: 'win32' });
 
