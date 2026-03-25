@@ -329,6 +329,70 @@ suite('NuGetConfigResolver Tests', () => {
             assert.strictEqual(source1?.Password, 'pass');
         });
 
+        test('Merges source from workspace config with credentials from user profile config (split-file setup)', async () => {
+            // Simulate Windows so APPDATA path is used (fully mockable via process.env.APPDATA)
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+
+            // User profile config: credentials only — safe to check in, no source URL
+            writeConfig(appDataDir, 'NuGet/NuGet.Config', `
+                <configuration>
+                    <packageSourceCredentials>
+                        <codeartifact>
+                            <add key="Username" value="aws" />
+                            <add key="ClearTextPassword" value="mytoken" />
+                        </codeartifact>
+                    </packageSourceCredentials>
+                </configuration>
+            `);
+
+            // Workspace config: source URL only — no credentials, safe to commit
+            writeConfig(workspaceDir, 'nuget.config', `
+                <configuration>
+                    <packageSources>
+                        <add key="codeartifact" value="https://example.codeartifact.eu-west-1.amazonaws.com/nuget/nuget/v3/index.json" />
+                    </packageSources>
+                </configuration>
+            `);
+
+            const sources = await NuGetConfigResolver.GetSourcesWithCredentialsAsync(workspaceDir);
+            const source = sources.find(s => s.Name === 'codeartifact');
+            assert.ok(source, 'Source should be found after merging workspace source + profile credentials');
+            assert.strictEqual(source?.Username, 'aws');
+            assert.strictEqual(source?.Password, 'mytoken');
+        });
+
+        test('Decodes NuGet XML-encoded source names in credentials (e.g. rfh_x002F_nuget → rfh/nuget)', async () => {
+            // Mirrors the real-world setup: source key contains "/" which NuGet encodes as _x002F_ in XML
+            Object.defineProperty(process, 'platform', { value: 'win32' });
+
+            writeConfig(appDataDir, 'NuGet/NuGet.Config', `
+                <configuration>
+                    <packageSourceCredentials>
+                        <rfh_x002F_nuget>
+                            <add key="Username" value="aws" />
+                            <add key="ClearTextPassword" value="mytoken" />
+                        </rfh_x002F_nuget>
+                    </packageSourceCredentials>
+                </configuration>
+            `);
+
+            writeConfig(workspaceDir, 'nuget.config', `
+                <configuration>
+                    <packageSources>
+                        <clear />
+                        <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+                        <add key="rfh/nuget" value="https://example-123456789.d.codeartifact.eu-west-1.amazonaws.com/nuget/nuget/v3/index.json" />
+                    </packageSources>
+                </configuration>
+            `);
+
+            const sources = await NuGetConfigResolver.GetSourcesWithCredentialsAsync(workspaceDir);
+            const source = sources.find(s => s.Name === 'rfh/nuget');
+            assert.ok(source, 'Source rfh/nuget should be found');
+            assert.strictEqual(source?.Username, 'aws');
+            assert.strictEqual(source?.Password, 'mytoken');
+        });
+
         test('Clears sources when <clear /> is present', async () => {
             // Setup User config with Source1
             if (os.homedir() === homeDir) {
