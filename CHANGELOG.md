@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.1.2 (2026-03-26)
+
+- docs: Regenerated README screenshots and demo GIF at full resolution (1280×780) showcasing all features including framework badges and filter dropdowns
+- chore: Added `npm run docs` script and auto-regeneration hook — screenshots and demo GIF are automatically regenerated in the background after commits that touch `src/` or `tools/mock-api.js`
+
 ## 1.1.1 (2026-03-26)
 
 - feat: Framework-aware CPM package updates — packages scoped to a specific target framework via `<ItemGroup Condition="...">` in `Directory.Packages.props` are now shown with a framework badge in the Installed, Updates, and Consolidate tabs, and can be filtered by framework via a dropdown in the search bar

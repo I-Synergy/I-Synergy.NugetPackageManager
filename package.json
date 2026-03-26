@@ -3,7 +3,7 @@
   "publisher": "I-Synergy",
   "displayName": "I-Synergy NuGet Package Manager",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "license": "MIT",
   "icon": "docs/images/icon.png",
   "galleryBanner": {
@@ -173,6 +173,7 @@
     "dev": "node ./esbuild.js && node ./tools/dev-server.mjs",
     "test-compile": "tsc -p ./tsconfig.test.json",
     "package": "vsce package --no-dependencies --out releases/",
+    "docs": "node ./tools/generate-docs.mjs",
     "release": "node tools/release.mjs",
     "screenshot": "node tools/take-screenshots.mjs"
   },
@@ -192,10 +193,7 @@
     "esbuild": "^0.27.4",
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
-    "gif-encoder-2": "^1.0.5",
     "jsdom": "^29.0.0",
-    "playwright": "^1.49.0",
-    "pngjs": "^7.0.0",
     "sinon": "^21.0.3",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
