@@ -1,4 +1,1 @@
-- fix: Batch package updates no longer abort restore on the first failure — all projects are now attempted and errors are collected
-- fix: Restore errors after "Update All Selected" are now shown in the UI instead of silently going to the output log only
-- fix: NU1605 transitive version conflicts are now automatically resolved during restore — when a downgrade is detected, the conflicting package is updated to the required minimum version (in `Directory.Packages.props` for CPM projects, or via `dotnet add package` for direct references) and restore is retried
-- refactor: `TaskExecutor` now exposes full dotnet output on failure via `DotnetError` instead of only the last partial line, enabling precise conflict parsing
+- fix: CPM `Directory.Packages.props` corruption when updating multiple packages in parallel — concurrent read-modify-write operations on the same file are now serialized via a per-file mutex, preventing interleaved writes that produced malformed XML (e.g. `</Project>Project>Project>` at end of file)

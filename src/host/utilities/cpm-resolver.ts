@@ -2,6 +2,7 @@ import fs from "fs";
 import * as path from "path";
 import { DOMParser } from "@xmldom/xmldom";
 import xpath from "xpath";
+import { Mutex } from "async-mutex";
 import { Logger } from "../../common/logger";
 
 export type CpmFrameworkEntry = {
@@ -16,6 +17,16 @@ export type CpmPackageMap = {
 };
 
 export default class CpmResolver {
+  private static readonly fileMutexes = new Map<string, Mutex>();
+
+  private static getFileMutex(filePath: string): Mutex {
+    const key = path.normalize(filePath).toLowerCase();
+    if (!this.fileMutexes.has(key)) {
+      this.fileMutexes.set(key, new Mutex());
+    }
+    return this.fileMutexes.get(key)!;
+  }
+
   static async GetPackageVersionsAsync(projectPath: string): Promise<Map<string, string> | null> {
     const cpmFilePath = await this.FindDirectoryPackagesPropsFileAsync(projectPath);
     if (!cpmFilePath) {
@@ -136,67 +147,72 @@ export default class CpmResolver {
       throw new Error(`Directory.Packages.props not found for ${projectPath}`);
     }
 
-    const content = await fs.promises.readFile(cpmFilePath, "utf8");
-    const escaped = packageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const release = await this.getFileMutex(cpmFilePath).acquire();
+    try {
+      const content = await fs.promises.readFile(cpmFilePath, "utf8");
+      const escaped = packageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    let updated: string;
+      let updated: string;
 
-    if (condition !== undefined) {
-      // Scoped update: only modify within the matching <ItemGroup Condition="..."> block
-      const escapedCondition = condition.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const itemGroupRegex = new RegExp(
-        `(<ItemGroup[^>]+Condition="${escapedCondition}"[^>]*>)(.*?)(</ItemGroup>)`,
-        "s"
-      );
-      const itemGroupMatch = itemGroupRegex.exec(content);
-      if (!itemGroupMatch) {
-        throw new Error(`ItemGroup with Condition="${condition}" not found in ${cpmFilePath}`);
-      }
-
-      const fullMatch = itemGroupMatch[0]!;
-      const openTag = itemGroupMatch[1]!;
-      const body = itemGroupMatch[2]!;
-      const closeTag = itemGroupMatch[3]!;
-
-      // Apply version replacement within the ItemGroup body only
-      let updatedBody = body.replace(
-        new RegExp(`(Include="${escaped}"[^>]*?Version=")[^"]*"`),
-        `$1${newVersion}"`
-      );
-      if (updatedBody === body) {
-        updatedBody = body.replace(
-          new RegExp(`(Version=")[^"]*("[^>]*?Include="${escaped}")`),
-          `$1${newVersion}$2`
+      if (condition !== undefined) {
+        // Scoped update: only modify within the matching <ItemGroup Condition="..."> block
+        const escapedCondition = condition.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const itemGroupRegex = new RegExp(
+          `(<ItemGroup[^>]+Condition="${escapedCondition}"[^>]*>)(.*?)(</ItemGroup>)`,
+          "s"
         );
-      }
-      if (updatedBody === body) {
-        throw new Error(`Package ${packageId} not found in ItemGroup with Condition="${condition}" in ${cpmFilePath}`);
-      }
+        const itemGroupMatch = itemGroupRegex.exec(content);
+        if (!itemGroupMatch) {
+          throw new Error(`ItemGroup with Condition="${condition}" not found in ${cpmFilePath}`);
+        }
 
-      updated = content.replace(fullMatch, `${openTag}${updatedBody}${closeTag}`);
-    } else {
-      // Unconditional update: existing global behavior
-      // Handle: Include="PackageId" ... Version="oldVersion"
-      updated = content.replace(
-        new RegExp(`(Include="${escaped}"[^>]*?Version=")[^"]*"`),
-        `$1${newVersion}"`
-      );
+        const fullMatch = itemGroupMatch[0]!;
+        const openTag = itemGroupMatch[1]!;
+        const body = itemGroupMatch[2]!;
+        const closeTag = itemGroupMatch[3]!;
 
-      // Handle: Version="oldVersion" ... Include="PackageId"
-      if (updated === content) {
+        // Apply version replacement within the ItemGroup body only
+        let updatedBody = body.replace(
+          new RegExp(`(Include="${escaped}"[^>]*?Version=")[^"]*"`),
+          `$1${newVersion}"`
+        );
+        if (updatedBody === body) {
+          updatedBody = body.replace(
+            new RegExp(`(Version=")[^"]*("[^>]*?Include="${escaped}")`),
+            `$1${newVersion}$2`
+          );
+        }
+        if (updatedBody === body) {
+          throw new Error(`Package ${packageId} not found in ItemGroup with Condition="${condition}" in ${cpmFilePath}`);
+        }
+
+        updated = content.replace(fullMatch, `${openTag}${updatedBody}${closeTag}`);
+      } else {
+        // Unconditional update: existing global behavior
+        // Handle: Include="PackageId" ... Version="oldVersion"
         updated = content.replace(
-          new RegExp(`(Version=")[^"]*("[^>]*?Include="${escaped}")`),
-          `$1${newVersion}$2`
+          new RegExp(`(Include="${escaped}"[^>]*?Version=")[^"]*"`),
+          `$1${newVersion}"`
         );
+
+        // Handle: Version="oldVersion" ... Include="PackageId"
+        if (updated === content) {
+          updated = content.replace(
+            new RegExp(`(Version=")[^"]*("[^>]*?Include="${escaped}")`),
+            `$1${newVersion}$2`
+          );
+        }
+
+        if (updated === content) {
+          throw new Error(`Package ${packageId} not found in ${cpmFilePath}`);
+        }
       }
 
-      if (updated === content) {
-        throw new Error(`Package ${packageId} not found in ${cpmFilePath}`);
-      }
+      await fs.promises.writeFile(cpmFilePath, updated, "utf8");
+      Logger.info(`CpmResolver.UpdatePackageVersion: Updated ${packageId} to ${newVersion} in ${cpmFilePath}`);
+    } finally {
+      release();
     }
-
-    await fs.promises.writeFile(cpmFilePath, updated, "utf8");
-    Logger.info(`CpmResolver.UpdatePackageVersion: Updated ${packageId} to ${newVersion} in ${cpmFilePath}`);
   }
 
   private static async ParsePackageVersionsAsync(cpmFilePath: string): Promise<Map<string, string>> {

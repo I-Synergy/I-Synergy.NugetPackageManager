@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.1.3 (2026-03-26)
+
+- fix: CPM `Directory.Packages.props` corruption when updating multiple packages in parallel — concurrent read-modify-write operations on the same file are now serialized via a per-file mutex, preventing interleaved writes that produced malformed XML (e.g. `</Project>Project>Project>` at end of file)
+
 ## 1.1.2 (2026-03-26)
 
 - docs: Regenerated README screenshots and demo GIF at full resolution (1280×780) showcasing all features including framework badges and filter dropdowns
