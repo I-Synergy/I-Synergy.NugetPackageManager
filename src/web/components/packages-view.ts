@@ -288,6 +288,7 @@ export class PackagesView extends LitElement {
 
   @state() activeTab: TabId = "browse";
   @state() projects: Array<ProjectViewModel> = [];
+  @state() private _allProjectPaths: string[] = [];
   @state() selectedVersion: string = "";
   @state() selectedPackage: PackageViewModel | null = null;
   @state() packages: Array<PackageViewModel> = [];
@@ -416,7 +417,9 @@ export class PackagesView extends LitElement {
     if (this.showProjectTree) return this.selectedProjectPaths;
     // When the project tree is hidden, still scope to the solution-filtered project list
     // so that updates/consolidate/vulnerabilities don't scan non-solution projects.
-    return this.projects.map(p => p.Path);
+    // Use the stable _allProjectPaths reference (not a mapped getter) to avoid
+    // creating a new array on every render, which would cause @lit/task to re-run infinitely.
+    return this._allProjectPaths;
   }
 
   private get filteredProjects(): Array<ProjectViewModel> {
@@ -835,10 +838,11 @@ export class PackagesView extends LitElement {
       this.projects = result.value.Projects.map(
         (x) => new ProjectViewModel(x)
       );
-      const validPaths = new Set(this.projects.map((p) => p.Path));
+      this._allProjectPaths = this.projects.map((p) => p.Path);
+      const validPaths = new Set(this._allProjectPaths);
       this.selectedProjectPaths = this.selectedProjectPaths.filter((p) => validPaths.has(p));
       if (this.selectedProjectPaths.length === 0) {
-        this.selectedProjectPaths = this.projects.map((p) => p.Path);
+        this.selectedProjectPaths = this._allProjectPaths;
       }
       await this.LoadProjectsPackagesAsync(forceReload);
     }
