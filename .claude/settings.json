@@ -10,6 +10,17 @@
             "command": "npm run esbuild 2>&1 | tail -3"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "async": true,
+            "statusMessage": "Regenerating screenshots and demo GIF...",
+            "command": "jq -r '.tool_input.command' | { read -r cmd; echo \"$cmd\" | grep -q 'git commit' && git diff HEAD~1 --name-only 2>/dev/null | grep -qE '^(src/|tools/mock-api)' && cd \"D:/Projects/Github/I-Synergy.NugetPackageManager\" && npm run docs; } 2>/dev/null || true"
+          }
+        ]
       }
     ]
   },
