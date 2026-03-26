@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 1.1.1 (2026-03-26)
+
+- feat: Framework-aware CPM package updates — packages scoped to a specific target framework via `<ItemGroup Condition="...">` in `Directory.Packages.props` are now shown with a framework badge in the Installed, Updates, and Consolidate tabs, and can be filtered by framework via a dropdown in the search bar
+- fix: Project discovery now respects solution files — when a `.sln` or `.slnx` file is present in the workspace root, only projects referenced by those solutions are shown (instead of all `.csproj` files in the folder)
+- fix: Updates, Consolidate, and Vulnerabilities tabs no longer scan projects outside the solution when the project tree panel is hidden
+- fix: Updates and Consolidate tabs no longer spin indefinitely on projects without multiple target frameworks — a stable array reference is now passed to the task runner instead of a newly allocated array on every render
+- fix: Version comparison now follows NuGet SemVer rules — stable releases correctly sort above pre-release versions of the same base version
+- fix: CPM `Directory.Packages.props` is now parsed once per file (cached by path) during outdated package checks, preventing redundant file reads when multiple projects share the same props file
+- fix: Outdated package detection now tracks the minimum installed version across projects, ensuring all projects are flagged and updated when any one of them is behind
+- security: Updated `picomatch` to fix ReDoS vulnerability (GHSA-c2c7-rcm5-vvqj, GHSA-3v7f-55p6-f55p)
+
 ## 1.1.0 (2026-03-25)
 
 - fix: Batch package updates no longer abort restore on the first failure — all projects are now attempted and errors are collected
