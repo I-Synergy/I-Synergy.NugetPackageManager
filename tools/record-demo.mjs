@@ -6,15 +6,14 @@
 import { chromium } from 'playwright';
 import GIFEncoder from 'gif-encoder-2';
 import { PNG } from 'pngjs';
-import { createWriteStream, readFileSync } from 'fs';
+import { createWriteStream } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { tmpdir } from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_FILE = join(__dirname, '..', 'docs', 'images', 'demo.gif');
-const WIDTH = 800;
-const HEIGHT = 500;
+const WIDTH = 1280;
+const HEIGHT = 780;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -23,32 +22,38 @@ async function waitForNoSpinner(page, timeout = 45000) {
     () => document.querySelectorAll('.spinner.large').length === 0,
     { timeout }
   ).catch(() => {});
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(500);
 }
 
-/** Capture a frame (raw RGBA buffer) from the page. */
 async function captureFrame(page) {
   const buf = await page.screenshot({ type: 'png' });
   const png = PNG.sync.read(buf);
-  return png.data; // raw RGBA
+  return png.data;
 }
 
-/** Add N identical frames at the given delay (ms). */
-async function addFrames(encoder, page, count, delayMs) {
+/** Hold a still frame for the given duration (ms). */
+async function hold(encoder, page, ms) {
   const frame = await captureFrame(page);
-  encoder.setDelay(delayMs);
-  for (let i = 0; i < count; i++) encoder.addFrame(frame);
+  encoder.setDelay(ms);
+  encoder.addFrame(frame);
 }
 
-/** Animate a smooth scroll or just pause for a moment. */
-async function pause(encoder, page, ms) {
-  const steps = Math.max(1, Math.round(ms / 100));
+/** Record live motion for the given duration, capturing every ~100ms. */
+async function record(encoder, page, ms) {
+  const interval = 100;
+  const steps = Math.max(1, Math.round(ms / interval));
   for (let i = 0; i < steps; i++) {
     const frame = await captureFrame(page);
-    encoder.setDelay(100);
+    encoder.setDelay(interval);
     encoder.addFrame(frame);
-    if (i < steps - 1) await page.waitForTimeout(100);
+    if (i < steps - 1) await page.waitForTimeout(interval);
   }
+}
+
+async function clickTab(page, label) {
+  await page.click(`[role="tab"]:has-text("${label}")`);
+  await page.waitForTimeout(400);
+  await waitForNoSpinner(page);
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -61,9 +66,8 @@ await waitForNoSpinner(page);
 
 console.log('Setting up GIF encoder...');
 const encoder = new GIFEncoder(WIDTH, HEIGHT, 'neuquant', true);
-encoder.setRepeat(0);   // loop forever
-encoder.setQuality(20);
-encoder.setDelay(100);
+encoder.setRepeat(0);
+encoder.setQuality(15);
 encoder.start();
 
 const readStream = encoder.createReadStream();
@@ -72,51 +76,70 @@ readStream.pipe(writeStream);
 
 console.log('Recording...');
 
-// 1. Browse tab — show the installed packages list (hold 2s)
-await addFrames(encoder, page, 25, 80);  // 2s
+// ── Scene 1: Installed tab — show package list ───────────────────────────────
+await hold(encoder, page, 1500);
 
-// 2. Type a search query character by character
+// ── Scene 2: Open project tree ───────────────────────────────────────────────
+await page.click('.tab-tree-toggle');
+await page.waitForTimeout(400);
+await record(encoder, page, 800);
+
+// ── Scene 3: Close project tree again ────────────────────────────────────────
+await page.click('.tab-tree-toggle');
+await page.waitForTimeout(300);
+await record(encoder, page, 500);
+
+// ── Scene 4: Type a search ───────────────────────────────────────────────────
 await page.click('input[placeholder="Search packages..."]');
-await pause(encoder, page, 300);
+await record(encoder, page, 300);
 for (const ch of 'serilog') {
   await page.keyboard.type(ch, { delay: 0 });
-  await pause(encoder, page, 120);
+  await record(encoder, page, 120);
 }
 await waitForNoSpinner(page);
-await pause(encoder, page, 1200);
+await record(encoder, page, 800);
 
-// 3. Click the first result to open details
+// ── Scene 5: Click first result to show details panel ────────────────────────
 const firstRow = page.locator('package-row').first();
 await firstRow.click();
-await page.waitForTimeout(600);
-await pause(encoder, page, 1500);
+await page.waitForTimeout(800);
+await record(encoder, page, 1500);
 
-// 4. Clear search and go to Updates tab
+// ── Scene 6: Clear search ────────────────────────────────────────────────────
 await page.click('input[placeholder="Search packages..."]');
 await page.keyboard.press('Control+a');
 await page.keyboard.press('Backspace');
-await page.waitForTimeout(300);
-await page.click('[role="tab"]:has-text("Updates")');
-await waitForNoSpinner(page, 45000);
-await pause(encoder, page, 2000);
-
-// 5. Go to Consolidate tab
-await page.click('[role="tab"]:has-text("Consolidate")');
-await waitForNoSpinner(page, 20000);
-await pause(encoder, page, 1500);
-
-// 6. Go to Vulnerabilities tab
-await page.click('[role="tab"]:has-text("Vulnerabilities")');
-await waitForNoSpinner(page, 20000);
-await pause(encoder, page, 1500);
-
-// 7. Back to Browse
-await page.click('[role="tab"]:has-text("Browse")');
+await record(encoder, page, 400);
 await waitForNoSpinner(page);
-await addFrames(encoder, page, 20, 80);
+await record(encoder, page, 400);
+
+// ── Scene 7: Updates tab — show framework badges ─────────────────────────────
+await clickTab(page, 'Updates');
+await record(encoder, page, 2000);
+
+// ── Scene 8: Use the framework filter dropdown ───────────────────────────────
+const frameworkSelect = page.locator('select[slot="extra-right"]');
+if (await frameworkSelect.isVisible()) {
+  await frameworkSelect.selectOption({ index: 1 }); // first specific framework
+  await record(encoder, page, 1200);
+  await frameworkSelect.selectOption({ value: '' }); // back to "All frameworks"
+  await record(encoder, page, 800);
+}
+
+// ── Scene 9: Consolidate tab — show version inconsistencies + framework badges
+await clickTab(page, 'Consolidate');
+await record(encoder, page, 2000);
+
+// ── Scene 10: Vulnerabilities tab ────────────────────────────────────────────
+await clickTab(page, 'Vulnerabilities');
+await record(encoder, page, 2000);
+
+// ── Scene 11: Back to Browse ─────────────────────────────────────────────────
+await clickTab(page, 'Browse');
+await waitForNoSpinner(page);
+await hold(encoder, page, 1500);
 
 encoder.finish();
-
 await new Promise((resolve) => writeStream.on('finish', resolve));
 await browser.close();
 
