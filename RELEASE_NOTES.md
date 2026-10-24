@@ -1,4 +1,11 @@
-# NuGet Package Manager 1.2.10
+# NuGet Package Manager 1.2.11
+
+## Framework Selection
+
+- Platform TFMs (windows/android/ios) are grouped under their base `.NET` line.
+- **Shared** is a separate selector option and is not updated with a `.NET`-specific run.
+- One global framework selector now serves Installed, Updates and Consolidate.
+- Updates scrolling and installed-framework availability are fixed.
 
 ## Fixes and UI
 

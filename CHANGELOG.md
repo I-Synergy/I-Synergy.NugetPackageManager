@@ -2,10 +2,14 @@
 
 ## Unreleased
 
+## 1.2.11 (2026-10-24)
+
 - feat: framework selectors now collapse platform TFMs (windows/android/ios) to their base `.NET` line and expose **Shared** as a separate option; selecting a `.NET` line excludes shared packages.
+- feat: a single global framework selector is shared by Installed, Updates and Consolidate, removing duplicate controls and duplicate Shared entries.
 - fix: Updates keeps installed framework lines in the selector even when they have no current outdated row.
 - fix: Updates content now scrolls correctly in the constrained tab layout.
-- test: cover platform-TFM normalization and separate shared filtering.
+- refactor: framework option building, matching and grouping live in `src/common/framework.ts`.
+- test: cover platform-TFM normalization, shared filtering and single-selector behavior.
 
 ## 1.2.10 (2026-10-24)
 
