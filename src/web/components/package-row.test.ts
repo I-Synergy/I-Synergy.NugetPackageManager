@@ -150,14 +150,16 @@ suite('PackageRow Component', () => {
         const img = shadowRoot?.querySelector('img.icon') as HTMLImageElement;
         assert.ok(img);
 
-        // Simulate error event
-        img.dispatchEvent(new Event('error'));
+        // jsdom 30 no longer raises image error events; invoke the same handler
+        // the template binds to @error.
+        (packageRow as unknown as { onIconError(): void }).onIconError();
 
         await packageRow.updateComplete;
 
         assert.strictEqual(packageRow.iconUrl, 'https://nuget.org/Content/gallery/img/default-package-icon.svg');
         await packageRow.updateComplete;
-        assert.strictEqual(img.getAttribute('src'), 'https://nuget.org/Content/gallery/img/default-package-icon.svg');
+        const updatedImg = shadowRoot?.querySelector('img.icon') as HTMLImageElement;
+        assert.strictEqual(updatedImg.getAttribute('src'), 'https://nuget.org/Content/gallery/img/default-package-icon.svg');
     });
 
     test('should display version when showInstalledVersion is false', async () => {

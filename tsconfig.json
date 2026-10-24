@@ -9,7 +9,6 @@
 		],
 		"sourceMap": true,
 		"rootDir": "src",
-		"baseUrl": ".",
 		"strict": true,
 		"noUncheckedIndexedAccess": true,
 		"exactOptionalPropertyTypes": true,

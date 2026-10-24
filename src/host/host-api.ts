@@ -1974,10 +1974,8 @@ function getVersionMajor(version: string): number | null {
 
 /** Highest version in the list that belongs to `major`, or null when none match. */
 function getLatestInMajor(versions: string[], major: number): string | null {
-  return (
-    versions
-      .filter((version) => getVersionMajor(version) === major)
-      .sort(compareVersions)
-      .at(-1) ?? null
-  );
+  const matches = versions
+    .filter((version) => getVersionMajor(version) === major)
+    .sort(compareVersions);
+  return matches[matches.length - 1] ?? null;
 }
