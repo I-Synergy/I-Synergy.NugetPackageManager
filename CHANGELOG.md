@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.1 (2026-10-24)
+
+- fix: update `@vscode/vsce` and pin patched `@azure/identity` / `@azure/msal-node` versions so `npm audit --audit-level=high` passes in CI.
+- chore: refresh release artifacts and dependency lockfile.
+
 ## 1.2.0 (2026-10-24)
 
 - feat: the NuGet Activity Bar entry is hidden until the workspace contains a supported .NET project (`.csproj`, `.fsproj`, or `.vbproj`) and updates when projects are added or removed.

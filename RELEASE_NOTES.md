@@ -1,4 +1,9 @@
-# NuGet Package Manager 1.2.0
+# NuGet Package Manager 1.2.1
+
+## Maintenance
+
+- Updated `@vscode/vsce` and pinned patched Azure identity/MSAL dependencies.
+- `npm audit --audit-level=high` now passes in CI.
 
 ## Highlights
 
