@@ -19,19 +19,19 @@
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Getting Started](#getting-started)
-- [Tabs & Workflows](#tabs--workflows)
+- [Tabs and Workflows](#tabs-and-workflows)
   - [Browse](#browse)
   - [Installed](#installed)
   - [Updates](#updates)
-  - [Vulnerabilities](#vulnerabilities)
   - [Consolidate](#consolidate)
+  - [Vulnerabilities](#vulnerabilities)
   - [Cleanup](#cleanup)
-- [Activity Bar & Background Checks](#activity-bar--background-checks)
+- [Activity Bar and Background Checks](#activity-bar-and-background-checks)
 - [Project Tree](#project-tree)
 - [Commands](#commands)
 - [Configuration](#configuration)
 - [Private Feed Authentication](#private-feed-authentication)
-- [Central Package Management](#central-package-management-cpm)
+- [Central Package Management](#central-package-management)
 - [Inline Version Decorations](#inline-version-decorations)
 - [Contributing](#contributing)
 - [Architecture](#architecture)
@@ -98,7 +98,7 @@ Or via the Extensions panel: click **···** → **Install from VSIX…**
 
 ## Getting Started
 
-1. Open a folder or workspace that contains `.csproj` / `.fsproj` / `.sln` files — the extension activates automatically.
+1. Open a folder or workspace that contains `.csproj` / `.fsproj` / `.vbproj` / `.sln` / `.slnx` files — the extension activates automatically.
 2. Click the **NuGet** icon in the Activity Bar. The full-page workspace opens in an editor tab; the sidebar icon stays available as a launcher.
 3. Your projects appear in the **project tree** on the left. All are selected by default.
 4. Use the **Browse** tab to search for and install packages.
@@ -109,7 +109,8 @@ Or via the Extensions panel: click **···** → **Install from VSIX…**
 
 ---
 
-## Tabs & Workflows
+<a id="tabs-and-workflows"></a>
+## Tabs and Workflows
 
 ### Browse
 
@@ -149,6 +150,18 @@ Lists all packages where a newer version is available on the configured sources.
 - Per-row **update button** for single-package updates
 - Tab data refreshes automatically every time you switch to it
 
+### Consolidate
+
+![Consolidate](docs/images/screenshot-consolidate.png)
+
+Detects packages that are installed at different versions across your projects.
+
+- Groups packages by ID, shows which project uses which version (latest highlighted in orange, older in yellow)
+- **Version dropdown** per package — pick the target version to consolidate to
+- **Consolidate** button applies to a single package; **Consolidate all** processes each framework line separately
+- Respects Central Package Management and never merges one framework's version into another
+- Tab data refreshes automatically every time you switch to it
+
 ### Vulnerabilities
 
 ![Vulnerabilities](docs/images/screenshot-vulnerabilities.png)
@@ -161,18 +174,6 @@ Scans installed packages against the NuGet vulnerability database, including dep
 - Affected version range and affected projects are shown for each entry
 - **Advisory** link opens the GitHub Security Advisory in your browser
 - A **yellow vulnerability banner is shown across every tab** and links directly to Vulnerabilities
-- Tab data refreshes automatically every time you switch to it
-
-### Consolidate
-
-![Consolidate](docs/images/screenshot-consolidate.png)
-
-Detects packages that are installed at different versions across your projects.
-
-- Groups packages by ID, shows which project uses which version (latest highlighted in orange, older in yellow)
-- **Version dropdown** per package — pick the target version to consolidate to
-- **Consolidate** button applies to a single package; **Consolidate all** processes each framework line separately
-- Respects Central Package Management and never merges one framework's version into another
 - Tab data refreshes automatically every time you switch to it
 
 ---
@@ -193,7 +194,8 @@ Use **Remove unused** after reviewing the list. This replaces the PowerShell `Re
 
 ---
 
-## Activity Bar & Background Checks
+<a id="activity-bar-and-background-checks"></a>
+## Activity Bar and Background Checks
 
 - The NuGet entry is hidden in workspaces without a supported .NET project
 - Clicking it opens the full-page workspace in an editor tab; the sidebar launcher remains available
@@ -208,7 +210,7 @@ Use **Remove unused** after reviewing the list. This replaces the PowerShell `Re
 The collapsible project tree on the left of the main view lets you scope operations:
 
 - **Check / uncheck** individual projects to include or exclude them from searches and batch operations
-- **CPM badge** displayed next to projects where `Directory.Packages.props` is detected
+- **Selected/total project count** and target-framework metadata are shown in the tree header and rows
 - Supports C# (`.csproj`), F# (`.fsproj`), and VB.NET (`.vbproj`) project files
 - Projects discovered recursively from the workspace root, excluding `node_modules`, `bin`, `obj`
 
@@ -299,7 +301,9 @@ For non-standard authentication flows, configure a script path per source. The s
 
 ---
 
-## Central Package Management (CPM)
+<a id="central-package-management"></a>
+<a id="central-package-management-cpm"></a>
+## Central Package Management
 
 NuGet Package Manager has first-class support for [Central Package Management](https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management).
 
