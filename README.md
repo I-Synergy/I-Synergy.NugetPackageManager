@@ -26,6 +26,7 @@
   - [Vulnerabilities](#vulnerabilities)
   - [Consolidate](#consolidate)
   - [Cleanup](#cleanup)
+- [Activity Bar & Background Checks](#activity-bar--background-checks)
 - [Project Tree](#project-tree)
 - [Commands](#commands)
 - [Configuration](#configuration)
@@ -44,11 +45,13 @@
 | | Feature | Description |
 |---|---|---|
 | 📦 | **Browse & Install** | Search nuget.org and private feeds, install into one or multiple projects at once |
+| 🖥️ | **Full-page workspace** | Opens in an editor tab from the NuGet Activity Bar icon, with a compact sidebar launcher and restored panel state |
+| 🔔 | **Update badge** | The Activity Bar icon shows the available-update count and refreshes from the extension host every 15 minutes while visible |
 | 📊 | **Real-time Progress** | Animated spinner during install/update operations, showing which package is being processed |
-| 🔄 | **One-click Updates** | See all outdated packages with version diffs, update individually or all at once |
-| 🛡️ | **Vulnerability Scanning** | Color-coded CVE severity badges (Critical / High / Medium / Low) with advisory links |
+| 🔄 | **Transactional updates** | Packages are written one at a time, restored once after the complete set, and rolled back if a write or restore fails |
+| 🛡️ | **Vulnerability Scanning** | Critical / High / Medium / Low severity, advisory links, transitive dependencies and a yellow banner across every tab |
 | 🗑️ | **Remove from Solution** | Remove a package reference from one project or from every project in the solution at once |
-| 🔀 | **Version Consolidation** | Find and fix version inconsistencies across projects in a single click |
+| 🔀 | **Version Consolidation** | Finds and fixes version inconsistencies per framework line, never merging netX versions |
 | 🧹 | **Cleanup** | Find and remove unused `PackageVersion` entries from `Directory.Packages.props`, with automatic backups |
 | 🌲 | **Project Tree** | Checkbox-based project selector — scope every operation to exactly the projects you want |
 | 🔐 | **Private Feeds** | Reads `NuGet.config`, supports Azure Artifacts Credential Provider and custom password scripts |
@@ -61,7 +64,7 @@
 ## Requirements
 
 - Visual Studio Code **1.110** or later
-- A workspace containing `.csproj`, `.fsproj`, or `.sln` files
+- A workspace containing `.csproj`, `.fsproj`, `.vbproj`, `.sln`, or `.slnx` files
 - **.NET SDK** installed and on `PATH` (for install / update / restore operations)
 
 ---
@@ -98,8 +101,9 @@ Or via the Extensions panel: click **···** → **Install from VSIX…**
 1. Open a folder or workspace that contains `.csproj` / `.fsproj` / `.sln` files — the extension activates automatically.
 2. Click the **NuGet** icon in the Activity Bar. The full-page workspace opens in an editor tab; the sidebar icon stays available as a launcher.
 3. Your projects appear in the **project tree** on the left. All are selected by default.
-4. Use the **BROWSE** tab to search for and install packages.
-5. Run **UPDATES** to check for outdated packages, **VULNERABILITIES** for security issues, and **CONSOLIDATE** to fix version drift across projects.
+4. Use the **Browse** tab to search for and install packages.
+5. Run **Updates** to check for outdated packages, **Vulnerabilities** for security issues, **Consolidate** for version drift, and **Cleanup** for unused CPM entries.
+6. The Activity Bar badge shows how many updates are available; it refreshes in the background every 15 minutes while the icon is visible.
 
 > **Tip:** Use the Command Palette (`Ctrl+Shift+P`) and type `NuGet Package Manager` to jump directly to any feature.
 
@@ -138,21 +142,25 @@ Shows every package installed across all selected projects. Select a package to 
 Lists all packages where a newer version is available on the configured sources.
 
 - Each row shows the **installed version → latest version** with source attribution
-- **Select individual packages** with checkboxes, then click **Update All** to apply in one go
+- **Select individual packages** with checkboxes, then click **Update selected** or **Update all**
+- Packages are written **one at a time**, with per-package progress; the Activity Bar badge updates as rows clear
+- `dotnet restore` runs **once after all selected versions are written**, so dependent packages resolve against the complete set
+- If a write or the final restore fails, the host restores the affected file snapshots and reports a rollback
 - Per-row **update button** for single-package updates
-- Counts on the tab badge update in real time
 - Tab data refreshes automatically every time you switch to it
 
 ### Vulnerabilities
 
 ![Vulnerabilities](docs/images/screenshot-vulnerabilities.png)
 
-Scans installed packages against the NuGet vulnerability database.
+Scans installed packages against the NuGet vulnerability database, including dependencies.
 
+- **Direct and transitive packages** are scanned; transitive rows come from `project.assets.json`
+- Transitive entries are marked **transitive** and show **Via:** direct package(s) that pull them in
 - Severity badges: **CRITICAL** · **HIGH** · **MEDIUM** · **LOW**
-- Affected version range shown for each entry
+- Affected version range and affected projects are shown for each entry
 - **Advisory** link opens the GitHub Security Advisory in your browser
-- Affected projects listed below each vulnerable package
+- A **yellow vulnerability banner is shown across every tab** and links directly to Vulnerabilities
 - Tab data refreshes automatically every time you switch to it
 
 ### Consolidate
@@ -163,8 +171,8 @@ Detects packages that are installed at different versions across your projects.
 
 - Groups packages by ID, shows which project uses which version (latest highlighted in orange, older in yellow)
 - **Version dropdown** per package — pick the target version to consolidate to
-- **Consolidate** button applies to a single package; **Consolidate All** fixes all at once
-- Respects Central Package Management — CPM-managed packages are labelled accordingly
+- **Consolidate** button applies to a single package; **Consolidate all** processes each framework line separately
+- Respects Central Package Management and never merges one framework's version into another
 - Tab data refreshes automatically every time you switch to it
 
 ---
@@ -182,6 +190,16 @@ Finds `PackageVersion` entries in `Directory.Packages.props` that no project ref
 ![Cleanup](docs/images/screenshot-cleanup.png)
 
 Use **Remove unused** after reviewing the list. This replaces the PowerShell `Remove-UnusedPackages.ps1` workflow with an in-editor report and confirmation.
+
+---
+
+## Activity Bar & Background Checks
+
+- The NuGet entry is hidden in workspaces without a supported .NET project
+- Clicking it opens the full-page workspace in an editor tab; the sidebar launcher remains available
+- The icon badge shows the number of available updates
+- Update checks run from the extension host **every 15 minutes while the icon is visible**, even when the page is closed
+- Background scans and timers stop when the icon is hidden or the extension deactivates
 
 ---
 
