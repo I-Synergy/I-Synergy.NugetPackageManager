@@ -1,6 +1,10 @@
-# NuGet Package Manager 1.2.5
+# NuGet Package Manager 1.2.6
 
 ## Fixes and UI
+
+- Fixed remaining multi-TFM gaps in Consolidate and Vulnerabilities.
+- Added the framework selector to Consolidate.
+- Added the mandatory multi-TFM regression checklist for future changes.
 
 - Fixed multi-target CPM packages disappearing from Updates on net11.0.
 - Added the framework selector to Updates for per-framework review and updates.

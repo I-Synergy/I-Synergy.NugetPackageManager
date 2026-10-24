@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.2.6 (2026-10-24)
+
+- fix: Consolidate and Vulnerabilities now retain all framework-scoped CPM resolutions when a package has no single `Version`, matching Updates and Installed.
+- feat: add the framework selector to Consolidate for reviewing and consolidating net10.0/net11.0 lines separately.
+- docs: add the mandatory multi-TFM regression checklist to `AGENTS.md`.
+
 ## 1.2.5 (2026-10-24)
 
 - fix: framework-scoped CPM packages with separate net10.0/net11.0 versions are no longer dropped from Updates when the package has no single version.
