@@ -1193,8 +1193,6 @@ export function createHostAPI(): HostAPI {
 
         for (const project of projects) {
           for (const pkg of project.Packages) {
-            if (!pkg.Version) continue;
-
             const resolutions = pkg.CpmResolutions?.length
               ? pkg.CpmResolutions
               : [{ Tfm: "", Version: pkg.Version, Condition: "", ConditionLabel: "", Matched: true }];
@@ -1321,8 +1319,6 @@ export function createHostAPI(): HostAPI {
 
         for (const project of projects) {
           for (const pkg of project.Packages) {
-            if (!pkg.Version) continue;
-
             const resolutions = pkg.CpmResolutions?.length
               ? pkg.CpmResolutions
               : [{ Tfm: "", Version: pkg.Version, Condition: "", ConditionLabel: "", Matched: true }];

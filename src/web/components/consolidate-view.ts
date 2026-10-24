@@ -343,6 +343,27 @@ export class ConsolidateView extends LitElement {
             </div>
           </div>
           <div class="list-actions">
+            ${this.frameworkOptions.length > 1
+              ? html`
+                  <select
+                    class="framework-select"
+                    aria-label="Target framework"
+                    .value=${this.selectedFramework}
+                    @change=${(e: Event) =>
+                      this.dispatchEvent(
+                        new CustomEvent<string>("framework-changed", {
+                          detail: (e.target as HTMLSelectElement).value,
+                          bubbles: true,
+                          composed: true,
+                        })
+                      )}
+                  >
+                    ${this.frameworkOptions.map(
+                      (option) => html`<option value=${option.value}>${option.label}</option>`
+                    )}
+                  </select>
+                `
+              : nothing}
             ${this.packages.length > 0
               ? html`
                   <button
