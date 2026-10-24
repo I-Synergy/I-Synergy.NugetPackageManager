@@ -197,6 +197,8 @@ Use **Remove unused** after reviewing the list. This replaces the PowerShell `Re
 <a id="activity-bar-and-background-checks"></a>
 ## Activity Bar and Background Checks
 
+![NuGet sidebar and full-page workspace](docs/images/screenshot-sidebar.png)
+
 - The NuGet entry is hidden in workspaces without a supported .NET project
 - Clicking it opens the full-page workspace in an editor tab; the sidebar launcher remains available
 - The icon badge shows the number of available updates

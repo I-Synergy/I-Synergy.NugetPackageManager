@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.4 (2026-10-24)
+
+- docs: fix README TOC anchors, align workflow sections with the actual tab order (Browse, Installed, Updates, Consolidate, Vulnerabilities, Cleanup), and add a real VS Code Activity Bar/sidebar screenshot.
+- chore: publish the corrected README and screenshots.
+
 ## 1.2.3 (2026-10-24)
 
 - docs: refresh the README with the full-page workspace, Activity Bar badge/background checks, transactional updates, Cleanup tab, transitive vulnerability scanning, global vulnerability banner and solution-wide removal.

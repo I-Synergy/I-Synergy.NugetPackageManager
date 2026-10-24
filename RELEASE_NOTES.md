@@ -1,7 +1,9 @@
-# NuGet Package Manager 1.2.3
+# NuGet Package Manager 1.2.4
 
 ## Documentation
 
+- Added a real VS Code screenshot showing the NuGet Activity Bar/sidebar launcher.
+- Fixed README TOC anchors and aligned the workflow sections with the actual tab order.
 - Refreshed the README for the full-page workspace, Activity Bar badge and background checks, transactional updates, Cleanup tab, transitive vulnerabilities, global vulnerability banner and solution-wide removal.
 - Regenerated screenshots and the demo GIF for the current marketplace-style UI.
 
