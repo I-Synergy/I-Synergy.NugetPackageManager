@@ -75,6 +75,23 @@ suite('UpdatesView', () => {
         assert.strictEqual(groups[0]!.packages.length, 1);
     });
 
+    test('exposes framework options and filters visible updates by framework', () => {
+        const shared = makePackage('', '');
+        const net10 = makePackage("$(TargetFramework.StartsWith('net10.0'))", 'net10.0');
+        const net11 = makePackage("$(TargetFramework.StartsWith('net11.0'))", 'net11.0');
+        view.packages = [shared, net11, net10];
+
+        assert.deepStrictEqual(view.frameworkOptions, [
+            { value: '', label: 'All frameworks' },
+            { value: 'net10.0', label: 'net10.0' },
+            { value: 'net11.0', label: 'net11.0' },
+        ]);
+
+        view.selectedFramework = 'net11.0';
+        const visible = (view as unknown as { visiblePackages: OutdatedPackageViewModel[] }).visiblePackages;
+        assert.deepStrictEqual(visible.map((pkg) => pkg.CpmFramework).sort(), ['', 'net11.0']);
+    });
+
     test('sends the group scope and condition for a framework row', async () => {
         const pkg = makePackage("$(TargetFramework.StartsWith('net10.0'))", 'net10.0');
         view.packages = [pkg];
