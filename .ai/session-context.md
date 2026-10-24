@@ -1,0 +1,148 @@
+# NuGet Package Manager — Session Context
+
+**Last Updated:** 2026-10-24
+**Project Version:** 1.1.3
+**Branch:** bugfixes/main
+**Written By:** Reasonix Code
+**Next Session May Use:** Any
+
+---
+
+## Project Overview
+
+**Extension ID:** `I-Synergy.NugetPackageManager.I-Synergy.NugetPackageManager`
+**Purpose:** VS Code extension for browsing, installing, updating, and auditing NuGet packages across .NET projects without leaving the editor.
+**Stack:** TypeScript, Node.js (host), Lit (webview), dotnet CLI, typed RPC over postMessage
+**Phase:** Active development — post-fork hardening
+
+---
+
+## Recent Work (this session and last)
+
+### Completed: Whole-application review (2026-10-24)
+- Report: `.ai/analysis/whole-application-review-2026-10-24.md`
+- 4 parallel reviewers (architecture, security, web UI, tests/maintainability) + direct verification of every Blocker
+- Result: 4 Blockers, 16 Majors, 20 Minors; 277 tests still passing, tsc/lint clean
+- Blockers: workspace-controlled `passwordScriptPath` RCE; unconditional CPM row sends `Scope:"all"` and rewrites framework lines; path containment broken on Linux/macOS and bypassable on Windows; workspace `nuget.config` `%VAR%` credential expansion to attacker feed
+- Highest-priority Majors: consolidate ignores RPC result and removes all rows by Id; RPC timeout does not cancel host work; per-project update loses TFM context; element-level `PackageVersion` conditions ignored; unvalidated version written into XML; vulnerability key casing + partial cache; latest-version relies on feed ordering; Basic auth forwarded to feed-supplied URLs; `.vscodeignore` ships 12 MB `.ai/`; publish job runs on every `main` push
+- No code was changed by the review
+
+### Completed: AI template upgrade — `.claude/` → `.ai/` (2026-10-24)
+- Migrated all AI context to `.ai/` with the template migration script; `.claude/` now holds only `settings.json` + `settings.local.json` (plus generated junctions)
+- Applied the updated template: `.ai/agents` (9), `.ai/skills` (80), `.ai/patterns`, `.ai/reference`, `.ai/checklists`, `.ai/scripts`, `.ai/tests`
+- Rewrote `AGENTS.md` for this TypeScript/VS Code extension project; `CLAUDE.md` remains the detailed engineering guide and points to `AGENTS.md`
+- Updated `.github/copilot-instructions.md` with the `.ai/session-context.md` convention and session-memory section
+- `sync-skills.py` created junctions: `.claude|.github|.reasonix/{skills,agents}` → `.ai/{skills,agents}` (gitignored)
+- `.claude/settings.json`: `.ai/plans` plansDirectory, SessionStart sync + session-context hooks, skill/agent sync hooks, npm esbuild/lint Stop hook (the .NET build hook was removed)
+- Validation: `.ai/tests/run-all-tests.sh` — **11/11 suites passed**
+- Project-owned content preserved: `session-context`, `project/`, `plans/`, `progress/`, `completed/`, `analysis/`
+
+### Completed: Multi-framework CPM version management (2026-10-24)
+- New `cpm-condition.ts`: parses/evaluates MSBuild conditions (`!`, `StartsWith/EndsWith/Contains`, `==`/`!=`, `And`/`Or`, parentheses); labels negation distinctly (`not net11.0`)
+- New `project-framework-resolver.ts`: resolves real project TFMs via `dotnet msbuild -getProperty`, with mtime cache, XML fallback, manual overrides and a 16-way evaluation limiter
+- `CpmResolver`: `ResolveVersions` (one version line per condition), `UpdateCpmVersionsAsync` (single read/write per props file, verification before write, group/all/first scopes)
+- `host-api.ts`: Installed/Updates/Consolidate/Vulnerabilities now share per-TFM resolution; aligned latest version per TFM major; deduplicated NuGet lookups; `packageSourceMapping`-aware source selection; bin/obj exclusions
+- UI: per-TFM rows and framework filter, **Update all TFMs**, explicit latest-overall action, TFM badges for vulnerabilities
+- Tests: 277 passing; fixtures in `src/host/utilities/__fixtures__/cpm` and `.../projects`; host integration covers net10/net11/multi/platform projects
+- Verified against `D:\Projects\I-Synergy\I-Synergy.Framework`: 69 unconditional + 2×31 conditional groups, net10 → 10.0.13, net11 → 11.0.0-rc.2, scoped writes only touch the addressed `ItemGroup`
+- Screenshots: `docs/images/screenshot-{installed,updates}-frameworks.png`, `...-net9.png`
+
+### Completed: Framework-aware CPM updates (feature/framework-aware-cpm-updates)
+- `CpmResolver`: new `CpmFrameworkEntry`/`CpmPackageMap` types; `GetFrameworkPackageMapAsync` reads conditional ItemGroups; `UpdatePackageVersionAsync` accepts optional `condition` for scoped regex updates
+- `OutdatedPackage`/`OutdatedPackageViewModel`: optional `CpmCondition`/`CpmFramework` fields
+- `BatchUpdateRequest.Updates`: optional `CpmCondition` field forwarded to `CpmResolver.UpdatePackageVersionAsync`
+- `host-api.ts`: composite key `"packageId\0condition"` in `getOutdatedPackagesAsync`; per-project `CpmPackageMap` cached; `CpmCondition`/`CpmFramework` emitted on `OutdatedPackage`
+- `updates-view.ts`: `_selectedFramework` state; `frameworkOptions` getter (empty → no selector shown); `visiblePackages` filters by framework + text query; `toggleSelectAll`/`allVisibleSelected` scoped to visible; framework `<select>` dropdown (only when conditional packages exist); framework badge on each row in "All" view; `CpmCondition` passed in update calls; reset on load
+- Tests: 9 new tests in `cpm-resolver.test.ts` covering `GetFrameworkPackageMapAsync` + condition-scoped updates; 226 total passing
+
+### Completed: NU1605 Batch Update Fixes (v1.1.0, released)
+- `DotnetError` class with `output: string` carrying full stdout
+- `restoreProjectsAsync`: per-project error isolation, collects all failures
+- `restoreWithConflictResolutionAsync`: auto-fixes NU1605 transitive conflicts, retries (max 2 attempts)
+- `parseNu1605Conflicts`: regex parser for NU1605 error lines
+
+### Completed: Real-time Progress Bar
+- Migrated `executeAddPackage` / `executeRemovePackage` from `vscode.Task` → `child_process.spawn`
+- `TaskExecutor.ExecuteCommand` parses dotnet stdout for stage keywords, stores in `Map<operationId, OperationProgress>`
+- Added `getOperationProgress` RPC method; webview polls every 300ms
+- `project-row` shows animated progress bar (stage label + fill bar) during operations
+- Polling stopped in `disconnectedCallback` and when `Active=false`
+
+### Completed: Tab Auto-refresh
+- Updates, Consolidate, Vulnerabilities tabs auto-refresh when switched to
+- `setTab()` guards with `if (tab === this.activeTab) return` to avoid redundant reloads
+- Removed per-tab refresh buttons (they were redundant)
+
+### Completed: Security Hardening (commit 537a330)
+- `nonce.ts`: `globalThis.crypto.randomUUID()` — no Node.js import, works in browser too
+- `host-api.ts`: workspace path validation + URL validation in `updateProject`
+- `password-script-executor.ts`: explicit allowlist for `.ps1/.bat/.cmd/.sh`, reject others
+- `task-executor.ts`: proper `await mutex.acquire()`, 120s timeout, `clearTimeout` on success
+- `project-row.ts`: stop polling on `Active=false`, cleanup in `disconnectedCallback`
+- `search-bar.ts`: sort option whitelist validation
+- `main.ts`: stored event listeners + `disconnectedCallback` cleanup
+
+### Completed: Documentation & Assets
+- Official NuGet logo as extension icon (`docs/images/icon.png`, `docs/raw/icon.svg`)
+- README updated with Real-time Progress feature, auto-refresh notes, retry button
+- CHANGELOG.md updated with full Unreleased section
+
+### Completed: Dependency Updates
+- Updated 16 packages (skipped eslint 9→10, opentelemetry version pin)
+
+---
+
+## Established Patterns
+
+### RPC Pattern
+All host↔webview calls use typed RPC (`src/common/rpc/types.ts`). Every method returns `Result<T>`. Add new methods by:
+1. Adding request/response types to `types.ts`
+2. Adding the method signature to `HostAPI` interface in `types.ts`
+3. Implementing in `host-api.ts`
+4. Calling via `hostApi.methodName(request)` from webview
+
+### Error Handling
+RPC methods use `ok(value)` / `fail(message)` helpers. Never throw — always return `fail()`.
+
+### Progress Operations
+For long-running operations:
+1. Generate `operationId = \`${type}-${packageId}-${Date.now()}\``
+2. Pass to `TaskExecutor.ExecuteCommand`
+3. Start polling `getOperationProgress` every 300ms
+4. Stop polling when `Active=false` or component disconnected
+
+---
+
+## Known Issues / Decisions
+
+### RPC Timeout
+Increased from 30s → 120s (`RPC_TIMEOUT_MS` in `types.ts`) to handle large solution restores. This is intentional.
+
+### OpenTelemetry
+Used for anonymous usage telemetry (operation counts, error rates). Connects to an OTLP endpoint configured in `host-api.ts`. No PII is sent. The endpoint is hardcoded to the project's own collector.
+
+### ESLint Version
+Staying on ESLint 9.x — ESLint 10 has breaking config changes that aren't worth migrating now.
+
+### src/common/ Isomorphism
+Files in `src/common/` are bundled into BOTH the host (Node.js) and web (browser) bundles. They must not import Node.js-only modules. Use `globalThis.crypto` instead of `import { randomBytes } from "crypto"`.
+
+---
+
+## Open Plan
+
+Remediation plan for the whole-application review is at
+`.ai/plans/whole-application-review-remediation.md` — status PROPOSED, awaiting approval.
+It maps all 40 findings to steps, with decisions D1–D6. Do not start code changes until the
+plan and decisions are approved. The `.claude/` → `.ai/` migration plan was completed on
+2026-10-24 and archived to `.ai/completed/`.
+
+---
+
+## Next Session Checklist
+
+1. **If releasing**: Update `package.json` version, run `npm run package`, verify `.vsix`
+2. **If adding RPC method**: types.ts → host-api.ts → webview call
+3. **If editing `src/common/`**: Ensure no Node.js-only imports (test with `npm run esbuild`)
+4. **Before any commit**: `npm run esbuild` + `npm run lint` (0 errors required)
+5. **After changing AI context**: `bash .ai/tests/run-all-tests.sh` (11 suites) and regenerate junctions with `python .ai/scripts/sync-skills.py`

@@ -1,5 +1,8 @@
 # CLAUDE.md
 
+> Canonical agent guide: [`AGENTS.md`](AGENTS.md). This file keeps the project-specific
+> engineering detail used by Claude Code. AI working context lives in `.ai/`.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Identity
@@ -99,8 +102,22 @@ Tests use **VSCode Test CLI** with Mocha (bundled in `@vscode/test-cli`) + Sinon
 
 Run a single test file by modifying `.vscode-test.mjs` config or using the test explorer.
 
-## Code Conventions
+## Central Package Management (multi-framework)
 
+`CpmResolver` resolves package versions per project and target framework:
+
+- Conditions (`<ItemGroup Condition="...">`) are evaluated with `cpm-condition.ts` against the
+  project's real TFMs (`project-framework-resolver.ts`, `dotnet msbuild -getProperty`).
+- Negated conditions are labels (`not net11.0`); one version line per condition.
+- `UpdateCpmVersionsAsync` applies all changes for one props file in a single read/write,
+  verifies before writing, and scopes writes to the addressed `ItemGroup`.
+- Runtime-aligned packages stay on the TFM's major line (`net10.0` → 10.x) unless the user
+  explicitly chooses the overall latest.
+- Installed, Updates, Consolidate and Vulnerabilities must share the same per-TFM resolution.
+
+Details: `.ai/project/architecture.md`, `README.md` → *Multi-framework version management*.
+
+## Code Conventions
 - **Strict TypeScript**: `strict: true`, avoid `any` (warn-level in ESLint)
 - **Unused vars**: Prefix with `_` to suppress warnings
 - **Error responses**: RPC methods return `Result<T>` — use `ok(value)` / `fail(error)` helpers
@@ -139,14 +156,14 @@ These apply to this project specifically:
 **On every non-trivial task (3+ steps or multi-file):**
 
 1. Enter plan mode (`EnterPlanMode`), present the plan, wait for approval
-2. Create a progress file at `.claude/progress/{task-slug}.md`
+2. Create a progress file at `.ai/progress/{task-slug}.md`
 3. Update progress file after each step (Edit `- [ ]` → `- [x]`)
-4. On completion: mark DONE and move to `.claude/completed/`
+4. On completion: mark DONE and move to `.ai/completed/`
 
-**Do NOT use built-in `TaskCreate`/`TaskUpdate`/`TaskList` tools** — use local `.claude/progress/` markdown files instead.
+**Do NOT use built-in `TaskCreate`/`TaskUpdate`/`TaskList` tools** — use local `.ai/progress/` markdown files instead.
 
 ## Session Management
 
-1. Read `.claude/session-context.md` at session start
+1. Read `.ai/session-context.md` at session start
 2. Update it before ending with current state and next steps
-3. Plans are stored in `.claude/plans/` (configured via `plansDirectory` in `.claude/settings.json`)
+3. Plans are stored in `.ai/plans/` (configured via `plansDirectory` in `.claude/settings.json`)

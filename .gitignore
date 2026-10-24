@@ -6,4 +6,17 @@ dist
 .env
 .playwright-mcp/
 releases/
-.claude/plans/
+
+# AI template scratch and generated artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ai/tmp/
+
+# Platform skill/agent junctions (recreated by .ai/scripts/sync-skills.py)
+.claude/skills/
+.claude/agents/
+.github/skills/
+.github/agents/
+.reasonix/skills/
+.reasonix/agents/
