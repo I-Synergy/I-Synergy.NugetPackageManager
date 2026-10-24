@@ -189,7 +189,9 @@ export class ProjectTree extends LitElement {
             : this.projects.length === 0
               ? html`<div class="empty-state">No projects found</div>`
               : nothing}
-          ${!this.loading && this.projects.map(
+          ${this.loading
+            ? nothing
+            : this.projects.map(
             (p) => html`
               <div class="tree-item" role="listitem">
                 <input

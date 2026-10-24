@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.7 (2026-10-24)
+
+- fix: stop rendering the literal string `false` in the Projects pane during loading.
+- perf: resolve target frameworks from the existing `obj/project.assets.json` first, avoiding one `dotnet msbuild` process per project on first load; MSBuild remains the fallback.
+
 ## 1.2.6 (2026-10-24)
 
 - fix: Consolidate and Vulnerabilities now retain all framework-scoped CPM resolutions when a package has no single `Version`, matching Updates and Installed.

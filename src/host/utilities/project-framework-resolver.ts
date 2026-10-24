@@ -8,7 +8,7 @@ import { Logger } from "../../common/logger";
 
 const execFileAsync = promisify(execFile);
 
-export type TargetFrameworkSource = "msbuild" | "xml" | "override";
+export type TargetFrameworkSource = "msbuild" | "xml" | "assets" | "override";
 
 export type TargetFrameworkInfo = {
   Frameworks: string[];
@@ -74,25 +74,30 @@ export default class ProjectFrameworkResolver {
     }
 
     let info: TargetFrameworkInfo;
-    try {
-      const evaluator = this.evaluator ?? ((p: string) => this.EvaluateWithMsBuildAsync(p));
-      await this.acquireEvaluationSlotAsync();
-      let frameworks: string[];
+    const fromAssets = await this.TryResolveFromAssetsAsync(projectPath);
+    if (fromAssets) {
+      info = fromAssets;
+    } else {
       try {
-        frameworks = await evaluator(projectPath);
-      } finally {
-        this.releaseEvaluationSlot();
-      }
-      if (frameworks.length > 0) {
-        info = { Frameworks: this.normalizeFrameworks(frameworks), Source: "msbuild" };
-      } else {
+        const evaluator = this.evaluator ?? ((p: string) => this.EvaluateWithMsBuildAsync(p));
+        await this.acquireEvaluationSlotAsync();
+        let frameworks: string[];
+        try {
+          frameworks = await evaluator(projectPath);
+        } finally {
+          this.releaseEvaluationSlot();
+        }
+        if (frameworks.length > 0) {
+          info = { Frameworks: this.normalizeFrameworks(frameworks), Source: "msbuild" };
+        } else {
+          info = await this.ParseProjectFileAsync(projectPath);
+        }
+      } catch (error) {
+        Logger.debug(
+          `ProjectFrameworkResolver: MSBuild evaluation failed for ${projectPath}; falling back to XML (${String(error)})`
+        );
         info = await this.ParseProjectFileAsync(projectPath);
       }
-    } catch (error) {
-      Logger.debug(
-        `ProjectFrameworkResolver: MSBuild evaluation failed for ${projectPath}; falling back to XML (${String(error)})`
-      );
-      info = await this.ParseProjectFileAsync(projectPath);
     }
 
     info = this.withOverrides(info, overrides);
@@ -126,6 +131,34 @@ export default class ProjectFrameworkResolver {
     const workers = Array.from({ length: Math.min(concurrency, projectPaths.length) }, () => worker());
     await Promise.all(workers);
     return result;
+  }
+
+  /**
+   * Reads the target frameworks recorded by the last restore. This avoids one
+   * `dotnet msbuild` process per project on the first load. Assets are only used
+   * when they are at least as new as the project file.
+   */
+  private static async TryResolveFromAssetsAsync(
+    projectPath: string
+  ): Promise<TargetFrameworkInfo | null> {
+    const assetsPath = path.join(path.dirname(projectPath), "obj", "project.assets.json");
+    try {
+      const [assetsStat, projectStat] = await Promise.all([
+        fs.promises.stat(assetsPath),
+        fs.promises.stat(projectPath),
+      ]);
+      if (assetsStat.mtimeMs < projectStat.mtimeMs) return null;
+
+      const parsed = JSON.parse(await fs.promises.readFile(assetsPath, "utf8")) as {
+        targets?: Record<string, unknown>;
+      };
+      const frameworks = this.normalizeFrameworks(
+        Object.keys(parsed.targets ?? {}).map((target) => target.split("/")[0] ?? target)
+      );
+      return frameworks.length > 0 ? { Frameworks: frameworks, Source: "assets" } : null;
+    } catch {
+      return null;
+    }
   }
 
   /** Literal (non-evaluated) parse of `<TargetFramework(s)>` elements. */
@@ -226,7 +259,10 @@ export default class ProjectFrameworkResolver {
   }
 
   private static async BuildCacheKeyAsync(projectPath: string): Promise<string> {
-    const files = new Set<string>([projectPath]);
+    const files = new Set<string>([
+      projectPath,
+      path.join(path.dirname(projectPath), "obj", "project.assets.json"),
+    ]);
     let current = path.dirname(projectPath);
     const root = path.parse(current).root;
 

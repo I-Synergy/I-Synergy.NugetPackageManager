@@ -45,6 +45,27 @@ suite('ProjectFrameworkResolver Tests', () => {
         assert.strictEqual(calls, 1, 'second call should be served from cache');
     });
 
+    test('uses project.assets.json without invoking MSBuild', async () => {
+        const projectPath = path.join(tmpDir, 'App.csproj');
+        fs.writeFileSync(projectPath, '<Project Sdk="Microsoft.NET.Sdk" />');
+        fs.mkdirSync(path.join(tmpDir, 'obj'), { recursive: true });
+        fs.writeFileSync(
+            path.join(tmpDir, 'obj', 'project.assets.json'),
+            JSON.stringify({ targets: { 'net10.0': {}, 'net11.0': {} } })
+        );
+
+        let calls = 0;
+        ProjectFrameworkResolver.SetEvaluatorForTests(async () => {
+            calls++;
+            return ['should-not-be-used'];
+        });
+
+        const info = await ProjectFrameworkResolver.GetTargetFrameworksAsync(projectPath);
+        assert.deepStrictEqual(info.Frameworks, ['net10.0', 'net11.0']);
+        assert.strictEqual(info.Source, 'assets');
+        assert.strictEqual(calls, 0, 'assets should avoid a dotnet msbuild process');
+    });
+
     test('falls back to literal XML when MSBuild evaluation throws', async () => {
         const projectPath = path.join(tmpDir, 'App.csproj');
         fs.writeFileSync(

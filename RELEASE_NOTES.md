@@ -1,6 +1,9 @@
-# NuGet Package Manager 1.2.6
+# NuGet Package Manager 1.2.7
 
 ## Fixes and UI
+
+- Fixed the literal `false` text shown while projects are loading.
+- Added an assets-based target-framework fast path to avoid the long first-load delay in large CPM workspaces.
 
 - Fixed remaining multi-TFM gaps in Consolidate and Vulnerabilities.
 - Added the framework selector to Consolidate.
