@@ -174,6 +174,25 @@ the webview call site.
   version on the TFM's major line. A cross-major bump is an explicit action.
 - Do not consolidate across framework lines; the different versions are intentional.
 
+#### Multi-TFM regression checklist (mandatory)
+
+A CPM package with framework-scoped versions intentionally has no single
+`ProjectPackage.Version`; it has `CpmResolutions`. Before completing any change that touches
+package versions or framework filters:
+
+- Search for empty-version guards and review every match:
+  `grep -rn "CpmResolutions\|!pkg\.Version\|pkg\.Version" src/host src/web`
+- Never `continue`/skip a package merely because `pkg.Version` is empty. If
+  `pkg.CpmResolutions` exists, process every resolution (`Tfm`, `Condition`, `Version`)
+  independently.
+- Check all consumers: Installed, Updates, Consolidate, Vulnerabilities, Cleanup and project
+  rows must agree on the same per-TFM rows.
+- Every tab that filters by framework must render a framework selector and wire its
+  `framework-changed` event back to `packages-view` (Updates and Consolidate are required).
+- Add both regressions: a host test for a package with multiple `CpmResolutions` and an empty
+  `Version`, and a component test for the selector/filter behavior. A host-only test is not
+  sufficient for a UI feature.
+
 ### 7. Tests
 
 - Tests use the VS Code Test CLI + Mocha (TDD `suite`/`test`) + Sinon + Node `assert`.
