@@ -8,6 +8,7 @@ import "./dropdown";
 import { scrollableBase } from "@/web/styles/base.css";
 import { sharedStyles } from "@/web/styles/shared.css";
 import { hostApi } from "@/web/registrations";
+import { buildFrameworkOptions, getBaseTargetFramework, getFrameworkGroupKey, matchesFrameworkSelection } from "@/common/framework";
 import { InconsistentPackageViewModel } from "../types";
 
 @customElement("consolidate-view")
@@ -141,33 +142,35 @@ export class ConsolidateView extends LitElement {
   });
 
   get frameworkOptions(): Array<{ value: string; label: string }> {
-    const frameworks = new Set(
-      this.packages.flatMap((p) => p.Versions.map((v) => v.CpmFramework)).filter(Boolean)
+    const values = this.packages.flatMap((p) => p.Versions.map((v) => v.CpmFramework));
+    return buildFrameworkOptions(values, values.some((value) => value === ""));
+  }
+
+  private packageMatchesFramework(pkg: InconsistentPackageViewModel): boolean {
+    return pkg.Versions.some((v) =>
+      matchesFrameworkSelection(this.selectedFramework, v.CpmFramework)
     );
-    if (frameworks.size === 0) return [];
-    return [
-      { value: "", label: "All frameworks" },
-      ...[...frameworks].sort().map((f) => ({ value: f, label: f })),
-    ];
   }
 
   private get visiblePackages(): InconsistentPackageViewModel[] {
     if (this.selectedFramework === "" || this.frameworkOptions.length === 0) return this.packages;
-    return this.packages.filter((p) =>
-      p.Versions.some((v) => v.CpmFramework === this.selectedFramework || v.CpmFramework === "")
-    );
+    return this.packages.filter((pkg) => this.packageMatchesFramework(pkg));
   }
 
   private get groupedVisiblePackages(): Array<{ key: string; label: string; packages: InconsistentPackageViewModel[] }> {
     const groups = new Map<string, InconsistentPackageViewModel[]>();
     for (const pkg of this.visiblePackages) {
-      const key = pkg.Versions[0]?.CpmFramework ?? "";
+      const key = getFrameworkGroupKey(this.selectedFramework, pkg.Versions[0]?.CpmFramework ?? "");
       const list = groups.get(key) ?? [];
       list.push(pkg);
       groups.set(key, list);
     }
     return [...groups.entries()]
-      .map(([key, packages]) => ({ key, label: key || "Shared", packages }))
+      .map(([key, packages]) => ({
+        key,
+        label: key || "Shared",
+        packages,
+      }))
       .sort((a, b) => {
         if (a.key === "" && b.key !== "") return -1;
         if (a.key !== "" && b.key === "") return 1;
@@ -290,7 +293,7 @@ export class ConsolidateView extends LitElement {
           <span class="package-name" @click=${() => this.selectPackage(pkg.Id)}>${pkg.Id}</span>
           ${pkg.CpmManaged ? html`<span class="cpm-badge">CPM</span>` : nothing}
           ${pkg.Versions[0]?.CpmFramework
-            ? html`<span class="tfm-badge">${pkg.Versions[0].CpmFramework}</span>`
+            ? html`<span class="tfm-badge">${getBaseTargetFramework(pkg.Versions[0].CpmFramework)}</span>`
             : nothing}
           <div class="row-actions">
             ${pkg.IsConsolidating
@@ -317,7 +320,9 @@ export class ConsolidateView extends LitElement {
             (v) => html`
               <div class="version-row">
                 <span class="version">${v.Version}</span>
-                ${v.CpmFramework && !this.selectedFramework ? html`<span class="tfm-badge">${v.CpmFramework}</span>` : nothing}
+                ${v.CpmFramework && !this.selectedFramework
+                  ? html`<span class="tfm-badge">${getBaseTargetFramework(v.CpmFramework)}</span>`
+                  : nothing}
                 <span class="projects">${v.Projects.map((p) => p.Name).join(", ")}</span>
               </div>
             `
@@ -343,27 +348,6 @@ export class ConsolidateView extends LitElement {
             </div>
           </div>
           <div class="list-actions">
-            ${this.frameworkOptions.length > 1
-              ? html`
-                  <select
-                    class="framework-select"
-                    aria-label="Target framework"
-                    .value=${this.selectedFramework}
-                    @change=${(e: Event) =>
-                      this.dispatchEvent(
-                        new CustomEvent<string>("framework-changed", {
-                          detail: (e.target as HTMLSelectElement).value,
-                          bubbles: true,
-                          composed: true,
-                        })
-                      )}
-                  >
-                    ${this.frameworkOptions.map(
-                      (option) => html`<option value=${option.value}>${option.label}</option>`
-                    )}
-                  </select>
-                `
-              : nothing}
             ${this.packages.length > 0
               ? html`
                   <button

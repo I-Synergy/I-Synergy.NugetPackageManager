@@ -6,6 +6,7 @@ import codicon from "@/web/styles/codicon.css";
 import { scrollableBase } from "@/web/styles/base.css";
 import { sharedStyles } from "@/web/styles/shared.css";
 import { hostApi } from "@/web/registrations";
+import { buildFrameworkOptions, getFrameworkGroupKey, getFrameworkLabel, matchesFrameworkSelection, SHARED_FRAMEWORK } from "@/common/framework";
 import { OutdatedPackageViewModel, PackageViewModel } from "../types";
 import "./package-row";
 
@@ -17,17 +18,19 @@ export class UpdatesView extends LitElement {
     sharedStyles,
     css`
       :host {
-        display: flex;
+        display: block;
         flex: 1;
         width: 100%;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
       }
 
       .updates-container {
         display: flex;
         flex-direction: column;
-        height: 100%;
         width: 100%;
-        overflow: hidden;
+        min-height: 0;
         .outdated-row {
           display: flex;
           align-items: center;
@@ -45,19 +48,16 @@ export class UpdatesView extends LitElement {
             min-width: 0;
           }
 
-          .framework-select {
-            background: var(--vscode-dropdown-background);
-            color: var(--vscode-dropdown-foreground);
-            border: 1px solid var(--vscode-dropdown-border);
-            border-radius: 6px;
-            padding: 4px 8px;
-            font-size: 11px;
-          }
+
 
           .row-actions {
             display: flex;
             align-items: center;
             flex-shrink: 0;
+          }
+
+          .package-list {
+            flex: 0 0 auto;
           }
         }
 
@@ -73,6 +73,7 @@ export class UpdatesView extends LitElement {
   @property({ attribute: false }) projectPaths: string[] = [];
   @property() sourceUrl: string = "";
   @property() filterQuery: string = "";
+  @property({ attribute: false }) availableFrameworks: Array<{ value: string; label: string }> = [];
 
   private _loadTask = new Task(this, {
     task: async ([projectPaths, sourceUrl, prerelease, forceReload], { signal }) => {
@@ -105,18 +106,19 @@ export class UpdatesView extends LitElement {
   });
 
   get frameworkOptions(): Array<{ value: string; label: string }> {
-    const frameworks = new Set(this.packages.map((p) => p.CpmFramework).filter(Boolean));
-    if (frameworks.size === 0) return [];
-    return [
-      { value: "", label: "All frameworks" },
-      ...[...frameworks].sort().map((f) => ({ value: f, label: f })),
+    const values = [
+      ...this.packages.map((pkg) => pkg.CpmFramework),
+      ...this.availableFrameworks.map((option) => option.value),
     ];
+    return buildFrameworkOptions(values, this.packages.some((pkg) => pkg.CpmFramework === ""));
   }
 
   private get visiblePackages(): OutdatedPackageViewModel[] {
     let list = this.packages;
     if (this.selectedFramework !== "" && this.frameworkOptions.length > 0) {
-      list = list.filter((p) => p.CpmFramework === this.selectedFramework || p.CpmFramework === "");
+      list = list.filter((pkg) =>
+        matchesFrameworkSelection(this.selectedFramework, pkg.CpmFramework)
+      );
     }
     if (!this.filterQuery) return list;
     const q = this.filterQuery.toLowerCase();
@@ -126,13 +128,17 @@ export class UpdatesView extends LitElement {
   private get groupedVisiblePackages(): Array<{ key: string; label: string; packages: OutdatedPackageViewModel[] }> {
     const groups = new Map<string, OutdatedPackageViewModel[]>();
     for (const pkg of this.visiblePackages) {
-      const key = pkg.CpmFramework || "";
+      const key = getFrameworkGroupKey(this.selectedFramework, pkg.CpmFramework);
       const list = groups.get(key) ?? [];
       list.push(pkg);
       groups.set(key, list);
     }
     return [...groups.entries()]
-      .map(([key, packages]) => ({ key, label: key || "Shared", packages }))
+      .map(([key, packages]) => ({
+        key,
+        label: key ? getFrameworkLabel(key) : getFrameworkLabel(SHARED_FRAMEWORK),
+        packages,
+      }))
       .sort((a, b) => {
         if (a.key === "" && b.key !== "") return -1;
         if (a.key !== "" && b.key === "") return 1;
@@ -407,27 +413,6 @@ export class UpdatesView extends LitElement {
             </div>
           </div>
           <div class="list-actions">
-            ${this.frameworkOptions.length > 1
-              ? html`
-                  <select
-                    class="framework-select"
-                    aria-label="Target framework"
-                    .value=${this.selectedFramework}
-                    @change=${(e: Event) =>
-                      this.dispatchEvent(
-                        new CustomEvent<string>("framework-changed", {
-                          detail: (e.target as HTMLSelectElement).value,
-                          bubbles: true,
-                          composed: true,
-                        })
-                      )}
-                  >
-                    ${this.frameworkOptions.map(
-                      (option) => html`<option value=${option.value}>${option.label}</option>`
-                    )}
-                  </select>
-                `
-              : nothing}
             ${visible.length > 0
               ? html`
                   <button class="ghost-btn" title="${allVisibleSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>

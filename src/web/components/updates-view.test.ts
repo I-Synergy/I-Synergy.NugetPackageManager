@@ -75,6 +75,22 @@ suite('UpdatesView', () => {
         assert.strictEqual(groups[0]!.packages.length, 1);
     });
 
+    test('includes installed framework lines even when they have no outdated row', () => {
+        const net10 = makePackage("$(TargetFramework.StartsWith('net10.0'))", 'net10.0');
+        view.packages = [net10];
+        view.availableFrameworks = [
+            { value: '', label: 'All frameworks' },
+            { value: 'net10.0', label: 'net10.0' },
+            { value: 'net11.0', label: 'net11.0' },
+        ];
+
+        assert.deepStrictEqual(view.frameworkOptions, [
+            { value: '', label: 'All frameworks' },
+            { value: 'net10.0', label: 'net10.0' },
+            { value: 'net11.0', label: 'net11.0' },
+        ]);
+    });
+
     test('exposes framework options and filters visible updates by framework', () => {
         const shared = makePackage('', '');
         const net10 = makePackage("$(TargetFramework.StartsWith('net10.0'))", 'net10.0');
@@ -83,13 +99,49 @@ suite('UpdatesView', () => {
 
         assert.deepStrictEqual(view.frameworkOptions, [
             { value: '', label: 'All frameworks' },
+            { value: '__shared__', label: 'Shared' },
             { value: 'net10.0', label: 'net10.0' },
             { value: 'net11.0', label: 'net11.0' },
         ]);
 
         view.selectedFramework = 'net11.0';
         const visible = (view as unknown as { visiblePackages: OutdatedPackageViewModel[] }).visiblePackages;
-        assert.deepStrictEqual(visible.map((pkg) => pkg.CpmFramework).sort(), ['', 'net11.0']);
+        assert.deepStrictEqual(visible.map((pkg) => pkg.CpmFramework).sort(), ['net11.0']);
+
+        view.selectedFramework = '__shared__';
+        const sharedOnly = (view as unknown as { visiblePackages: OutdatedPackageViewModel[] }).visiblePackages;
+        assert.deepStrictEqual(sharedOnly.map((pkg) => pkg.CpmFramework), ['']);
+    });
+
+    test('does not duplicate the shared option from available frameworks', () => {
+        const shared = makePackage('', '');
+        view.packages = [shared];
+        view.availableFrameworks = [
+            { value: '', label: 'All frameworks' },
+            { value: '__shared__', label: 'Shared' },
+            { value: 'net10.0', label: 'net10.0' },
+        ];
+
+        assert.deepStrictEqual(view.frameworkOptions, [
+            { value: '', label: 'All frameworks' },
+            { value: '__shared__', label: 'Shared' },
+            { value: 'net10.0', label: 'net10.0' },
+        ]);
+    });
+
+    test('collapses platform TFMs into their base .NET line', () => {
+        const windows = makePackage("$(TargetFramework.Contains('-windows'))", 'net10.0-windows10.0.26100.0');
+        const android = makePackage("$(TargetFramework.Contains('-android'))", 'net10.0-android34.0');
+        view.packages = [windows, android];
+
+        assert.deepStrictEqual(view.frameworkOptions, [
+            { value: '', label: 'All frameworks' },
+            { value: 'net10.0', label: 'net10.0' },
+        ]);
+
+        view.selectedFramework = 'net10.0';
+        const visible = (view as unknown as { visiblePackages: OutdatedPackageViewModel[] }).visiblePackages;
+        assert.strictEqual(visible.length, 2);
     });
 
     test('sends the group scope and condition for a framework row', async () => {

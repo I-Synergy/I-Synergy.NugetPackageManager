@@ -135,6 +135,7 @@ Shows every package installed across all selected projects. Select a package to 
 - **Remove from all projects** — removes the package reference from every project in the solution, confirms the project list first, and restores once after the removals
 - **CPM cleanup** — when the last project reference is removed, the matching `PackageVersion` entry is deleted from `Directory.Packages.props` so no stale global reference remains
 - **Version changes** — install, update, or change a package version per project without leaving the package list
+- **Framework filter** — collapses platform TFMs (windows, android, ios) to their base `.NET` line. **Shared** is a separate option, so unconditional versions are never mixed into a `.NET`-specific update run.
 
 ### Updates
 
@@ -148,6 +149,7 @@ Lists all packages where a newer version is available on the configured sources.
 - `dotnet restore` runs **once after all selected versions are written**, so dependent packages resolve against the complete set
 - If a write or the final restore fails, the host restores the affected file snapshots and reports a rollback
 - Per-row **update button** for single-package updates
+- **Framework selector** — choose **All frameworks**, **Shared**, or a base `.NET` line such as `net10.0` / `net11.0`. Platform variants are grouped under the base line; selecting a `.NET` line excludes shared packages.
 - Tab data refreshes automatically every time you switch to it
 
 ### Consolidate
@@ -159,6 +161,7 @@ Detects packages that are installed at different versions across your projects.
 - Groups packages by ID, shows which project uses which version (latest highlighted in orange, older in yellow)
 - **Version dropdown** per package — pick the target version to consolidate to
 - **Consolidate** button applies to a single package; **Consolidate all** processes each framework line separately
+- **Framework selector** — review **Shared** separately from the base `.NET` lines; platform TFMs are grouped under their base line
 - Respects Central Package Management and never merges one framework's version into another
 - Tab data refreshes automatically every time you switch to it
 
@@ -340,7 +343,7 @@ The extension evaluates each condition against the project's real target framewo
 3. writes only inside the `ItemGroup` that produced the row;
 4. batches all changes for a shared props file into a single read/write cycle.
 
-Use the framework dropdown to focus on one line, or **Update all TFMs** in the Updates tab to bump every selected package on each of its framework lines at once. Values that do not follow the TFM major — for example a stable `10.x` package in a `net11.0` line — require the explicit *latest overall* action, which is shown with a warning.
+Use the framework dropdown to focus on one base `.NET` line, **Shared** for unconditional versions, or **All frameworks**; platform TFMs (windows/android/ios) are grouped under their base `.NET` line. Selecting a `.NET` line excludes shared packages, so shared versions are updated in a separate run. **Update all TFMs** remains an explicit cross-framework action. Values that do not follow the TFM major — for example a stable `10.x` package in a `net11.0` line — require the explicit *latest overall* action, which is shown with a warning.
 
 ![Installed packages grouped per target framework](docs/images/screenshot-installed-frameworks.png)
 

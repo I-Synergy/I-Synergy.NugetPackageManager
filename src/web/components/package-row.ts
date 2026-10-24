@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { PackageViewModel } from "../types";
+import { getBaseTargetFramework } from "@/common/framework";
 import codicon from "@/web/styles/codicon.css";
 import { sharedStyles } from "@/web/styles/shared.css";
 
@@ -276,7 +277,7 @@ export class PackageRow extends LitElement {
                 ? html`<span class="codicon codicon-verified-filled verified-badge" title="Verified owner"></span>`
                 : nothing}
               ${this.package.CpmFramework
-                ? html`<span class="tfm-badge" title="Framework-scoped version">${this.package.CpmFramework}</span>`
+                ? html`<span class="tfm-badge" title="Framework-scoped version">${getBaseTargetFramework(this.package.CpmFramework)}</span>`
                 : nothing}
               ${this.package.Authors
                 ? html`<span class="authors">by ${this.package.Authors}</span>`

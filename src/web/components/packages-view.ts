@@ -4,6 +4,7 @@ import { customElement, state } from "lit/decorators.js";
 import Split from "split.js";
 import lodash from "lodash";
 import { hostApi, configuration } from "@/web/registrations";
+import { buildFrameworkOptions, getFrameworkGroupKey, matchesFrameworkSelection } from "@/common/framework";
 import codicon from "@/web/styles/codicon.css";
 import { scrollableBase } from "@/web/styles/base.css";
 import { sharedStyles } from "@/web/styles/shared.css";
@@ -1056,12 +1057,8 @@ export class PackagesView extends LitElement {
   }
 
   private get installedFrameworkOptions(): Array<{ value: string; label: string }> {
-    const frameworks = new Set(this.projectsPackages.map((p) => p.CpmFramework).filter(Boolean));
-    if (frameworks.size === 0) return [];
-    return [
-      { value: "", label: "All frameworks" },
-      ...[...frameworks].sort().map((f) => ({ value: f, label: f })),
-    ];
+    const values = this.projectsPackages.map((p) => p.CpmFramework);
+    return buildFrameworkOptions(values, values.some((value) => value === ""));
   }
 
   private get filteredInstalledPackages(): PackageViewModel[] {
@@ -1070,7 +1067,7 @@ export class PackagesView extends LitElement {
       const isPrerelease = version.includes("-");
       if (!this.filters.Prerelease && isPrerelease) return false;
       if (this._installedFramework !== "" && this.installedFrameworkOptions.length > 0) {
-        return pkg.CpmFramework === this._installedFramework || pkg.CpmFramework === "";
+        return matchesFrameworkSelection(this._installedFramework, pkg.CpmFramework);
       }
       return true;
     });
@@ -1079,7 +1076,7 @@ export class PackagesView extends LitElement {
   private get groupedInstalledPackages(): Array<{ key: string; label: string; packages: PackageViewModel[] }> {
     const groups = new Map<string, PackageViewModel[]>();
     for (const pkg of this.filteredInstalledPackages) {
-      const key = pkg.CpmFramework || "";
+      const key = getFrameworkGroupKey(this._installedFramework, pkg.CpmFramework);
       const list = groups.get(key) ?? [];
       list.push(pkg);
       groups.set(key, list);
@@ -1489,6 +1486,7 @@ export class PackagesView extends LitElement {
                   .projectPaths=${this.effectiveProjectPaths}
                   .sourceUrl=${this.filters.SourceUrl}
                   .filterQuery=${this.filters.Query}
+                  .availableFrameworks=${this.installedFrameworkOptions}
                   .selectedFramework=${this._updatesFramework}
                   @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
                   @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}

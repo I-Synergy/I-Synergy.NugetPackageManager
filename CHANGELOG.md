@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- feat: framework selectors now collapse platform TFMs (windows/android/ios) to their base `.NET` line and expose **Shared** as a separate option; selecting a `.NET` line excludes shared packages.
+- fix: Updates keeps installed framework lines in the selector even when they have no current outdated row.
+- fix: Updates content now scrolls correctly in the constrained tab layout.
+- test: cover platform-TFM normalization and separate shared filtering.
+
 ## 1.2.10 (2026-10-24)
 
 - fix: exclude every dot-directory (`.git`, `.vs`, `.vscode`, `.github`, `.ai`, `.reasonix`, etc.) from project, CPM and cleanup scans.
