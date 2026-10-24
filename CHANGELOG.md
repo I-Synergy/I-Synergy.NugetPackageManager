@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.2.5 (2026-10-24)
+
+- fix: framework-scoped CPM packages with separate net10.0/net11.0 versions are no longer dropped from Updates when the package has no single version.
+- feat: add the target-framework selector to the Updates tab so each framework line can be reviewed and updated separately.
+- feat: show a loading indicator and status in the Projects pane while discovery and TFM resolution run; keep the previous list visible during refresh.
+- feat: collapse the Projects sidebar by default.
+
 ## 1.2.4 (2026-10-24)
 
 - docs: fix README TOC anchors, align workflow sections with the actual tab order (Browse, Installed, Updates, Consolidate, Vulnerabilities, Cleanup), and add a real VS Code Activity Bar/sidebar screenshot.

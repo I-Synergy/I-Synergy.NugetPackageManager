@@ -46,6 +46,25 @@ const styles = css`
       flex: 1;
     }
 
+    .loading-state {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 12px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+
+      .codicon {
+        font-size: 14px;
+      }
+    }
+
+    .empty-state {
+      padding: 16px 12px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+    }
+
     .tree-item {
       display: flex;
       align-items: center;
@@ -89,6 +108,8 @@ export class ProjectTree extends LitElement {
   static override styles = [codicon, scrollableBase, styles];
 
   @property({ type: Array }) projects: ProjectViewModel[] = [];
+  @property({ type: Boolean }) loading: boolean = false;
+  @property({ type: String }) loadingMessage: string = "Discovering projects…";
   @state() selectedPaths: string[] = [];
   @state() allChecked: boolean = true;
   @state() isIndeterminate: boolean = false;
@@ -157,10 +178,18 @@ export class ProjectTree extends LitElement {
               this.OnSelectAllChanged((e.target as HTMLInputElement).checked)}
           />
           <span class="header-label">Projects</span>
-          <span class="header-count">${this.selectedPaths.length}/${this.projects.length}</span>
+          <span class="header-count">${this.loading ? "…" : `${this.selectedPaths.length}/${this.projects.length}`}</span>
         </div>
-        <div class="tree-list" role="list">
-          ${this.projects.map(
+        <div class="tree-list" role="list" aria-busy=${this.loading}>
+          ${this.loading
+            ? html`<div class="loading-state" role="status" aria-live="polite">
+                <span class="codicon codicon-loading codicon-modifier-spin"></span>
+                <span>${this.loadingMessage}</span>
+              </div>`
+            : this.projects.length === 0
+              ? html`<div class="empty-state">No projects found</div>`
+              : nothing}
+          ${!this.loading && this.projects.map(
             (p) => html`
               <div class="tree-item" role="listitem">
                 <input

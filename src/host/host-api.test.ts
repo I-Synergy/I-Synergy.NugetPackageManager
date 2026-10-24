@@ -290,6 +290,39 @@ suite('HostAPI Tests', () => {
             assert.strictEqual(result.value.Packages[0]!.Projects.length, 2);
         });
 
+        test('keeps framework-scoped CPM resolutions when package has no single version', async () => {
+            const uri = makeProjectUri('/ws/A.csproj');
+            sandbox.stub(vscode.workspace, 'findFiles').resolves([uri]);
+
+            const project = {
+                Name: 'A',
+                Path: '/ws/A.csproj',
+                CpmEnabled: true,
+                Packages: [{
+                    Id: 'Newtonsoft.Json',
+                    Version: '',
+                    IsPinned: false,
+                    CpmResolutions: [
+                        { Tfm: 'net10.0', Version: '1.0.0', Condition: 'net10', ConditionLabel: 'net10.0', Matched: true },
+                        { Tfm: 'net11.0', Version: '2.0.0', Condition: 'net11', ConditionLabel: 'net11.0', Matched: true },
+                    ],
+                }],
+            } as unknown as Project;
+
+            sandbox.stub(ProjectParser, 'ParseAsync').resolves(project);
+            setupNugetApi('3.0.0');
+
+            const api = createHostAPI();
+            const result = await api.getOutdatedPackagesAsync({ ForceReload: false, Prerelease: false });
+
+            assert.ok(result.ok);
+            assert.strictEqual(result.value.Packages.length, 2);
+            assert.deepStrictEqual(
+                result.value.Packages.map((pkg) => [pkg.CpmFramework, pkg.InstalledVersion]).sort(),
+                [['net10.0', '1.0.0'], ['net11.0', '2.0.0']]
+            );
+        });
+
         test('does not report package as outdated when all projects are already at latest', async () => {
             const uriA = makeProjectUri('/ws/A.csproj');
             sandbox.stub(vscode.workspace, 'findFiles').resolves([uriA]);

@@ -409,7 +409,7 @@ export class PackagesView extends LitElement {
   @state() packagesLoadingError: boolean = false;
   @state() packagesLoadingErrorMessage: string = "";
   @state() selectedProjectPaths: string[] = [];
-  @state() showProjectTree: boolean = true;
+  @state() showProjectTree: boolean = false;
   @state() private _installedFramework = "";
   @state() private _updatesFrameworkOptions: Array<{ value: string; label: string }> = [];
   @state() private _updatesFramework = "";
@@ -417,6 +417,8 @@ export class PackagesView extends LitElement {
   @state() private _consolidateFramework = "";
   @state() private removingPackage = false;
   @state() private removeError = "";
+  @state() private projectsLoading = false;
+  @state() private projectsLoadingMessage = "Discovering projects and resolving target frameworks…";
   private _refreshAc: AbortController | undefined;
   private _connected = false;
 
@@ -986,23 +988,30 @@ export class PackagesView extends LitElement {
     const ac = new AbortController();
     this._projectsAc = ac;
 
-    this.projects = [];
-    const result = await hostApi.getProjectsAsync({ ForceReload: forceReload }, ac.signal);
+    this.projectsLoading = true;
+    this.projectsLoadingMessage = "Discovering projects and resolving target frameworks…";
+    try {
+      const result = await hostApi.getProjectsAsync({ ForceReload: forceReload }, ac.signal);
 
-    if (ac.signal.aborted) return;
+      if (ac.signal.aborted) return;
 
-    if (result.ok) {
-      this.projects = result.value.Projects.map(
-        (x) => new ProjectViewModel(x)
-      );
-      this._allProjectPaths = this.projects.map((p) => p.Path);
-      const validPaths = new Set(this._allProjectPaths);
-      this.selectedProjectPaths = this.selectedProjectPaths.filter((p) => validPaths.has(p));
-      if (this.selectedProjectPaths.length === 0) {
-        this.selectedProjectPaths = this._allProjectPaths;
+      if (result.ok) {
+        this.projects = result.value.Projects.map(
+          (x) => new ProjectViewModel(x)
+        );
+        this._allProjectPaths = this.projects.map((p) => p.Path);
+        const validPaths = new Set(this._allProjectPaths);
+        this.selectedProjectPaths = this.selectedProjectPaths.filter((p) => validPaths.has(p));
+        if (this.selectedProjectPaths.length === 0) {
+          this.selectedProjectPaths = this._allProjectPaths;
+        }
+        await this.LoadProjectsPackagesAsync(forceReload);
+        await this.RefreshVulnerabilityCountAsync();
       }
-      await this.LoadProjectsPackagesAsync(forceReload);
-      await this.RefreshVulnerabilityCountAsync();
+    } finally {
+      if (this._projectsAc === ac) {
+        this.projectsLoading = false;
+      }
     }
   }
 
@@ -1362,6 +1371,8 @@ export class PackagesView extends LitElement {
           ? html`<div class="col" id="project-tree">
               <project-tree
                 .projects=${this.projects}
+                .loading=${this.projectsLoading}
+                .loadingMessage=${this.projectsLoadingMessage}
                 @selection-changed=${async (e: CustomEvent<string[]>) =>
                   await this.OnProjectSelectionChangedAsync(e.detail)}
               ></project-tree>
@@ -1379,9 +1390,11 @@ export class PackagesView extends LitElement {
             >
               <span class="codicon codicon-list-tree"></span>
             </button>
-            ${this.projects.length > 0
-              ? html`<span class="scope-summary" title="Selected projects / total projects">${this.selectedProjectPaths.length}/${this.projects.length} projects</span>`
-              : nothing}
+            ${this.projectsLoading
+              ? html`<span class="scope-summary">Loading projects…</span>`
+              : this.projects.length > 0
+                ? html`<span class="scope-summary" title="Selected projects / total projects">${this.selectedProjectPaths.length}/${this.projects.length} projects</span>`
+                : nothing}
             <button
               class="tab ${this.activeTab === "browse" ? "active" : ""}"
               role="tab"
@@ -1482,6 +1495,9 @@ export class PackagesView extends LitElement {
                   @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
                     this._updatesFrameworkOptions = e.detail;
                     this._updatesFramework = "";
+                  }}
+                  @framework-changed=${(e: CustomEvent<string>) => {
+                    this._updatesFramework = e.detail;
                   }}
                 ></updates-view>
               </div>`

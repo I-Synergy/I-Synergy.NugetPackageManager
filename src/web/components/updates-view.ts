@@ -45,6 +45,15 @@ export class UpdatesView extends LitElement {
             min-width: 0;
           }
 
+          .framework-select {
+            background: var(--vscode-dropdown-background);
+            color: var(--vscode-dropdown-foreground);
+            border: 1px solid var(--vscode-dropdown-border);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+          }
+
           .row-actions {
             display: flex;
             align-items: center;
@@ -398,6 +407,27 @@ export class UpdatesView extends LitElement {
             </div>
           </div>
           <div class="list-actions">
+            ${this.frameworkOptions.length > 1
+              ? html`
+                  <select
+                    class="framework-select"
+                    aria-label="Target framework"
+                    .value=${this.selectedFramework}
+                    @change=${(e: Event) =>
+                      this.dispatchEvent(
+                        new CustomEvent<string>("framework-changed", {
+                          detail: (e.target as HTMLSelectElement).value,
+                          bubbles: true,
+                          composed: true,
+                        })
+                      )}
+                  >
+                    ${this.frameworkOptions.map(
+                      (option) => html`<option value=${option.value}>${option.label}</option>`
+                    )}
+                  </select>
+                `
+              : nothing}
             ${visible.length > 0
               ? html`
                   <button class="ghost-btn" title="${allVisibleSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>

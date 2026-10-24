@@ -1,4 +1,10 @@
-# NuGet Package Manager 1.2.4
+# NuGet Package Manager 1.2.5
+
+## Fixes and UI
+
+- Fixed multi-target CPM packages disappearing from Updates on net11.0.
+- Added the framework selector to Updates for per-framework review and updates.
+- Added a Projects loading indicator, kept the previous list during refresh, and collapsed the Projects sidebar by default.
 
 ## Documentation
 

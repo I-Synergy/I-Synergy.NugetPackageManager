@@ -767,12 +767,13 @@ export function createHostAPI(): HostAPI {
         >();
 
         for (const project of projects) {
-          const cpmMap = projectCpmMaps.get(project.Path) ?? null;
-
           for (const pkg of project.Packages) {
-            if (!pkg.Version || pkg.IsPinned) continue;
+            if (pkg.IsPinned) continue;
 
-            const resolutions = cpmMap && pkg.CpmResolutions?.length
+            // A package with framework-scoped versions intentionally has no
+            // single `pkg.Version`; use its per-TFM resolutions instead of
+            // dropping it from the Updates tab.
+            const resolutions = pkg.CpmResolutions?.length
               ? pkg.CpmResolutions
               : [{
                   Tfm: "",
