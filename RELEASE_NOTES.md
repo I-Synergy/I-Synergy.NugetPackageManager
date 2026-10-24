@@ -1,6 +1,8 @@
-# NuGet Package Manager 1.2.9
+# NuGet Package Manager 1.2.10
 
 ## Fixes and UI
+
+- Excluded all dot-directories from project discovery and cleanup scans.
 
 - Hard-excluded `.ai/` and `.reasonix/` from all scans; malformed scratch projects no longer break the Cleanup report.
 

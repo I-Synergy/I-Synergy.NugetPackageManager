@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.10 (2026-10-24)
+
+- fix: exclude every dot-directory (`.git`, `.vs`, `.vscode`, `.github`, `.ai`, `.reasonix`, etc.) from project, CPM and cleanup scans.
+- chore: replace the specific hidden-directory defaults with `**/.*/**`.
+
 ## 1.2.9 (2026-10-24)
 
 - fix: hard-exclude `.ai/` and `.reasonix/` from every project, props and cleanup scan, so scratch/fake projects can never break Cleanup or be treated as solution projects.
