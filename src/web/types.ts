@@ -84,12 +84,16 @@ export class ProjectViewModel {
   Path: string;
   CpmEnabled: boolean;
   Packages: ProjectPackageViewModel[];
+  TargetFrameworks: string[];
+  TfmSource: string;
 
   constructor(model: Project) {
     this.Name = model.Name;
     this.Path = model.Path;
     this.CpmEnabled = model.CpmEnabled;
     this.Packages = model.Packages.map((x) => new ProjectPackageViewModel(x));
+    this.TargetFrameworks = model.TargetFrameworks ?? [];
+    this.TfmSource = model.TfmSource ?? "";
   }
 }
 
@@ -99,6 +103,7 @@ export class ProjectPackageViewModel {
   IsPinned: boolean;
   VersionSource: VersionSource;
   CpmFramework: string;
+  CpmResolutions: CpmResolution[];
 
   constructor(model: ProjectPackage) {
     this.Id = model.Id;
@@ -106,6 +111,7 @@ export class ProjectPackageViewModel {
     this.IsPinned = model.IsPinned;
     this.VersionSource = model.VersionSource;
     this.CpmFramework = model.CpmFramework ?? "";
+    this.CpmResolutions = model.CpmResolutions ?? [];
   }
 }
 
@@ -113,11 +119,14 @@ export class OutdatedPackageViewModel {
   Id: string;
   InstalledVersion: string;
   LatestVersion: string;
+  LatestOverallVersion: string;
   Projects: Array<{ Name: string; Path: string; Version: string }>;
   SourceUrl: string;
   SourceName: string;
   CpmCondition: string;
   CpmFramework: string;
+  CpmConditionLabel: string;
+  CpmMatched: boolean;
   IsUpdating: boolean = false;
   Selected: boolean = false;
 
@@ -125,17 +134,26 @@ export class OutdatedPackageViewModel {
     this.Id = model.Id;
     this.InstalledVersion = model.InstalledVersion;
     this.LatestVersion = model.LatestVersion;
+    this.LatestOverallVersion = model.LatestOverallVersion ?? "";
     this.Projects = model.Projects;
     this.SourceUrl = model.SourceUrl;
     this.SourceName = model.SourceName;
     this.CpmCondition = model.CpmCondition ?? "";
     this.CpmFramework = model.CpmFramework ?? "";
+    this.CpmConditionLabel = model.CpmConditionLabel ?? "";
+    this.CpmMatched = model.CpmMatched ?? true;
   }
 }
 
 export class InconsistentPackageViewModel {
   Id: string;
-  Versions: Array<{ Version: string; Projects: Array<{ Name: string; Path: string }>; CpmFramework: string }>;
+  Versions: Array<{
+    Version: string;
+    Projects: Array<{ Name: string; Path: string }>;
+    CpmFramework: string;
+    CpmCondition: string;
+    CpmConditionLabel: string;
+  }>;
   LatestInstalledVersion: string;
   CpmManaged: boolean;
   TargetVersion: string;
@@ -143,7 +161,12 @@ export class InconsistentPackageViewModel {
 
   constructor(model: InconsistentPackage) {
     this.Id = model.Id;
-    this.Versions = model.Versions.map((v) => ({ ...v, CpmFramework: v.CpmFramework ?? "" }));
+    this.Versions = model.Versions.map((v) => ({
+      ...v,
+      CpmFramework: v.CpmFramework ?? "",
+      CpmCondition: v.CpmCondition ?? "",
+      CpmConditionLabel: v.CpmConditionLabel ?? "",
+    }));
     this.LatestInstalledVersion = model.LatestInstalledVersion;
     this.CpmManaged = model.CpmManaged;
     this.TargetVersion = model.LatestInstalledVersion;
@@ -158,6 +181,9 @@ export class VulnerablePackageViewModel {
   AdvisoryUrl: string;
   AffectedVersionRange: string;
   Projects: Array<{ Name: string; Path: string }>;
+  CpmFrameworks: string[];
+  IsTransitive: boolean;
+  DependencyOf: string[];
 
   constructor(model: VulnerablePackage) {
     this.Id = model.Id;
@@ -167,6 +193,9 @@ export class VulnerablePackageViewModel {
     this.AdvisoryUrl = model.AdvisoryUrl;
     this.AffectedVersionRange = model.AffectedVersionRange;
     this.Projects = model.Projects;
+    this.CpmFrameworks = model.CpmFrameworks ?? [];
+    this.IsTransitive = model.IsTransitive ?? false;
+    this.DependencyOf = model.DependencyOf ?? [];
   }
 }
 

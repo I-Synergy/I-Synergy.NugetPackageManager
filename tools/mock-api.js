@@ -394,6 +394,39 @@
           };
         });
 
+      case 'getCleanupReportAsync':
+        return {
+          ok: true,
+          value: {
+            PropsFiles: [{
+              Path: '/mock/Directory.Packages.props',
+              Defined: ['AutoMapper', 'MediatR', 'Newtonsoft.Json', 'Serilog'],
+              Unused: ['AutoMapper', 'MediatR'],
+            }],
+            Used: ['Newtonsoft.Json', 'Serilog'],
+            Missing: [],
+            Unused: ['AutoMapper', 'MediatR'],
+          },
+        };
+
+      case 'cleanupUnusedPackagesAsync':
+        return delay(800).then(function () {
+          return {
+            ok: true,
+            value: {
+              Report: {
+                PropsFiles: [{ Path: '/mock/Directory.Packages.props', Defined: ['AutoMapper', 'MediatR', 'Newtonsoft.Json', 'Serilog'], Unused: [] }],
+                Used: ['Newtonsoft.Json', 'Serilog'],
+                Missing: [],
+                Unused: [],
+              },
+              Removed: ['AutoMapper', 'MediatR'],
+              Backups: ['/mock/Directory.Packages.props.backup.mock'],
+              Errors: [],
+            },
+          };
+        });
+
       case 'consolidatePackagesAsync':
         return delay(1500).then(function () {
           (params.ProjectPaths || []).forEach(function (path) {

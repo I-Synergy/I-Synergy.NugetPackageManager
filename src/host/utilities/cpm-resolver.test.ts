@@ -487,4 +487,261 @@ suite('CpmResolver Tests', () => {
             }
         );
     });
+
+    // ─── I-Synergy Framework grouped layout ─────────────────────────────────────
+
+    const CONDITION_LEGACY = "!$(TargetFramework.StartsWith('net11.0'))";
+    const CONDITION_MODERN = "$(TargetFramework.StartsWith('net11.0'))";
+
+    const FRAMEWORK_PROPS = `<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <!-- Third-party and cross-framework packages (unconditional) -->
+  <ItemGroup>
+    <PackageVersion Include="Shared.Library" Version="1.0.0" />
+  </ItemGroup>
+  <!-- Framework-aligned packages for net10.0 -->
+  <ItemGroup Condition="${CONDITION_LEGACY}">
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.120" />
+  </ItemGroup>
+  <!-- Framework-aligned packages for net11.0 -->
+  <ItemGroup Condition="${CONDITION_MODERN}">
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="11.0.0-rc.2.26504.105" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="11.0.0-rc.2.26504.105" />
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="11.0.0-rc.2.26505.5" />
+  </ItemGroup>
+</Project>`;
+
+    function writeFrameworkProps(): string {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, FRAMEWORK_PROPS);
+        return cpmPath;
+    }
+
+    test('parses negated and positive groups with distinct labels', async () => {
+        writeFrameworkProps();
+
+        const map = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+        assert.ok(map !== null);
+        assert.strictEqual(map!.unconditional.size, 1);
+        assert.strictEqual(map!.conditional.length, 2);
+        assert.strictEqual(map!.hasConditionalGroups, true);
+
+        const legacy = map!.conditional.find((e) => e.condition === CONDITION_LEGACY);
+        const modern = map!.conditional.find((e) => e.condition === CONDITION_MODERN);
+        assert.ok(legacy);
+        assert.ok(modern);
+        assert.strictEqual(legacy!.framework, 'not net11.0');
+        assert.strictEqual(modern!.framework, 'net11.0');
+        assert.strictEqual(legacy!.versions.get('Microsoft.Extensions.Logging'), '10.0.13');
+        assert.strictEqual(modern!.versions.get('Microsoft.Extensions.Logging'), '11.0.0-rc.2.26504.105');
+    });
+
+    test('resolves each TFM to its own version line', async () => {
+        writeFrameworkProps();
+        const map = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+
+        const resolutions = CpmResolver.ResolveVersions(
+            map!,
+            ['Microsoft.Extensions.Logging', 'Shared.Library'],
+            ['net10.0', 'net11.0']
+        );
+
+        const logging = resolutions.get('Microsoft.Extensions.Logging')!;
+        assert.strictEqual(logging.length, 2);
+        assert.strictEqual(logging.find((r) => r.Tfm === 'net10.0')!.Version, '10.0.13');
+        assert.strictEqual(logging.find((r) => r.Tfm === 'net11.0')!.Version, '11.0.0-rc.2.26504.105');
+        assert.ok(logging.every((r) => r.Matched));
+
+        const shared = resolutions.get('Shared.Library')!;
+        assert.strictEqual(shared.length, 1, 'unconditional package should produce one shared row');
+        assert.strictEqual(shared[0]!.Tfm, '');
+        assert.strictEqual(shared[0]!.Version, '1.0.0');
+    });
+
+    test('resolves platform-specific TFMs through StartsWith', async () => {
+        writeFrameworkProps();
+        const map = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+
+        const resolutions = CpmResolver.ResolveVersions(
+            map!,
+            ['Microsoft.Extensions.Logging'],
+            ['net10.0-windows10.0.26100.0']
+        );
+
+        assert.strictEqual(resolutions.get('Microsoft.Extensions.Logging')![0]!.Version, '10.0.13');
+    });
+
+    test('falls back to every group when no TFMs could be evaluated', async () => {
+        writeFrameworkProps();
+        const map = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+
+        const resolutions = CpmResolver.ResolveVersions(map!, ['Microsoft.Extensions.Logging'], []);
+        const logging = resolutions.get('Microsoft.Extensions.Logging')!;
+        assert.strictEqual(logging.length, 2);
+        assert.deepStrictEqual(
+            logging.map((r) => r.ConditionLabel).sort(),
+            ['net11.0', 'not net11.0']
+        );
+    });
+
+    test('negated condition also matches non-net11 TFMs', async () => {
+        writeFrameworkProps();
+        const map = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+
+        const resolutions = CpmResolver.ResolveVersions(
+            map!,
+            ['Microsoft.Extensions.Logging'],
+            ['netstandard2.0']
+        );
+        const logging = resolutions.get('Microsoft.Extensions.Logging')!;
+        assert.strictEqual(logging.length, 1);
+        assert.strictEqual(logging[0]!.Matched, true);
+        assert.strictEqual(logging[0]!.Version, '10.0.13');
+        assert.strictEqual(logging[0]!.Tfm, 'netstandard2.0');
+    });
+
+    test('does not surface a package whose positive condition matches none of the project TFMs', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net8.0'))">
+    <PackageVersion Include="Pkg.Net8" Version="8.0.0" />
+  </ItemGroup>
+</Project>`);
+
+        const map = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+        const resolutions = CpmResolver.ResolveVersions(map!, ['Pkg.Net8'], ['net10.0']);
+        assert.strictEqual(resolutions.get('Pkg.Net8'), undefined);
+    });
+
+    test('flags a package when its condition cannot be evaluated', async () => {
+        const cpmPath = path.join(tmpDir, 'Directory.Packages.props');
+        fs.writeFileSync(cpmPath, `<Project>
+  <PropertyGroup><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup>
+  <ItemGroup Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(TargetFrameworkVersion)', 'v11.0'))">
+    <PackageVersion Include="Pkg.Unsupported" Version="3.0.0" />
+  </ItemGroup>
+</Project>`);
+
+        const map = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
+        const resolved = CpmResolver.ResolveVersions(map!, ['Pkg.Unsupported'], ['net10.0']);
+        const entry = resolved.get('Pkg.Unsupported')!;
+        assert.strictEqual(entry.length, 1);
+        assert.strictEqual(entry[0]!.Matched, false);
+        assert.strictEqual(entry[0]!.Version, '3.0.0');
+    });
+
+    test('updates only the net11.0 group when its condition is supplied', async () => {
+        const cpmPath = writeFrameworkProps();
+
+        await CpmResolver.UpdatePackageVersionAsync(
+            projectPath,
+            'Microsoft.Extensions.Logging',
+            '11.0.0-rc.3',
+            CONDITION_MODERN
+        );
+
+        const updated = fs.readFileSync(cpmPath, 'utf8');
+        assert.ok(updated.includes('Version="10.0.13"'), 'net10 line must be unchanged');
+        assert.ok(
+            updated.includes('Include="Microsoft.Extensions.Logging" Version="11.0.0-rc.3"'),
+            'net11 logging line must be updated'
+        );
+        assert.ok(
+            updated.includes('Include="Microsoft.Extensions.Hosting" Version="11.0.0-rc.2.26504.105"'),
+            'other net11 packages must be unchanged'
+        );
+    });
+
+    test('updates only the negated net10.0 group when its condition is supplied', async () => {
+        const cpmPath = writeFrameworkProps();
+
+        await CpmResolver.UpdatePackageVersionAsync(
+            projectPath,
+            'Microsoft.Extensions.Logging',
+            '10.0.14',
+            CONDITION_LEGACY
+        );
+
+        const updated = fs.readFileSync(cpmPath, 'utf8');
+        assert.ok(updated.includes('Version="10.0.14"'), 'net10 line must be updated');
+        assert.ok(updated.includes('Version="11.0.0-rc.2.26504.105"'), 'net11 line must be unchanged');
+    });
+
+    test('applies changes for both groups in one write', async () => {
+        const cpmPath = writeFrameworkProps();
+
+        await CpmResolver.UpdateCpmVersionsAsync(cpmPath, [
+            { packageId: 'Microsoft.Extensions.Logging', version: '10.0.14', condition: CONDITION_LEGACY, scope: 'group' },
+            { packageId: 'Microsoft.Extensions.Logging', version: '11.0.0-rc.3', condition: CONDITION_MODERN, scope: 'group' },
+        ]);
+
+        const map = await CpmResolver.ParseCpmFileAsync(cpmPath);
+        const legacy = map.conditional.find((e) => e.condition === CONDITION_LEGACY)!;
+        const modern = map.conditional.find((e) => e.condition === CONDITION_MODERN)!;
+        assert.strictEqual(legacy.versions.get('Microsoft.Extensions.Logging'), '10.0.14');
+        assert.strictEqual(modern.versions.get('Microsoft.Extensions.Logging'), '11.0.0-rc.3');
+    });
+
+    test('scope "all" updates every group and preserves other packages', async () => {
+        const cpmPath = writeFrameworkProps();
+
+        await CpmResolver.UpdateCpmVersionsAsync(cpmPath, [
+            { packageId: 'Microsoft.Extensions.Hosting', version: '12.0.0', scope: 'all' },
+        ]);
+
+        const map = await CpmResolver.ParseCpmFileAsync(cpmPath);
+        for (const entry of map.conditional) {
+            assert.strictEqual(entry.versions.get('Microsoft.Extensions.Hosting'), '12.0.0');
+        }
+        assert.strictEqual(map.unconditional.get('Shared.Library'), '1.0.0');
+    });
+
+    test('verification failure leaves the file untouched', async () => {
+        const cpmPath = writeFrameworkProps();
+        const before = fs.readFileSync(cpmPath, 'utf8');
+
+        await assert.rejects(
+            async () => await CpmResolver.UpdateCpmVersionsAsync(cpmPath, [
+                { packageId: 'Microsoft.Extensions.Logging', version: '10.0.14', condition: CONDITION_LEGACY, scope: 'group' },
+                { packageId: 'Missing.Package', version: '1.0.0', condition: CONDITION_MODERN, scope: 'group' },
+            ]),
+            (err: Error) => err.message.includes('Missing.Package')
+        );
+
+        assert.strictEqual(fs.readFileSync(cpmPath, 'utf8'), before, 'no partial write should occur');
+    });
+
+    test('removes a package version from every group', async () => {
+        const cpmPath = writeFrameworkProps();
+
+        const removed = await CpmResolver.RemovePackageVersionAsync(
+            cpmPath,
+            'Microsoft.Extensions.Logging'
+        );
+
+        assert.strictEqual(removed, true);
+        const updated = fs.readFileSync(cpmPath, 'utf8');
+        assert.ok(!updated.includes('Microsoft.Extensions.Logging'));
+        const map = await CpmResolver.ParseCpmFileAsync(cpmPath);
+        assert.strictEqual(CpmResolver.HasPackage(map, 'Microsoft.Extensions.Logging'), false);
+    });
+
+    test('package IDs are matched case-insensitively', async () => {
+        const cpmPath = writeFrameworkProps();
+
+        await CpmResolver.UpdatePackageVersionAsync(
+            projectPath,
+            'microsoft.extensions.logging',
+            '10.0.14',
+            CONDITION_LEGACY
+        );
+
+        const updated = fs.readFileSync(cpmPath, 'utf8');
+        assert.ok(updated.includes('Version="10.0.14"'));
+    });
 });

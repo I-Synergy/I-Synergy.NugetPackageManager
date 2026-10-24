@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosInstance, AxiosProxyConfig, AxiosRequestConfig, AxiosResponse } from "axios";
 import * as vscode from "vscode";
 import { Logger } from "../../common/logger";
+import { compareVersions } from "../utilities/version";
 
 type RawPackageSearchItem = {
   "@id": string;
@@ -73,6 +74,9 @@ export default class NuGetApi {
   private readonly _cacheTtl: number = 5 * 60 * 1000; // 5 minutes
   private readonly _vulnCacheTtl: number = 60 * 60 * 1000; // 1 hour
 
+  private _sourceHost: string = "";
+  private readonly _trustedHosts = new Set<string>();
+
   constructor(
     private readonly _url: string,
     private readonly _username?: string,
@@ -82,13 +86,33 @@ export default class NuGetApi {
     this.http = axios.create({
       ...(proxy !== undefined && { proxy }),
     });
-    // Add Basic Auth if credentials are provided
-    if (this._username && this._password) {
-      const token = btoa(`${this._username}:${this._password}`);
+
+    try {
+      this._sourceHost = new URL(this._url).host.toLowerCase();
+      this._trustedHosts.add(this._sourceHost);
+    } catch {
+      this._sourceHost = "";
+    }
+
+    // Add Basic Auth only for the configured source origin and the service
+    // endpoints that origin declares. Feed items can contain absolute URLs;
+    // credentials must not follow arbitrary hosts.
+    if (this._password) {
+      const token = btoa(`${this._username ?? ""}:${this._password}`);
       this.http.interceptors.request.use((config) => {
+        if (!this.isTrustedSourceUrl(config.url ?? "")) return config;
         config.headers["Authorization"] = `Basic ${token}`;
         return config;
       });
+    }
+  }
+
+  private isTrustedSourceUrl(url: string): boolean {
+    if (this._trustedHosts.size === 0) return false;
+    try {
+      return this._trustedHosts.has(new URL(url, this._url).host.toLowerCase());
+    } catch {
+      return false;
     }
   }
 
@@ -195,7 +219,12 @@ export default class NuGetApi {
     }
     
     const itemsToUse = filteredItems.length > 0 ? filteredItems : items;
-    const item = itemsToUse[itemsToUse.length - 1]!;
+    const sortedItems = [...itemsToUse].sort((a, b) => {
+      const versionA = typeof a.catalogEntry === "object" ? a.catalogEntry.version ?? "" : "";
+      const versionB = typeof b.catalogEntry === "object" ? b.catalogEntry.version ?? "" : "";
+      return compareVersions(versionA, versionB);
+    });
+    const item = sortedItems[sortedItems.length - 1]!;
     const catalogEntry = item.catalogEntry as RawCatalogEntry;
     const packageObject: Package = {
       Id: item["@id"] || "",
@@ -244,6 +273,9 @@ export default class NuGetApi {
   async GetPackageDetailsAsync(packageVersionUrl: string, signal?: AbortSignal): Promise<GetPackageDetailsResponse> {
     try {
       await this.EnsureSearchUrlAsync();
+      if (!this.isTrustedSourceUrl(packageVersionUrl)) {
+        throw new Error("Refusing to fetch package details from an untrusted source host");
+      }
       Logger.debug(`NuGetApi.GetPackageDetailsAsync: Fetching package version from ${packageVersionUrl}`);
       const packageVersion = await this.ExecuteGetAsync(packageVersionUrl, ...(signal ? [{ signal }] : []));
       
@@ -332,13 +364,17 @@ export default class NuGetApi {
     }
 
     const vulnerabilities = new Map<string, VulnerabilityEntry[]>();
+    let complete = true;
 
     try {
       const indexResponse = await this.ExecuteGetAsync(this._vulnerabilityUrl, ...(signal ? [{ signal }] : []));
       const pages: Array<{ "@name": string; "@id": string; "@updated": string }> = indexResponse.data;
 
       for (const page of pages) {
-        if (signal?.aborted) break;
+        if (signal?.aborted) {
+          complete = false;
+          break;
+        }
         const pageResponse = await this.ExecuteGetAsync(page["@id"], ...(signal ? [{ signal }] : []));
         const data: Record<string, VulnerabilityEntry[]> = pageResponse.data;
 
@@ -349,12 +385,19 @@ export default class NuGetApi {
         }
       }
 
-      Logger.info(`NuGetApi.GetVulnerabilitiesAsync: Loaded vulnerabilities for ${vulnerabilities.size} packages`);
+      if (complete) {
+        Logger.info(`NuGetApi.GetVulnerabilitiesAsync: Loaded vulnerabilities for ${vulnerabilities.size} packages`);
+      }
     } catch (err) {
+      complete = false;
       Logger.error("NuGetApi.GetVulnerabilitiesAsync: Failed to fetch vulnerabilities", err);
     }
 
-    this._vulnerabilityCache = { data: vulnerabilities, timestamp: Date.now() };
+    // Never replace a good cache with a partial result; a failed page would
+    // otherwise hide CVEs for the whole TTL.
+    if (complete) {
+      this._vulnerabilityCache = { data: vulnerabilities, timestamp: Date.now() };
+    }
     return vulnerabilities;
   }
 
@@ -374,6 +417,15 @@ export default class NuGetApi {
     // Vulnerability endpoint is optional (not all feeds support it)
     if (!this._vulnerabilityUrl) {
       this._vulnerabilityUrl = await this.GetUrlFromNugetDefinitionAsync(response, "VulnerabilityInfo");
+    }
+
+    for (const serviceUrl of [this._searchUrl, this._packageInfoUrl, this._vulnerabilityUrl]) {
+      if (!serviceUrl) continue;
+      try {
+        this._trustedHosts.add(new URL(serviceUrl).host.toLowerCase());
+      } catch {
+        // Ignore malformed service URLs.
+      }
     }
 
     Logger.debug(`NuGetApi.EnsureSearchUrl: SearchUrl=${this._searchUrl}, PackageInfoUrl=${this._packageInfoUrl}, VulnerabilityUrl=${this._vulnerabilityUrl}`);

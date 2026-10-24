@@ -134,7 +134,11 @@ await record(encoder, page, 2000);
 await clickTab(page, 'Vulnerabilities');
 await record(encoder, page, 2000);
 
-// ── Scene 11: Back to Browse ─────────────────────────────────────────────────
+// ── Scene 11: Cleanup tab ────────────────────────────────────────────────────
+await clickTab(page, 'Cleanup');
+await record(encoder, page, 2000);
+
+// ── Scene 12: Back to Browse ─────────────────────────────────────────────────
 await clickTab(page, 'Browse');
 await waitForNoSpinner(page);
 await hold(encoder, page, 1500);

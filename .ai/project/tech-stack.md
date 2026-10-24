@@ -50,7 +50,7 @@
 
 ## VS Code Extension Manifest
 
-- **Extension ID**: `I-Synergy.NugetPackageManager.I-Synergy.NugetPackageManager`
+- **Extension ID**: `I-Synergy.i-synergy-nugetpackagemanager`
 - **Activation**: On command or workspace with `.csproj`/`.sln` files
 - **Webview**: Single persistent webview panel
 - **Outputs**: `releases/*.vsix`

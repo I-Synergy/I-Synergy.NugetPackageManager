@@ -51,7 +51,7 @@ Long-running operations (install/update/uninstall) stream progress to the UI:
 
 1. Webview generates `operationId = \`${type}-${packageId}-${Date.now()}\``
 2. Passes `operationId` to `updateProject` RPC call
-3. `TaskExecutor.ExecuteCommand` spawns dotnet, parses stdout stages, stores in `Map<operationId, OperationProgress>`
+3. `TaskExecutor.ExecuteCommandAsync` spawns dotnet, parses stdout stages, stores in `Map<operationId, OperationProgress>`
 4. Webview polls `getOperationProgress` every 300ms
 5. `project-row` shows animated progress bar; stops polling when `Active=false` or on `disconnectedCallback`
 
@@ -80,7 +80,7 @@ User action (click install)
   → Lit component event handler
   → hostApi.updateProject(req)           [RPC call over postMessage]
   → RpcHost dispatches to host-api.ts
-  → TaskExecutor.ExecuteCommand(dotnet)  [child_process.spawn]
+  → TaskExecutor.ExecuteCommandAsync(dotnet)  [child_process.spawn]
   → dotnet stdout parsed for progress stages
   → Component polls getOperationProgress every 300ms
   → Progress bar updates in UI
@@ -91,7 +91,7 @@ User action (click install)
 
 | Concern | Mitigation |
 |---------|-----------|
-| Path traversal | Validate paths against `vscode.workspace.getWorkspaceFolder()` before dotnet |
+| Path traversal | Validate paths with `src/host/utilities/workspace-path.ts` (resolve + realpath + relative check) before dotnet |
 | URL injection | Validate with `new URL()` before passing to dotnet CLI |
 | Script execution | Explicit allowlist: `.ps1`, `.bat`, `.cmd`, `.sh` only |
 | Nonce generation | `globalThis.crypto.randomUUID()` — works in both host and browser |

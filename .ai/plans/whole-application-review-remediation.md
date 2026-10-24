@@ -1,6 +1,6 @@
 # Plan: Whole-Application Review Remediation
 
-**Status:** PROPOSED — awaiting approval
+**Status:** IMPLEMENTED (2026-10-24) — progress and residual follow-ups in `.ai/completed/review-remediation.md`
 **Date:** 2026-10-24
 **Source review:** `.ai/analysis/whole-application-review-2026-10-24.md`
 **Scope:** all 40 findings (4 Blockers, 16 Majors, 20 Minors)

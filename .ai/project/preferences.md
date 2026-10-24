@@ -1,75 +1,48 @@
-# Project Development Preferences (CUSTOMIZE THIS)
+# Project Development Preferences
 
-**Instructions:** Copy this template and customize for your specific project preferences.
-
-**Purpose:** This file defines HOW you prefer to work - your personal workflow, communication style, and development approach.
+This file defines how agents work in this repository. It is project-specific and applies to
+all clients.
 
 ## Working Relationship
 
-### Communication Style
-- **Formality level:** [Direct and concise / Detailed explanations / etc.]
-- **Sycophancy:** [No sycophancy / Be encouraging / etc.]
-- **Challenge my thinking:** [Yes / No / Only when critical]
-- **Timeline estimates:** [Never include / Always include / Include when asked]
-- **Git co-authorship:** [Don't add Claude / Add Claude / etc.]
+- **Communication:** direct and concise; explain trade-offs when they are material.
+- **Sycophancy:** none. Challenge assumptions when evidence points the other way.
+- **Timelines:** include an estimate only when asked.
+- **Git co-authorship:** never add `Co-Authored-By:` trailers.
 
-### Problem-Solving Approach
-- **Shortcuts vs. Correct fixes:** [Always correct fix / Quick fixes acceptable for prototypes / etc.]
-- **Bug fixing:** [Fix immediately / Create ticket / Ask first]
-- **Technical debt:** [Never acceptable / Acceptable with documentation / etc.]
-- **Assumption handling:** [Always verify / Ask when uncertain / Proceed with reasonable assumptions]
-- **"Good enough" threshold:** [Production-ready only / Prototype-acceptable / etc.]
-- **Decision-making:** [User decides all tradeoffs / Agent autonomy for technical details / etc.]
+## Problem-Solving
+
+- **Correct fixes over shortcuts**, unless the user explicitly asks for a prototype.
+- **Bug fixing:** reproduce first, then fix, then add a regression test.
+- **Technical debt:** acceptable only when documented and bounded.
+- **Assumptions:** verify against the code; ask only for user-owned decisions.
+- **"Good enough":** production-ready, with `npm run esbuild`, `npm run lint` and relevant
+  tests passing.
 
 ## Development Workflow
 
-### Autonomy Level
-- **Agent access:** [Full repository access / Read-only / Specific directories only]
-- **Execution model:** [Execute without asking / Ask before major changes / Ask for everything]
-- **Progress tracking:** [Real-time automatic updates / Status on request / etc.]
-
-### Documentation Preferences
-- **XML docs:** [All public APIs / Public interfaces only / Optional]
-- **Code comments:** [For complex logic only / Extensively / Minimal]
-- **Architecture docs:** [Mermaid diagrams required / Text only / Optional]
-- **README updates:** [With every feature / Major changes only / Manual]
+- **Autonomy:** implement technical details; ask before architecture, data-model, security or
+  public-contract changes.
+- **Planning:** non-trivial tasks get `.ai/plans/{task-slug}.md` and `.ai/progress/{task-slug}.md`.
+- **Progress:** update `- [ ]` → `- [x]` after each step; move finished files to `.ai/completed/`.
+- **Verification:** targeted tests first, then the full suite for multi-file changes.
 
 ## Code Style
 
-### Language Features
-- **Immutability:** [Records preferred / Classes with init / Mixed]
-- **Null handling:** [Nullable reference types enabled / Optional / Disabled]
-- **Expression-bodied members:** [Use extensively / Use sparingly / Avoid]
-- **Pattern matching:** [Use modern C# features / Conservative approach]
+- TypeScript strict mode; avoid `any`; prefix unused identifiers with `_`.
+- Every `async` method ends with `Async`; Lit lifecycle overrides are exempt.
+- Host RPC methods return `Result<T>` via `ok()` / `fail()`.
+- Use `@lit/task` for async work in Lit lifecycle methods.
+- No Node.js-only imports in `src/common/`.
+- No raw `innerHTML`; use Lit templates and VS Code CSS variables.
 
-### Organization
-- **File organization:** [One class per file / Multiple if related / No preference]
-- **Namespace structure:** [Match folder structure / Flat / Custom]
-- **Using statements:** [Implicit global usings / Explicit / Minimal]
+## Documentation
 
-## Review & Quality Gates
+- Update `README.md` and `CHANGELOG.md` for user-visible changes.
+- Regenerate screenshots with `npm run docs` after UI changes.
+- Keep doc identifiers (file names, method names, extension id) in sync with the code.
 
-### Pre-Submission Requirements
-- **Code review:** [Automated checklist / Manual review / Both]
-- **Build status:** [0 errors, 0 warnings / 0 errors only / Build succeeds]
-- **Test results:** [All pass / Critical pass / Optional]
-- **Documentation:** [Complete / API docs only / Optional]
+## Commits
 
-### Quality Metrics
-- **Code coverage:** [80%+ / 70%+ / 60%+]
-- **Cyclomatic complexity:** [< 10 / < 15 / No limit]
-- **Method length:** [< 50 lines / < 100 lines / No limit]
-
-## Session Context Integration
-
-**How this integrates with session-context.md:**
-
-When starting a new session, Claude should:
-1. Read this preferences file
-2. Apply these preferences to all work
-3. Document preference-based decisions in session-context.md
-4. Never re-ask questions answered here
-
----
-
-**Remember:** This file defines your personal working style. For technology choices, see [tech-stack.md](tech-stack.md). For system design, see [architecture.md](architecture.md).
+- Conventional commits in English: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`.
+- One logical change per commit; do not mix formatting-only changes with behavior.

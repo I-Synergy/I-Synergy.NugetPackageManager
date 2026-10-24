@@ -19,6 +19,33 @@
 
 ## Recent Work (this session and last)
 
+### Completed: Consolidation respects framework lines (2026-10-24)
+- Plan: `.ai/plans/consolidate-multi-framework.md`; progress: `.ai/completed/consolidate-multi-framework.md`
+- Host groups inconsistencies by `packageId + condition + TFM`; no cross-framework collapse
+- Consolidate cards grouped under Shared/netX; each card sends only its own line's projects/condition
+- `Consolidate all` is sequential and only for visible cards; blanket `Scope: all`/`first` is refused
+- Tests: **321 passing**, including grouping, per-line write scope and same-condition cards
+
+### Completed: Native UI polish (2026-10-24)
+- Progress: `.ai/completed/native-ui-polish.md`; design: `docs/design/native.html`
+- Review comparison: native polish vs marketplace style; native direction chosen
+- Installed/Updates grouped by Shared/netX with inline TFM chips and sticky group headers
+- Every tab now has a list header, context count and primary action
+- Consolidate and Vulnerabilities use card rows with chips, severity and project metadata
+- Details panel: package header (verified/TFM/source), labeled version selector, empty state
+- Project tree: selected/total count, TFM metadata; search bar spacing and source label clarified
+- Tests: **315 passing**; `npm run lint`/`npm run esbuild` clean; screenshots regenerated
+
+### Completed: Whole-application review remediation (2026-10-24)
+- Progress: `.ai/completed/review-remediation.md`; plan: `.ai/plans/whole-application-review-remediation.md`
+- All 4 Blockers fixed: workspace trust + password-script allowlist; unconditional CPM scope; realpath-based path containment on all path RPCs; no `%VAR%` expansion for workspace `nuget.config`
+- Security hardening: credential origin scoping, package/version validation before XML writes, atomic CPM writes, vulnerability key normalization + complete-only cache, SemVer latest selection, CSP, opt-in telemetry, `openExternal` scheme allowlist
+- CPM correctness: `unconditional` scope, consolidate result handling/row keys, per-project TFM context, element-level `PackageVersion` conditions, document-order precedence
+- Reliability/UI: RPC timeout posts `rpc-cancel`, dotnet abort/timeout, lazy tabs, visible update failures, working Sort, project-tree selection preservation, dialog focus/Escape
+- Packaging/release: `.vscodeignore` excludes `.ai`/`.reasonix`/`AGENTS.md`; publish gated on a new version; `pretest`; OTel deps declared; dead cache/settings/type removed
+- Verification: `npm run esbuild`, `npm run lint`, `npm test` — **313 passing**; framework e2e unchanged; `vsce ls` shows 18 files with no agent content; `.ai/tests` 11/11
+- Residual follow-ups are listed in `.ai/completed/review-remediation.md` (flaky test timers, some logger-only assertions, full Tab trap, remaining component/host coverage)
+
 ### Completed: Whole-application review (2026-10-24)
 - Report: `.ai/analysis/whole-application-review-2026-10-24.md`
 - 4 parallel reviewers (architecture, security, web UI, tests/maintainability) + direct verification of every Blocker
@@ -131,11 +158,30 @@ Files in `src/common/` are bundled into BOTH the host (Node.js) and web (browser
 
 ## Open Plan
 
-Remediation plan for the whole-application review is at
-`.ai/plans/whole-application-review-remediation.md` — status PROPOSED, awaiting approval.
-It maps all 40 findings to steps, with decisions D1–D6. Do not start code changes until the
-plan and decisions are approved. The `.claude/` → `.ai/` migration plan was completed on
-2026-10-24 and archived to `.ai/completed/`.
+### Completed: Sequential transactional updates (2026-10-24)
+- `Update all` / `Update all TFMs` no longer use `Promise.allSettled`
+- Each package is written, restored and verified before the next one starts
+- Per-package progress in the status line; first failure stops the batch and keeps the failed row
+- **321 tests passing**; VSIX repackaged
+
+
+### Completed: NuGet view visibility (2026-10-24)
+- Activity Bar entry is guarded by `nuget.hasSupportedProjects`
+- Context is set from discovered `.csproj`/`.fsproj`/`.vbproj` files and refreshed on folder/project changes
+- **321 tests passing**; VSIX repackaged
+
+
+### Completed: Full-page marketplace UI (2026-10-24)
+- Plan `.ai/plans/full-page-marketplace.md`; progress `.ai/completed/full-page-marketplace.md`
+- UI moved from the terminal/panel view to a full-page `WebviewPanel`; activity-bar icon opens it
+- Sidebar container is a compact launcher; panel restores after reload via `WebviewPanelSerializer`
+- Marketplace card language applied across all tabs and the details panel
+- **321 tests passing**; VSIX repackaged and force-installed
+
+
+None. The review remediation and native UI polish plans are implemented; residual follow-ups
+are recorded in `.ai/completed/review-remediation.md`. The `.claude/` → `.ai/` migration plan
+was completed on 2026-10-24 and archived to `.ai/completed/`.
 
 ---
 

@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## 1.2.0 (2026-10-24)
+
+- feat: the NuGet Activity Bar entry is hidden until the workspace contains a supported .NET project (`.csproj`, `.fsproj`, or `.vbproj`) and updates when projects are added or removed.
+- fix: uninstalling the last project reference now removes the matching `PackageVersion` entry from `Directory.Packages.props`, including conditional groups, so CPM files do not accumulate stale global references.
+- feat: **Cleanup** tab replaces `Remove-UnusedPackages.ps1`: it reports unused `PackageVersion` entries, shows missing definitions, backs up each props file, and removes unused entries across all conditional groups.
+- feat: **Remove from all projects** action on a selected package; per-project uninstall remains available from each project row. The solution-wide action confirms the affected projects and restores once afterward.
+- feat: the NuGet UI now opens as a **full-page editor tab** instead of a terminal-area panel. A NuGet icon in the Activity Bar opens/reveals the tab, with a compact sidebar launcher and panel restoration after reload.
+- feat: **marketplace-style UI** across Browse, Installed, Updates, Consolidate and Vulnerabilities — rounded cards, grouped framework sections, larger package icons, compact pill tabs, richer details header and theme-aware surfaces.
+
+- security: workspace password scripts now require a trusted workspace and a machine-scoped `passwordScriptAllowlist`; `-ExecutionPolicy Bypass` was removed. The extension declares `capabilities.untrustedWorkspaces.supported: false`.
+- security: `%VAR%` expansion is no longer applied to credentials from workspace `nuget.config`, preventing a repository from sending process-environment secrets to a feed it controls.
+- security: feed credentials are limited to the configured source host and the service endpoints that source declares; package details are refused from untrusted hosts.
+- security: project paths are validated with `path.resolve` + `realpath` + `path.relative` on every path-taking RPC, fixing Linux/macOS rejection and Windows prefix/traversal bypasses.
+- security: package IDs and versions are validated before writing; `Directory.Packages.props` updates use a temp file + rename and abort if the file changed concurrently.
+- fix: updating an unconditional CPM row now uses a dedicated `unconditional` scope and no longer rewrites framework-scoped version lines; consolidate checks the RPC result and removes only the consolidated framework line.
+- fix: Consolidate now respects framework lines. Inconsistencies are keyed by package + condition + target framework, cards are grouped under Shared/netX, only the selected line's projects are written, and a blanket `Scope: all`/`first` consolidation of a framework-scoped package is refused.
+- fix: CPM conditions on individual `PackageVersion` elements are parsed, resolved and updated; repeated conditions use the last document occurrence.
+- fix: per-project updates carry `CpmCondition`/`CpmTfm`; ambiguous multi-framework updates fail with a clear message instead of guessing.
+- fix: RPC timeouts post `rpc-cancel`; dotnet processes support abort/timeout and always release the global mutex.
+- feat: vulnerability scan includes transitive packages from `project.assets.json`, marks them as transitive and shows the direct packages that pull them in.
+- feat: the NuGet Activity Bar icon shows a badge with the number of available updates and clears it when everything is up to date.
+- feat: a yellow vulnerability banner is shown across all tabs, with a direct link to the Vulnerabilities tab.
+- fix: vulnerability matching is case-insensitive, returns the original package ID, and does not cache partial fetches.
+- fix: the “latest” version is selected with SemVer sorting rather than registration-page order.
+- fix: the Sort dropdown is now sent to the host and applied; tabs load only when activated.
+- fix: bulk updates now run strictly one package at a time, restore each package before starting the next, show per-package progress, and stop at the first failure instead of racing concurrent CPM writes.
+- fix: install/update failures are shown in the project row.
+- chore: `.vscodeignore` excludes `.ai/` and `AGENTS.md` from the `.vsix`; release publishing is gated on a new version.
+- chore: added `pretest`, declared all OpenTelemetry dependencies, removed unused `object-hash`, and corrected documentation drift.
+
+- feat: native UI polish — Installed and Updates group packages by shared/netX with inline TFM chips and sticky group headers; every tab has a clear header, context count and primary action; Consolidate and Vulnerabilities use compact card rows with project chips; the details panel has a package header, labeled version selector and helpful empty state; the project tree shows selection counts and TFM metadata.
+- feat: multi-framework CPM version management — conditional `ItemGroup`s are evaluated per project target framework (`dotnet msbuild -getProperty`) instead of using the first matching group. Negated conditions such as `!$(TargetFramework.StartsWith('net11.0'))` are evaluated and labelled distinctly (`not net11.0`), so both the net10.0 and net11.0 version lines can be shown and updated.
+- feat: framework-aligned update suggestions — runtime-aligned packages (`Microsoft.Extensions.*`, `Microsoft.AspNetCore.*`, `Microsoft.EntityFrameworkCore.*`, `Microsoft.Maui.*`, `System.*`) recommend the highest version on the TFM's major line; the overall latest version is available as a separate, explicit action.
+- feat: **Update all TFMs** action in the Updates tab — updates every framework line of the selected packages, each to its own aligned version.
+- feat: Installed, Updates, Consolidate and Vulnerabilities now share one per-TFM resolution, fixing inconsistent versions (for example 10.0.13 in Installed vs 11.0.0-rc in Vulnerabilities).
+- feat: CPM writes are grouped per props file — a batch update across many projects sharing one `Directory.Packages.props` now performs one read/write cycle per `(package, group)` instead of one per project. All changes are verified before writing, and a failed verification leaves the file untouched.
+- feat: `ConsolidateRequest` accepts `CpmCondition`/`Scope`; consolidation is scoped to the framework group selected in the UI.
+- feat: `packageSourceMapping` from `nuget.config` is parsed and honoured when resolving the latest version of a package.
+- feat: vulnerability results include the affected target frameworks and deduplicate identical versions across projects.
+- perf: latest-version lookups are cached per package for each refresh, so a package present in several framework groups is queried once.
+- perf: project discovery excludes `bin`, `obj`, `TestResults`, `packages` and `.git` by default (`excludeGlobs`).
+- feat: `.slnx` workspaces activate the extension explicitly.
+- test: added table-driven CPM fixture coverage for unconditional groups, distinct positive groups, shared IDs across positive groups, negated/positive framework groups, unconditional+conditional overrides, platform-specific TFMs, attribute ordering/quoting, complex `And`/`Or` conditions, unsupported conditions and document-order precedence.
+- test: added host-level integration tests for `.csproj` files targeting net10.0, net11.0, both, and platform-specific TFMs.
+
 ## 1.1.3 (2026-03-26)
 
 - fix: CPM `Directory.Packages.props` corruption when updating multiple packages in parallel — concurrent read-modify-write operations on the same file are now serialized via a per-file mutex, preventing interleaved writes that produced malformed XML (e.g. `</Project>Project>Project>` at end of file)

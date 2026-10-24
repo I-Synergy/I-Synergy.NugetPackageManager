@@ -27,8 +27,6 @@ class PasswordScriptTerminal implements vscode.Pseudoterminal {
       command = 'powershell.exe';
       args = [
         '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
         '-File',
         this.scriptPath,
         this.encodedPassword

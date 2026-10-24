@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import codicon from "@/web/styles/codicon.css";
 import { scrollableBase } from "@/web/styles/base.css";
@@ -15,15 +15,29 @@ const styles = css`
     .tree-header {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 4px 6px;
+      gap: 6px;
+      padding: 12px;
       border-bottom: 1px solid var(--vscode-panelSection-border);
-      font-weight: bold;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--vscode-descriptionForeground);
 
       .header-label {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+
+      .header-count {
+        margin-left: auto;
+        font-size: 10px;
+        letter-spacing: 0;
+        padding: 1px 6px;
+        border-radius: 8px;
+        background: var(--vscode-badge-background);
+        color: var(--vscode-badge-foreground);
       }
     }
 
@@ -35,8 +49,10 @@ const styles = css`
     .tree-item {
       display: flex;
       align-items: center;
-      gap: 4px;
-      padding: 2px 6px 2px 12px;
+      gap: 7px;
+      padding: 8px;
+      margin: 2px 6px;
+      border-radius: 8px;
       cursor: default;
 
       &:hover {
@@ -50,10 +66,19 @@ const styles = css`
       }
 
       .item-label {
+        flex: 1;
+        min-width: 0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
         font-size: 11px;
+      }
+
+      .item-meta {
+        font-size: 9px;
+        color: var(--vscode-descriptionForeground);
+        white-space: nowrap;
+        margin-left: auto;
       }
     }
   }
@@ -70,8 +95,14 @@ export class ProjectTree extends LitElement {
 
   override updated(changedProperties: Map<string, unknown>): void {
     if (changedProperties.has("projects")) {
-      this.selectedPaths = this.projects.map((p) => p.Path);
+      const previousSelection = new Set(this.selectedPaths);
+      this.selectedPaths = previousSelection.size === 0
+        ? this.projects.map((p) => p.Path)
+        : this.projects.filter((p) => previousSelection.has(p.Path)).map((p) => p.Path);
       this.syncCheckboxState();
+      if (previousSelection.size > 0) {
+        this.emitSelectionChanged();
+      }
     }
     if (changedProperties.has("selectedPaths")) {
       this.syncCheckboxState();
@@ -125,7 +156,8 @@ export class ProjectTree extends LitElement {
             @change=${(e: Event) =>
               this.OnSelectAllChanged((e.target as HTMLInputElement).checked)}
           />
-          <span class="header-label">All Projects</span>
+          <span class="header-label">Projects</span>
+          <span class="header-count">${this.selectedPaths.length}/${this.projects.length}</span>
         </div>
         <div class="tree-list" role="list">
           ${this.projects.map(
@@ -143,6 +175,9 @@ export class ProjectTree extends LitElement {
                 />
                 <span class="codicon codicon-file-code"></span>
                 <span class="item-label" title=${p.Path}>${p.Name}</span>
+                ${p.TargetFrameworks?.length
+                  ? html`<span class="item-meta">${p.TargetFrameworks.join(" · ")}</span>`
+                  : nothing}
               </div>
             `
           )}

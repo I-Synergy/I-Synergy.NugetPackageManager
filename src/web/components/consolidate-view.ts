@@ -31,8 +31,11 @@ export class ConsolidateView extends LitElement {
         overflow: hidden;
 
         .inconsistent-row {
-          padding: 6px;
-          border-bottom: 1px solid var(--vscode-panelSection-border);
+          padding: 12px;
+          margin: 5px 8px;
+          border: 1px solid var(--npm-border, var(--vscode-panelSection-border));
+          border-radius: var(--npm-radius, 10px);
+          background: var(--npm-surface-raised, var(--vscode-editorWidget-background));
 
           &.consolidating {
             opacity: 0.6;
@@ -123,10 +126,7 @@ export class ConsolidateView extends LitElement {
     args: () => [this.projectPaths, false] as [string[], boolean],
     onComplete: (packages) => {
       this.packages = packages;
-      this.statusText =
-        packages.length > 0
-          ? `${packages.length} package${packages.length !== 1 ? "s" : ""} with inconsistent versions`
-          : "";
+      this.statusText = "";
       this.dispatchEvent(new CustomEvent<number>("count-changed", {
         detail: packages.length,
         bubbles: true,
@@ -158,6 +158,23 @@ export class ConsolidateView extends LitElement {
     );
   }
 
+  private get groupedVisiblePackages(): Array<{ key: string; label: string; packages: InconsistentPackageViewModel[] }> {
+    const groups = new Map<string, InconsistentPackageViewModel[]>();
+    for (const pkg of this.visiblePackages) {
+      const key = pkg.Versions[0]?.CpmFramework ?? "";
+      const list = groups.get(key) ?? [];
+      list.push(pkg);
+      groups.set(key, list);
+    }
+    return [...groups.entries()]
+      .map(([key, packages]) => ({ key, label: key || "Shared", packages }))
+      .sort((a, b) => {
+        if (a.key === "" && b.key !== "") return -1;
+        if (a.key !== "" && b.key === "") return 1;
+        return a.key.localeCompare(b.key);
+      });
+  }
+
   async LoadInconsistentPackagesAsync(forceReload: boolean = false): Promise<void> {
     this.packages = [];
     this.statusText = "";
@@ -177,19 +194,48 @@ export class ConsolidateView extends LitElement {
     }));
   }
 
-  private async consolidateSingleAsync(pkg: InconsistentPackageViewModel): Promise<void> {
+  private async consolidateSingleAsync(pkg: InconsistentPackageViewModel): Promise<boolean> {
     pkg.IsConsolidating = true;
     this.requestUpdate();
     try {
-      const allProjects = pkg.Versions.flatMap((v) => v.Projects.map((p) => p.Path));
+      const target = pkg.Versions.find((v) => v.Version === pkg.TargetVersion) ?? pkg.Versions[0];
+      const condition = target?.CpmCondition ?? "";
+      const framework = target?.CpmFramework ?? "";
 
-      await hostApi.consolidatePackagesAsync({
+      // Consolidate only the projects that belong to the selected framework line.
+      // A multi-target project appears in both lines, but this request must address
+      // exactly one CPM condition. Never send the other line's projects here.
+      const lineVersions = pkg.Versions.filter(
+        (v) => (v.CpmCondition ?? "") === condition && (v.CpmFramework ?? "") === framework
+      );
+      const allProjects = [...new Set(
+        (lineVersions.length > 0 ? lineVersions : pkg.Versions)
+          .flatMap((v) => v.Projects.map((p) => p.Path))
+      )];
+      const result = await hostApi.consolidatePackagesAsync({
         PackageId: pkg.Id,
         TargetVersion: pkg.TargetVersion,
         ProjectPaths: allProjects,
+        ...(condition
+          ? { CpmCondition: condition, Scope: "group" as const }
+          : { Scope: "unconditional" as const }),
       });
 
-      this.packages = this.packages.filter((p) => p.Id !== pkg.Id);
+      if (!result.ok) {
+        this.statusText = `Failed to consolidate ${pkg.Id}: ${result.error}`;
+        return false;
+      }
+
+      // Remove only the framework line that was consolidated; another TFM row
+      // for the same package must remain visible.
+      this.packages = this.packages.filter(
+        (p) =>
+          !(
+            p.Id === pkg.Id
+            && (p.Versions[0]?.CpmCondition ?? "") === condition
+            && (p.Versions[0]?.CpmFramework ?? "") === framework
+          )
+      );
       this.dispatchEvent(new CustomEvent<number>("count-changed", {
         detail: this.packages.length,
         bubbles: true,
@@ -199,6 +245,10 @@ export class ConsolidateView extends LitElement {
         this.packages.length > 0
           ? `${this.packages.length} package${this.packages.length !== 1 ? "s" : ""} with inconsistent versions`
           : "All versions are consistent";
+      return true;
+    } catch (err) {
+      this.statusText = `Failed to consolidate ${pkg.Id}: ${err instanceof Error ? err.message : String(err)}`;
+      return false;
     } finally {
       pkg.IsConsolidating = false;
       this.requestUpdate();
@@ -206,16 +256,24 @@ export class ConsolidateView extends LitElement {
   }
 
   private async consolidateAllAsync(): Promise<void> {
+    const visible = this.visiblePackages;
+    if (visible.length === 0) return;
+
     const confirm = await hostApi.showConfirmationAsync({
-      Message: `Consolidate ${this.packages.length} package${this.packages.length !== 1 ? "s" : ""}?`,
-      Detail: "This will update all inconsistent packages to their target versions.",
+      Message: `Consolidate ${visible.length} package${visible.length !== 1 ? "s" : ""}?`,
+      Detail: "Each framework line is consolidated to its own target version. Lines are never merged.",
     });
     if (!confirm.ok || !confirm.value.Confirmed) return;
 
     this.isConsolidating = true;
     try {
-      const results = await Promise.allSettled(this.packages.map((pkg) => this.consolidateSingleAsync(pkg)));
-      const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      const results: boolean[] = [];
+      // Sequential: multiple framework lines can share one Directory.Packages.props,
+      // so writes must observe the previous line's update.
+      for (const pkg of visible) {
+        results.push(await this.consolidateSingleAsync(pkg));
+      }
+      const failed = results.filter((success) => !success);
       if (failed.length > 0) {
         this.statusText = `${failed.length} package${failed.length !== 1 ? "s" : ""} failed to consolidate`;
       }
@@ -230,7 +288,10 @@ export class ConsolidateView extends LitElement {
       <div class="inconsistent-row ${pkg.IsConsolidating ? "consolidating" : ""}">
         <div class="row-header">
           <span class="package-name" @click=${() => this.selectPackage(pkg.Id)}>${pkg.Id}</span>
-          ${pkg.CpmManaged ? html`<span class="cpm-badge">CPM Override</span>` : nothing}
+          ${pkg.CpmManaged ? html`<span class="cpm-badge">CPM</span>` : nothing}
+          ${pkg.Versions[0]?.CpmFramework
+            ? html`<span class="tfm-badge">${pkg.Versions[0].CpmFramework}</span>`
+            : nothing}
           <div class="row-actions">
             ${pkg.IsConsolidating
               ? html`<span class="spinner medium"></span>`
@@ -256,7 +317,7 @@ export class ConsolidateView extends LitElement {
             (v) => html`
               <div class="version-row">
                 <span class="version">${v.Version}</span>
-                ${v.CpmFramework && !this.selectedFramework ? html`<span class="framework-badge">${v.CpmFramework}</span>` : nothing}
+                ${v.CpmFramework && !this.selectedFramework ? html`<span class="tfm-badge">${v.CpmFramework}</span>` : nothing}
                 <span class="projects">${v.Projects.map((p) => p.Name).join(", ")}</span>
               </div>
             `
@@ -273,9 +334,15 @@ export class ConsolidateView extends LitElement {
 
     return html`
       <div class="consolidate-container" aria-busy=${isLoading}>
-        <div class="toolbar">
-          <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
-          <div class="toolbar-right">
+        <div class="list-header">
+          <div>
+            <div class="list-title">Consolidate versions</div>
+            <div class="list-subtitle">
+              ${visible.length} package${visible.length !== 1 ? "s" : ""} with inconsistent versions
+              ${this.statusText ? html` · ${this.statusText}` : nothing}
+            </div>
+          </div>
+          <div class="list-actions">
             ${this.packages.length > 0
               ? html`
                   <button
@@ -283,7 +350,7 @@ export class ConsolidateView extends LitElement {
                     ?disabled=${this.isConsolidating}
                     @click=${async () => await this.consolidateAllAsync()}
                   >
-                    Consolidate All
+                    Consolidate all
                   </button>
                 `
               : nothing}
@@ -302,7 +369,8 @@ export class ConsolidateView extends LitElement {
           ? html`
               <div class="empty">
                 <span class="codicon codicon-check"></span>
-                All package versions are consistent
+                <div class="empty-title">All package versions are consistent</div>
+                <div class="empty-hint">There is nothing to consolidate in the selected projects.</div>
               </div>
             `
           : nothing}
@@ -317,7 +385,15 @@ export class ConsolidateView extends LitElement {
         ${!isLoading && visible.length > 0
           ? html`
               <div class="package-list" role="list" aria-label="Inconsistent packages">
-                ${visible.map((pkg) => this.renderPackageRow(pkg))}
+                ${this.groupedVisiblePackages.map(
+                  (group) => html`
+                    <div class="group-header">
+                      ${group.label}
+                      <span class="group-count">${group.packages.length}</span>
+                    </div>
+                    ${group.packages.map((pkg) => this.renderPackageRow(pkg))}
+                  `
+                )}
               </div>
             `
           : nothing}

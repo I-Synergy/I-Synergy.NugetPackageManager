@@ -6,7 +6,6 @@ import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BasicTracerProvider, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import {
     SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
-    SEMRESATTRS_DEVICE_ID,
     SEMRESATTRS_OS_TYPE,
     SEMRESATTRS_SERVICE_NAME,
     SEMRESATTRS_SERVICE_VERSION,
@@ -39,7 +38,10 @@ export class Logger {
         }));
 
         const telemetryAddress = process.env.TELEMETRY_ADDRESS;
-        if (telemetryAddress && vscode.env.isTelemetryEnabled) {
+        const telemetryEnabled = vscode.workspace
+            .getConfiguration("i-synergy-nugetpackagemanager")
+            .get<boolean>("enableTelemetry", false);
+        if (telemetryEnabled && telemetryAddress && vscode.env.isTelemetryEnabled) {
             this._isEnabled = true;
             const traceExporter = new OTLPTraceExporter({
                 url: telemetryAddress,
@@ -50,16 +52,13 @@ export class Logger {
                     [SEMRESATTRS_SERVICE_NAME]: "i-synergy-nugetpackagemanager",
                     [SEMRESATTRS_SERVICE_VERSION]: context.extension.packageJSON.version,
                     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT ?? "",
-                    [SEMRESATTRS_DEVICE_ID]: vscode.env.machineId,
                     [SEMRESATTRS_OS_TYPE]: os.platform(),
                     "extension.id": context.extension.id,
-                    "session.id": vscode.env.sessionId,
                     language: vscode.env.language,
                     "vscode.edition": vscode.env.appName,
                     "vscode.version": vscode.version,
                     "vscode.host": vscode.env.appHost,
                     "vscode.remoteName": vscode.env.remoteName ?? "",
-                    "vscode.shell": vscode.env.shell,
                     "vscode.uiKind": vscode.env.uiKind,
                 }),
                 spanProcessors: [new SimpleSpanProcessor(traceExporter)],

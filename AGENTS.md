@@ -151,9 +151,9 @@ the webview call site.
 | Area | Rule |
 |---|---|
 | Nonces | `globalThis.crypto.randomUUID()` — works in Node.js 19+ and browsers |
-| Project paths | Validate inside a workspace folder before passing to dotnet |
+| Project paths | Validate with `src/host/utilities/workspace-path.ts` (resolve + realpath + relative) before dotnet or file writes |
 | Source URLs | Validate with `new URL()` before passing to the dotnet CLI |
-| Script execution | Password scripts restricted to `.ps1`, `.bat`, `.cmd`, `.sh`; reject others |
+| Script execution | Password scripts require a trusted workspace and a machine-scoped allowlist; only `.ps1`, `.bat`, `.cmd`, `.sh` are accepted |
 | Sort/filter input | Validate against an explicit allowlist |
 | Event listeners | Class fields; always removed in `disconnectedCallback` |
 
