@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.8 (2026-10-24)
+
+- fix: use light/dark tab icons so the NuGet Package Manager editor-tab icon is visible in dark and light themes.
+- perf: add a guarded literal XML target-framework fast path, falling through to assets/MSBuild for conditional TFMs.
+
 ## 1.2.7 (2026-10-24)
 
 - fix: stop rendering the literal string `false` in the Projects pane during loading.

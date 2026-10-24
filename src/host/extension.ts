@@ -223,7 +223,10 @@ class NugetWebviewManager implements vscode.Disposable {
         localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "dist")],
       }
     );
-    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "resources", "nuget.svg");
+    panel.iconPath = {
+      light: vscode.Uri.joinPath(this.extensionUri, "resources", "nuget-light.svg"),
+      dark: vscode.Uri.joinPath(this.extensionUri, "resources", "nuget-dark.svg"),
+    };
     this.panel = panel;
     this.attachPanel(panel);
     return panel;

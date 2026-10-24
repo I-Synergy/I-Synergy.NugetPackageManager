@@ -1,6 +1,9 @@
-# NuGet Package Manager 1.2.7
+# NuGet Package Manager 1.2.8
 
 ## Fixes and UI
+
+- Fixed the invisible NuGet tab icon in dark themes with theme-aware icons.
+- Added a guarded literal TFM fast path for faster project loading.
 
 - Fixed the literal `false` text shown while projects are loading.
 - Added an assets-based target-framework fast path to avoid the long first-load delay in large CPM workspaces.
