@@ -12,7 +12,13 @@ const styles = css`
     display: flex;
     gap: 10px;
     justify-content: space-between;
-    margin-bottom: 10px;
+    align-items: center;
+    margin: 8px 8px 0;
+    padding: 8px;
+    border: 1px solid var(--npm-border, var(--vscode-panelSection-border));
+    border-radius: var(--npm-radius, 10px);
+    background: var(--npm-surface-raised, var(--vscode-editorWidget-background));
+    flex-wrap: wrap;
 
     .search-bar-left {
       flex: 1;
@@ -75,6 +81,8 @@ const styles = css`
     .search-bar-right {
       display: flex;
       gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
     }
   }
 `;
@@ -156,7 +164,7 @@ export class SearchBar extends LitElement {
   private get sourceOptions(): DropdownOption[] {
     const sources = configuration.Configuration?.Sources ?? [];
     return [
-      { value: "", label: "All" },
+      { value: "", label: "All sources" },
       ...sources.map((s) => ({ value: s.Url, label: s.Name })),
     ];
   }

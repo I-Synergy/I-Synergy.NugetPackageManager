@@ -5,7 +5,7 @@ import xpath from "xpath";
 import os from "os";
 import * as vscode from "vscode";
 import PasswordScriptExecutor from "./password-script-executor";
-import CredentialsCache from "./credentials-cache";
+import { isPathInside } from "./workspace-path";
 import { Logger } from "../../common/logger";
 
 export type SourceWithCredentials = {
@@ -13,6 +13,8 @@ export type SourceWithCredentials = {
   Url: string;
   Username?: string;
   Password?: string;
+  /** `packageSourceMapping` patterns; when present only these packages use this source. */
+  Patterns?: string[];
 };
 
 export default class NuGetConfigResolver {
@@ -30,6 +32,7 @@ export default class NuGetConfigResolver {
       const entry: SourceWithCredentials = { Name: s.Name, Url: s.Url };
       if (s.Username !== undefined) entry.Username = s.Username;
       if (s.Password !== undefined) entry.Password = s.Password;
+      if (s.Patterns !== undefined) entry.Patterns = s.Patterns;
       sourcesMap.set(s.Name, entry);
     });
 
@@ -67,11 +70,22 @@ export default class NuGetConfigResolver {
     });
 
     const sources = Array.from(sourcesMap.values());
+    const allowlist = config.get<string[]>("passwordScriptAllowlist") ?? [];
+    const trusted = vscode.workspace.isTrusted !== false;
 
     for (const source of sources) {
       const passwordScriptPath = passwordScriptPaths.get(source.Name);
       
       if (passwordScriptPath && source.Password) {
+        if (!trusted) {
+          Logger.warn(`NuGetConfigResolver: Refusing password script for ${source.Name}: workspace is untrusted`);
+          continue;
+        }
+        if (!await this.IsPasswordScriptAllowedAsync(passwordScriptPath, allowlist, roots)) {
+          Logger.warn(`NuGetConfigResolver: Refusing password script for ${source.Name}: path is not in the machine-scoped passwordScriptAllowlist`);
+          continue;
+        }
+
         try {
           Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Decoding password for ${source.Name}`);
           const decodedPassword = await PasswordScriptExecutor.ExecuteScriptAsync(
@@ -79,18 +93,44 @@ export default class NuGetConfigResolver {
             source.Password
           );
           source.Password = decodedPassword;
-          CredentialsCache.set(source.Name, source.Username, decodedPassword);
         } catch (error) {
           Logger.error(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Failed to decode password for ${source.Name}`, error);
-          CredentialsCache.set(source.Name, source.Username, source.Password);
         }
       } else if (source.Username || source.Password) {
-        Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Caching credentials for ${source.Name}`);
-        CredentialsCache.set(source.Name, source.Username, source.Password);
+        Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Using credentials for ${source.Name}`);
       }
     }
 
     return sources;
+  }
+
+  private static async IsPasswordScriptAllowedAsync(
+    scriptPath: string,
+    allowlist: string[],
+    workspaceRoots: string[]
+  ): Promise<boolean> {
+    if (allowlist.length === 0) return false;
+
+    const base = workspaceRoots[0] ?? process.cwd();
+    const resolved = path.isAbsolute(scriptPath) ? scriptPath : path.resolve(base, scriptPath);
+    let realScript = resolved;
+    try {
+      realScript = await fs.promises.realpath(resolved);
+    } catch {
+      // Keep the resolved path; the executor will report a missing file.
+    }
+
+    for (const allowed of allowlist) {
+      const resolvedAllowed = path.resolve(allowed);
+      let realAllowed = resolvedAllowed;
+      try {
+        realAllowed = await fs.promises.realpath(resolvedAllowed);
+      } catch {
+        // Allowlist entries may not exist yet; compare resolved paths.
+      }
+      if (isPathInside(realAllowed, realScript)) return true;
+    }
+    return false;
   }
 
   static async GetSourcesWithCredentialsAsync(workspaceRoots?: string | string[]): Promise<SourceWithCredentials[]> {
@@ -104,6 +144,7 @@ export default class NuGetConfigResolver {
     const sources = new Map<string, SourceWithCredentials>();
     const disabledSources = new Set<string>();
     const credentials = new Map<string, { Username?: string; Password?: string }>();
+    const sourceMappings = new Map<string, string[]>();
     let clearFound = false;
 
     const configPaths = this.FindAllConfigFiles(workspaceRoots);
@@ -117,7 +158,8 @@ export default class NuGetConfigResolver {
     for (const configPath of configPaths) {
       try {
         Logger.debug(`NuGetConfigResolver.ResolveConfigs: Parsing ${configPath}`);
-        const result = await this.ParseConfigFileAsync(configPath);
+        const isWorkspaceConfig = workspaceConfigPaths.has(configPath);
+        const result = await this.ParseConfigFileAsync(configPath, !isWorkspaceConfig);
 
         if (result.clear) {
           Logger.debug(`NuGetConfigResolver.ResolveConfigs: '<clear />' found in ${configPath}, clearing sources`);
@@ -136,6 +178,13 @@ export default class NuGetConfigResolver {
           credentials.set(name, cred);
         });
 
+        if (result.clearMappings) {
+          sourceMappings.clear();
+        }
+        result.mappings.forEach((patterns, sourceKey) => {
+          sourceMappings.set(sourceKey, patterns);
+        });
+
         result.disabledSources.forEach(name => {
           disabledSources.add(name);
         });
@@ -152,6 +201,13 @@ export default class NuGetConfigResolver {
         if (cred.Password !== undefined) source.Password = cred.Password;
       }
     });
+
+    for (const [sourceKey, patterns] of sourceMappings) {
+      const source = sources.get(sourceKey);
+      if (source) {
+        source.Patterns = patterns;
+      }
+    }
 
     const enabledSources = Array.from(sources.values()).filter(
       source => !disabledSources.has(source.Name)
@@ -234,11 +290,16 @@ export default class NuGetConfigResolver {
   }
 
 
-  private static async ParseConfigFileAsync(configPath: string): Promise<{
+  private static async ParseConfigFileAsync(
+    configPath: string,
+    expandEnvironment: boolean = true
+  ): Promise<{
     sources: SourceWithCredentials[];
     credentials: Map<string, { Username?: string; Password?: string }>;
     disabledSources: string[];
     clear: boolean;
+    mappings: Map<string, string[]>;
+    clearMappings: boolean;
   }> {
     const content = await fs.promises.readFile(configPath, "utf8");
     const document = new DOMParser().parseFromString(content);
@@ -246,7 +307,9 @@ export default class NuGetConfigResolver {
     const sources: SourceWithCredentials[] = [];
     const credentials = new Map<string, { Username?: string; Password?: string }>();
     const disabledSources: string[] = [];
+    const mappings = new Map<string, string[]>();
     let clear = false;
+    let clearMappings = false;
 
     const clearNode = xpath.select("//packageSources/clear", document);
     if (clearNode && (clearNode as Node[]).length > 0) {
@@ -280,12 +343,33 @@ export default class NuGetConfigResolver {
 
     const credentialNodes = xpath.select("//packageSourceCredentials/*", document) as Node[];
     credentialNodes.forEach((sourceNode) => {
-      const parsed = this.ParseCredentialNode(sourceNode);
+      const parsed = this.ParseCredentialNode(sourceNode, expandEnvironment);
       if (parsed) {
         credentials.set(parsed.name, parsed.cred);
       }
     });
-    return { sources, credentials, disabledSources, clear };
+
+    const mappingClearNodes = xpath.select("//packageSourceMapping/clear", document) as Node[];
+    if (mappingClearNodes.length > 0) {
+      clearMappings = true;
+    }
+
+    const mappingSourceNodes = xpath.select("//packageSourceMapping/packageSource", document) as Node[];
+    mappingSourceNodes.forEach((node) => {
+      const el = node as Element;
+      const key = el.attributes?.getNamedItem("key")?.value;
+      if (!key) return;
+
+      const patterns = (xpath.select("package", el) as Node[])
+        .map((patternNode) => (patternNode as Element).attributes?.getNamedItem("pattern")?.value)
+        .filter((pattern): pattern is string => !!pattern);
+
+      if (patterns.length > 0) {
+        mappings.set(key, patterns);
+      }
+    });
+
+    return { sources, credentials, disabledSources, clear, mappings, clearMappings };
   }
 
   // NuGet encodes characters that are invalid in XML element names using _xHHHH_ notation,
@@ -294,7 +378,10 @@ export default class NuGetConfigResolver {
     return name.replace(/_x([0-9A-Fa-f]{4})_/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
   }
 
-  private static ParseCredentialNode(sourceNode: Node & { nodeName: string }): {
+  private static ParseCredentialNode(
+    sourceNode: Node & { nodeName: string },
+    expandEnvironment: boolean
+  ): {
     name: string;
     cred: { Username?: string; [key: string]: string | undefined };
   } | null {
@@ -309,8 +396,10 @@ export default class NuGetConfigResolver {
       authToken = xpath.select(`string(add[@key='${encKey}']/@value)`, sourceNode) as string;
     }
 
-    // Resolve environment variable references like %VAR_NAME%
-    if (authToken) {
+    // Resolve environment variable references like %VAR_NAME%. Never expand values
+    // from a workspace-level config: a repository must not be able to read the
+    // developer's environment variables and send them to a feed it controls.
+    if (authToken && expandEnvironment) {
       authToken = authToken.replace(/%([^%]+)%/g, (_match, varName) => process.env[varName] ?? "");
     }
 
@@ -320,9 +409,5 @@ export default class NuGetConfigResolver {
     if (user) cred.Username = user;
     if (authToken) cred[encKey] = authToken;
     return { name: sourceName, cred };
-  }
-
-  static ClearCache(): void {
-    CredentialsCache.clear();
   }
 }

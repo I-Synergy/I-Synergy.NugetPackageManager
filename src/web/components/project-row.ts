@@ -38,6 +38,12 @@ const styles = css`
       }
     }
   }
+
+  .row-error {
+    color: var(--vscode-errorForeground);
+    font-size: 10px;
+    padding: 0 4px 2px;
+  }
 `;
 
 @customElement("project-row")
@@ -49,6 +55,7 @@ export class ProjectRow extends LitElement {
   @property() packageVersion!: string;
   @property() sourceUrl!: string;
   @state() private loaders = new Map<string, boolean>();
+  @state() private errorMessage = "";
 
   get projectPackage() {
     return this.project.Packages.find((x) => x.Id === this.packageId);
@@ -65,15 +72,24 @@ export class ProjectRow extends LitElement {
       if (!confirm.ok || !confirm.value.Confirmed) return;
     }
 
+    const matchingResolution = this.projectPackage?.CpmResolutions?.find(
+      (resolution) => resolution.Version === this.packageVersion
+    ) ?? (this.projectPackage?.CpmResolutions?.length === 1
+      ? this.projectPackage.CpmResolutions[0]
+      : undefined);
+
     const request: UpdateProjectRequest = {
       Type: type,
       ProjectPath: this.project.Path,
       PackageId: this.packageId,
       Version: this.packageVersion,
       SourceUrl: this.sourceUrl,
+      ...(matchingResolution?.Condition ? { CpmCondition: matchingResolution.Condition } : {}),
+      ...(matchingResolution?.Tfm ? { CpmTfm: matchingResolution.Tfm } : {}),
     };
 
     this.loaders.set(request.PackageId, true);
+    this.errorMessage = "";
     this.requestUpdate();
 
     try {
@@ -90,7 +106,11 @@ export class ProjectRow extends LitElement {
             composed: true,
           })
         );
+      } else {
+        this.errorMessage = result.error;
       }
+    } catch (err) {
+      this.errorMessage = err instanceof Error ? err.message : String(err);
     } finally {
       this.loaders.delete(request.PackageId);
       this.requestUpdate();
@@ -141,6 +161,9 @@ export class ProjectRow extends LitElement {
         </div>
         <div class="project-actions">${this.renderActions()}</div>
       </div>
+      ${this.errorMessage
+        ? html`<div class="row-error" role="alert" title=${this.errorMessage}>${this.errorMessage}</div>`
+        : nothing}
     `;
   }
 }

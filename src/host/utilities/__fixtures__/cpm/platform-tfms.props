@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net10.0'))">
+    <PackageVersion Include="Pkg.Core" Version="10.0.0" />
+  </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.Contains('-windows'))">
+    <PackageVersion Include="Pkg.Windows" Version="1.0.0" />
+  </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
+    <PackageVersion Include="Pkg.Android" Version="1.0.0" />
+  </ItemGroup>
+</Project>

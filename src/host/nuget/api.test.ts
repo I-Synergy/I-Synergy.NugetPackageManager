@@ -178,6 +178,28 @@ suite('NuGetApi Tests', () => {
             assert.strictEqual(result.data?.Version, '1.0.0');
         });
 
+        test('should choose the SemVer latest even when registration items are out of order', async () => {
+            const api = new NuGetApi('https://api.nuget.org/v3/index.json');
+
+            const httpStub = sandbox.stub((api as any).http, 'get');
+            httpStub.onFirstCall().resolves(mockServiceIndex);
+            httpStub.onSecondCall().resolves({
+                data: {
+                    count: 1,
+                    items: [{
+                        items: [
+                            { '@id': 'v2', catalogEntry: { id: 'TestPackage', version: '2.0.0' } },
+                            { '@id': 'v10', catalogEntry: { id: 'TestPackage', version: '10.0.0' } },
+                            { '@id': 'v1', catalogEntry: { id: 'TestPackage', version: '1.0.0' } },
+                        ],
+                    }],
+                },
+            });
+
+            const result = await api.GetPackageAsync('TestPackage');
+            assert.strictEqual(result.data?.Version, '10.0.0');
+        });
+
         test('should return cached package on subsequent calls', async () => {
             const api = new NuGetApi('https://api.nuget.org/v3/index.json');
             

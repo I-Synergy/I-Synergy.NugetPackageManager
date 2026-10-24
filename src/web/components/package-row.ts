@@ -23,15 +23,34 @@ const DEFAULT_ICON_URL = "https://nuget.org/Content/gallery/img/default-package-
 
 const styles = css`
   .package-row {
-    margin: 2px;
-    padding: 4px 3px;
+    margin: 5px 8px 0;
+    padding: 10px 12px;
     display: flex;
-    gap: 6px;
+    gap: 12px;
     align-items: center;
     cursor: default;
+    border: 1px solid var(--npm-border, var(--vscode-panelSection-border));
+    border-radius: var(--npm-radius, 10px);
+    background: var(--npm-surface-raised, var(--vscode-editorWidget-background));
+    min-height: 48px;
+    transition: border-color 0.12s ease, transform 0.12s ease;
+
+    &.package-row-embedded {
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      min-height: auto;
+
+      &:hover {
+        transform: none;
+      }
+    }
 
     &.package-row-selected {
-      background-color: var(--vscode-list-activeSelectionBackground);
+      border-color: var(--npm-accent, var(--vscode-focusBorder));
+      box-shadow: 0 0 0 1px var(--npm-accent, var(--vscode-focusBorder));
+      background: color-mix(in srgb, var(--npm-accent, #6c5ce7) 10%, var(--npm-surface-raised, #252526));
       color: var(--vscode-list-activeSelectionForeground);
     }
 
@@ -43,7 +62,8 @@ const styles = css`
     }
 
     &:hover {
-      background-color: var(--vscode-list-hoverBackground);
+      border-color: var(--vscode-focusBorder);
+      transform: translateY(-1px);
     }
 
     &:focus-visible {
@@ -52,10 +72,12 @@ const styles = css`
     }
 
     .icon {
-      width: 24px;
-      height: 24px;
+      width: 40px;
+      height: 40px;
       flex-shrink: 0;
-      margin-top: 1px;
+      border-radius: 10px;
+      object-fit: contain;
+      background: var(--npm-surface, transparent);
     }
 
     .package-content {
@@ -81,7 +103,8 @@ const styles = css`
     }
 
     .name {
-      font-weight: bold;
+      font-size: 13px;
+      font-weight: 700;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -106,11 +129,11 @@ const styles = css`
 
     .description {
       font-size: 11px;
-      color: var(--vscode-descriptionForeground);
+      color: var(--npm-muted, var(--vscode-descriptionForeground));
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      margin-top: 1px;
+      margin-top: 3px;
     }
 
     .meta-line {
@@ -164,6 +187,7 @@ export class PackageRow extends LitElement {
   @property() updateVersion: string = "";
   @property({ type: Object }) package!: PackageViewModel;
   @property({ type: Number }) revision: number = 0;
+  @property({ type: Boolean }) embedded: boolean = false;
   @state() iconUrl: string | null = null;
 
   get resolvedIconUrl(): string {
@@ -227,7 +251,7 @@ export class PackageRow extends LitElement {
 
     return html`
       <div
-        class="package-row ${this.package.Selected ? "package-row-selected" : ""} ${this.package.Status === "Error" ? "package-row-error" : ""}"
+        class="package-row ${this.embedded ? "package-row-embedded" : ""} ${this.package.Selected ? "package-row-selected" : ""} ${this.package.Status === "Error" ? "package-row-error" : ""}"
         role="option"
         tabindex="0"
         aria-selected=${this.package.Selected ? "true" : "false"}
@@ -250,6 +274,9 @@ export class PackageRow extends LitElement {
               <span class="name">${this.package.Name}</span>
               ${this.package.Verified
                 ? html`<span class="codicon codicon-verified-filled verified-badge" title="Verified owner"></span>`
+                : nothing}
+              ${this.package.CpmFramework
+                ? html`<span class="tfm-badge" title="Framework-scoped version">${this.package.CpmFramework}</span>`
                 : nothing}
               ${this.package.Authors
                 ? html`<span class="authors">by ${this.package.Authors}</span>`

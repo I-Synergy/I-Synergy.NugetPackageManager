@@ -185,11 +185,11 @@ suite('SearchBar Component', () => {
         // Source dropdown is the second one; verify its options via the property
         const sourceDropdown = dropdowns[1] as any;
         const options = sourceDropdown.options as { value: string; label: string }[];
-        // Expected: 1 (All) + 2 (Sources) = 3
+        // Expected: 1 (All sources) + 2 (Sources) = 3
         assert.strictEqual(options.length, 3);
 
         assert.strictEqual(options[0]!.value, "");
-        assert.strictEqual(options[0]!.label, "All");
+        assert.strictEqual(options[0]!.label, "All sources");
         assert.strictEqual(options[1]!.value, "https://api.nuget.org/v3/index.json");
         assert.strictEqual(options[1]!.label, "NuGet.org");
         assert.strictEqual(options[2]!.value, "C:/LocalSource");

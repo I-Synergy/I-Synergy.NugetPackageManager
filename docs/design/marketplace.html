@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NuGet Package Manager — Marketplace</title>
+<style>
+  :root{
+    --bg:#181818; --surface:#222222; --surface2:#2a2a2a; --border:#363636;
+    --fg:#e7e7e7; --muted:#a0a0a0; --accent:#6c5ce7; --accent2:#3b82f6;
+    --accentHover:#7d6ff0; --chip:#333333; --green:#34d399; --yellow:#fbbf24;
+    --red:#f87171; --blue:#93c5fd;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%, #262144 0%, transparent 55%), var(--bg);color:var(--fg);font:13px/1.5 "Segoe UI",system-ui,sans-serif;overflow:hidden}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  .app{height:100vh;display:flex;flex-direction:column}
+  .topbar{height:58px;display:flex;align-items:center;gap:18px;padding:0 20px;border-bottom:1px solid var(--border);background:rgba(24,24,24,.85);backdrop-filter:blur(12px)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;letter-spacing:.2px;white-space:nowrap}
+  .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#7c5cff,#2f80ed);display:grid;place-items:center;font-size:15px;font-weight:800;color:#fff;box-shadow:0 4px 14px rgba(108,92,231,.35)}
+  .brand small{display:block;font-size:10px;font-weight:500;color:var(--muted);letter-spacing:.3px}
+  .tabs{display:flex;gap:4px;align-items:center;flex:1;background:var(--surface);padding:4px;border-radius:10px;border:1px solid var(--border);max-width:640px}
+  .tab{padding:7px 13px;border-radius:7px;color:var(--muted);display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.3px}
+  .tab:hover{background:var(--surface2);color:var(--fg)}
+  .tab.active{background:linear-gradient(135deg,#37306b,#26345c);color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .count{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#414141;color:#eaeaea;font-size:10px;display:grid;place-items:center}
+  .tab.active .count{background:rgba(255,255,255,.16)}
+  .top-actions{display:flex;gap:4px;align-items:center;margin-left:auto}
+  .icon-btn{width:32px;height:32px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+  .icon-btn:hover{background:var(--surface2);color:var(--fg)}
+  .toolbar{display:flex;align-items:center;gap:10px;padding:12px 20px 10px}
+  .search{position:relative;flex:1;max-width:430px}
+  .search input{width:100%;height:34px;background:var(--surface);border:1px solid var(--border);color:var(--fg);padding:0 34px 0 12px;border-radius:9px;outline:none;font-size:12px}
+  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,92,231,.18)}
+  .search .kbd{position:absolute;right:9px;top:8px;color:var(--muted);font-size:10px;border:1px solid var(--border);border-radius:5px;padding:1px 5px}
+  .select{height:34px;background:var(--surface);border:1px solid var(--border);color:var(--fg);border-radius:9px;padding:0 26px 0 11px;font-size:12px}
+  .check{display:flex;align-items:center;gap:6px;color:var(--muted);white-space:nowrap;font-size:12px}
+  .filter-chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:14px;background:var(--surface);color:var(--fg);font-size:11px;border:1px solid var(--border)}
+  .filter-chip b{font-weight:600;color:var(--blue)}
+  .spacer{flex:1}
+  .layout{flex:1;display:grid;grid-template-columns:230px minmax(0,1fr) 400px;gap:14px;padding:0 20px 18px;min-height:0}
+  .projects{background:var(--surface);border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .panel-head{display:flex;align-items:center;gap:8px;padding:13px 14px;border-bottom:1px solid var(--border);font-size:10px;font-weight:800;letter-spacing:.9px;color:var(--muted);text-transform:uppercase}
+  .panel-head .spacer{flex:1}
+  .tree{overflow:auto;padding:8px}
+  .tree-group{display:flex;align-items:center;gap:6px;padding:8px 8px 4px;color:var(--muted);font-size:10px;font-weight:800;letter-spacing:.7px}
+  .tree-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;color:var(--fg);font-size:12px}
+  .tree-item:hover{background:var(--surface2)}
+  .tree-item .cb{width:14px;height:14px;border:1px solid #6b6b6b;border-radius:4px;display:grid;place-items:center;font-size:9px;color:#fff;background:var(--accent)}
+  .tree-item .cb.off{background:transparent;color:transparent}
+  .tree-item .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .tree-item .muted{color:var(--muted);margin-left:auto;font-size:10px}
+  .list-panel{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .screen{display:none;height:100%;flex-direction:column;min-height:0}
+  .screen.active{display:flex}
+  .list-head{display:flex;align-items:flex-start;gap:10px;padding:4px 2px 12px}
+  .list-title{font-size:20px;font-weight:750;letter-spacing:-.2px}
+  .list-sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .list-actions{display:flex;gap:8px;margin-left:auto;align-items:center}
+  .btn{height:32px;padding:0 14px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#4f7cf7);color:#fff;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;box-shadow:0 4px 12px rgba(108,92,231,.25)}
+  .btn:hover{background:linear-gradient(135deg,var(--accentHover),#5d8cff)}
+  .btn.secondary{background:var(--surface);border:1px solid var(--border);color:var(--fg);box-shadow:none}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--muted);box-shadow:none}
+  .list{overflow:auto;flex:1;display:flex;flex-direction:column;gap:8px;padding-bottom:12px}
+  .group{display:flex;align-items:center;gap:8px;padding:8px 2px 2px;font-size:10px;font-weight:800;letter-spacing:.9px;color:var(--muted);text-transform:uppercase;position:sticky;top:0;background:var(--bg);z-index:1}
+  .group .chip{font-size:10px;letter-spacing:0;text-transform:none;background:var(--surface);color:var(--fg);padding:2px 8px;border-radius:10px;border:1px solid var(--border)}
+  .card{display:flex;align-items:center;gap:13px;padding:11px 13px;background:var(--surface);border:1px solid var(--border);border-radius:11px;transition:border-color .12s,transform .12s}
+  .card:hover{border-color:#4a4a4a;transform:translateY(-1px)}
+  .card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 6px 18px rgba(0,0,0,.2)}
+  .card .icon{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-size:13px;font-weight:800;color:#fff;flex-shrink:0}
+  .card .main{min-width:0;flex:1}
+  .card .title{display:flex;align-items:center;gap:7px;min-width:0}
+  .card .name{font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .authors{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .card .desc{color:var(--muted);font-size:11px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tfm{font-size:9px;font-weight:800;padding:2px 6px;border-radius:7px;background:rgba(52,211,153,.12);color:#8af0c7;border:1px solid rgba(52,211,153,.25);white-space:nowrap}
+  .tfm.shared{background:rgba(255,255,255,.06);color:#cfcfcf;border-color:#4a4a4a}
+  .card .side{display:flex;align-items:center;gap:9px;flex-shrink:0}
+  .version{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--fg);white-space:nowrap}
+  .version .from{color:var(--muted)}
+  .version .arrow{color:var(--muted);margin:0 5px}
+  .version .to{color:var(--green);font-weight:700}
+  .pill{font-size:10px;padding:2px 7px;border-radius:8px;background:var(--surface2);color:var(--muted)}
+  .rowbtn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--muted);border:1px solid transparent}
+  .rowbtn:hover{background:var(--surface2);border-color:var(--border);color:var(--fg)}
+  .details{background:var(--surface);border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  .details-head{display:flex;gap:12px;padding:16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(108,92,231,.08),transparent)}
+  .details-icon{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;font-size:16px;font-weight:800;color:#fff;flex-shrink:0;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+  .details-title{font-size:16px;font-weight:750;line-height:1.25}
+  .details-meta{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:11px;margin-top:4px;flex-wrap:wrap}
+  .verified{color:var(--blue)}
+  .details-body{overflow:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .label{font-size:10px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .version-picker{display:flex;gap:8px}
+  .version-picker select{flex:1;height:34px;background:var(--surface2);border:1px solid var(--border);color:var(--fg);border-radius:8px;padding:0 10px;font-size:12px}
+  .mini-table{width:100%;border-collapse:collapse;font-size:11px}
+  .mini-table td{padding:6px 0;border-bottom:1px solid #333}
+  .mini-table td:last-child{text-align:right;color:var(--muted)}
+  .section{border-top:1px solid var(--border);padding-top:12px}
+  .section-title{font-size:10px;font-weight:800;letter-spacing:.8px;color:var(--muted);margin-bottom:7px;text-transform:uppercase}
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .stat{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:8px 10px}
+  .stat b{display:block;font-size:13px}
+  .stat span{font-size:10px;color:var(--muted)}
+  .banner{display:flex;align-items:center;gap:8px;padding:9px 12px;margin-bottom:10px;border:1px solid rgba(59,130,246,.25);background:rgba(59,130,246,.08);color:#bfdbfe;border-radius:9px;font-size:11px}
+  .vuln-card{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:start;padding:13px;background:var(--surface);border:1px solid var(--border);border-radius:11px}
+  .sev{font-size:9px;font-weight:800;letter-spacing:.6px;padding:3px 7px;border-radius:5px;color:#1c1c1c}
+  .sev.high{background:#fbbf24}.sev.critical{background:#f87171}.sev.med{background:#fde68a}
+  .vuln-title{display:flex;align-items:center;gap:8px}
+  .vuln-title .name{font-weight:700;font-size:13px}
+  .vuln-detail{color:var(--muted);font-size:11px;margin-top:3px}
+  .vuln-detail b{color:var(--fg)}
+  .vuln-projects{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+  .pchip{font-size:10px;padding:2px 7px;border-radius:8px;background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
+  .advisory{color:var(--blue);font-size:11px;white-space:nowrap}
+  .con-card{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:12px}
+  .con-head{display:flex;align-items:center;gap:9px}
+  .con-head .name{font-weight:700;font-size:13px}
+  .con-head .actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .con-versions{display:flex;gap:16px;margin-top:8px;flex-wrap:wrap}
+  .con-version{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted)}
+  .con-version b{color:var(--yellow);font-family:ui-monospace,Consolas,monospace}
+  .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;height:100%;padding:24px;text-align:center;color:var(--muted)}
+  .empty-state .big{font-size:34px;opacity:.5}
+  .empty-state .title{color:var(--fg);font-weight:700;font-size:15px}
+  .empty-state .hint{font-size:12px;max-width:300px}
+  @media (max-width: 1100px){.layout{grid-template-columns:1fr 360px}.projects{display:none}}
+  @media (max-width: 860px){.layout{grid-template-columns:1fr}.details{display:none}.toolbar{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="logo">N</span><div>NuGet Package Manager<small>I-Synergy Framework workspace</small></div></div>
+    <nav class="tabs">
+      <button class="tab" data-screen="browse">Browse</button>
+      <button class="tab active" data-screen="installed">Installed <span class="count">12</span></button>
+      <button class="tab" data-screen="updates">Updates <span class="count">9</span></button>
+      <button class="tab" data-screen="consolidate">Consolidate <span class="count">2</span></button>
+      <button class="tab" data-screen="vuln">Vulnerabilities <span class="count">2</span></button>
+    </nav>
+    <div class="top-actions"><button class="icon-btn" title="Toggle project tree">▤</button><button class="icon-btn" title="Refresh">↻</button><button class="icon-btn" title="Settings">⚙</button></div>
+  </header>
+
+  <div class="toolbar">
+    <div class="search"><input placeholder="Search installed packages…" /><span class="kbd">⌘K</span></div>
+    <select class="select"><option>All sources</option><option>nuget.org</option><option>Azure DevOps</option></select>
+    <select class="select"><option>All frameworks</option><option>net8.0</option><option>net9.0</option></select>
+    <label class="check"><input type="checkbox" /> Prerelease</label>
+    <select class="select"><option>Relevance</option><option>Downloads</option><option>Recently updated</option></select>
+    <div class="spacer"></div>
+    <span class="filter-chip">Scope <b>All projects</b> ×</span>
+    <span class="filter-chip">Framework <b>All</b> ×</span>
+  </div>
+
+  <main class="layout">
+    <aside class="projects">
+      <div class="panel-head">Projects <span class="spacer"></span><button class="icon-btn" title="Select all">☑</button></div>
+      <div class="tree">
+        <div class="tree-group">SOLUTION</div>
+        <div class="tree-item"><span class="cb">✓</span><span class="dot"></span> MyApp <span class="muted">2 TFMs</span></div>
+        <div class="tree-item"><span class="cb">✓</span><span class="dot"></span> MyApp.Core <span class="muted">2 TFMs</span></div>
+        <div class="tree-item"><span class="cb">✓</span><span class="dot"></span> MyApp.Api <span class="muted">1 TFM</span></div>
+        <div class="tree-item"><span class="cb off">✓</span><span class="dot" style="background:#6b6b6b"></span> MyApp.Tests <span class="muted">1 TFM</span></div>
+        <div class="tree-group" style="margin-top:10px">INSIGHTS</div>
+        <div class="tree-item">⚠ 2 vulnerabilities <span class="muted">review</span></div>
+        <div class="tree-item">↑ 9 updates <span class="muted">ready</span></div>
+      </div>
+    </aside>
+
+    <section class="list-panel">
+      <div class="screen active" data-screen="installed">
+        <div class="list-head"><div><div class="list-title">Installed packages</div><div class="list-sub">12 packages · 4 projects · shared and framework-scoped</div></div><div class="list-actions"><button class="btn ghost">Select all</button><button class="btn">Update all</button></div></div>
+        <div class="list">
+          <div class="group">Shared <span class="chip">6</span></div>
+          <div class="card"><div class="icon" style="background:#c99700">NJ</div><div class="main"><div class="title"><span class="name">Newtonsoft.Json</span><span class="verified">✔</span></div><div class="authors">by James Newton-King</div><div class="desc">Json.NET is a popular high-performance JSON framework for .NET.</div></div><div class="side"><span class="version">13.0.3</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="card"><div class="icon" style="background:#256d8a">SE</div><div class="main"><div class="title"><span class="name">Serilog</span></div><div class="authors">by Serilog Contributors</div><div class="desc">Simple .NET logging with fully-structured events.</div></div><div class="side"><span class="version">2.11.0</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="card"><div class="icon" style="background:#7c3aed">AM</div><div class="main"><div class="title"><span class="name">AutoMapper</span></div><div class="authors">by Jimmy Bogard</div><div class="desc">A convention-based object-object mapper.</div></div><div class="side"><span class="version">11.0.1</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="card"><div class="icon" style="background:#1f7a4d">TS</div><div class="main"><div class="title"><span class="name">Microsoft.NET.Test.Sdk</span></div><div class="authors">by Microsoft</div><div class="desc">MSBuild targets and properties for building .NET test projects.</div></div><div class="side"><span class="version">17.0.0</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="card"><div class="icon" style="background:#1d4ed8">MD</div><div class="main"><div class="title"><span class="name">MediatR</span></div><div class="authors">by Jimmy Bogard</div><div class="desc">Simple mediator implementation in .NET.</div></div><div class="side"><span class="version">10.0.0</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="card"><div class="icon" style="background:#2d6a4f">PO</div><div class="main"><div class="title"><span class="name">Polly</span></div><div class="authors">by App-vNext</div><div class="desc">Resilience and transient-fault-handling policies for .NET.</div></div><div class="side"><span class="version">8.4.2</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="group">net8.0 <span class="chip">3</span></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">MH</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div><div class="desc">The HttpClient factory for configuring named clients.</div></div><div class="side"><span class="version">8.0.0</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">OA</div><div class="main"><div class="title"><span class="name">Microsoft.AspNetCore.OpenApi</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div><div class="desc">APIs for annotating route handler endpoints in ASP.NET Core.</div></div><div class="side"><span class="version">8.0.4</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="card selected"><div class="icon" style="background:#5b21b6">ML</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Logging</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div><div class="desc">Logging infrastructure default implementation.</div></div><div class="side"><span class="version">8.0.0</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="group">net9.0 <span class="chip">3</span></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">MH</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div><div class="desc">The HttpClient factory for configuring named clients.</div></div><div class="side"><span class="version">9.0.0</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">OA</div><div class="main"><div class="title"><span class="name">Microsoft.AspNetCore.OpenApi</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div><div class="desc">APIs for annotating route handler endpoints in ASP.NET Core.</div></div><div class="side"><span class="version">9.0.0</span><button class="rowbtn" title="Update">↑</button></div></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">ML</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Logging</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div><div class="desc">Logging infrastructure default implementation.</div></div><div class="side"><span class="version">9.0.0</span><button class="rowbtn" title="Update">↑</button></div></div>
+        </div>
+      </div>
+
+      <div class="screen" data-screen="updates">
+        <div class="list-head"><div><div class="list-title">Updates</div><div class="list-sub">9 updates · 6 shared · 3 framework-scoped</div></div><div class="list-actions"><button class="btn ghost">Select all</button><button class="btn">Update selected</button><button class="btn secondary">Update all TFMs</button></div></div>
+        <div class="banner">ℹ Framework-aligned packages stay on the TFM's major line. Use “latest overall” only when you intend to cross it.</div>
+        <div class="list">
+          <div class="group">Shared <span class="chip">6</span></div>
+          <div class="card"><div class="icon" style="background:#c99700">NJ</div><div class="main"><div class="title"><span class="name">Newtonsoft.Json</span></div><div class="authors">by James Newton-King</div><div class="desc">Json.NET is a popular high-performance JSON framework.</div></div><div class="side"><span class="version"><span class="from">12.0.3</span><span class="arrow">→</span><span class="to">13.0.3</span></span><button class="btn">Update</button></div></div>
+          <div class="card"><div class="icon" style="background:#256d8a">SE</div><div class="main"><div class="title"><span class="name">Serilog</span></div><div class="authors">by Serilog Contributors</div><div class="desc">Simple .NET logging with fully-structured events.</div></div><div class="side"><span class="version"><span class="from">2.11.0</span><span class="arrow">→</span><span class="to">4.2.0</span></span><button class="btn">Update</button></div></div>
+          <div class="card"><div class="icon" style="background:#7c3aed">AM</div><div class="main"><div class="title"><span class="name">AutoMapper</span></div><div class="authors">by Jimmy Bogard</div><div class="desc">A convention-based object-object mapper.</div></div><div class="side"><span class="version"><span class="from">11.0.1</span><span class="arrow">→</span><span class="to">13.0.1</span></span><button class="btn">Update</button></div></div>
+          <div class="group">net8.0 <span class="chip">3</span></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">MH</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div><div class="desc">The HttpClient factory for configuring named clients.</div></div><div class="side"><span class="version"><span class="from">8.0.0</span><span class="arrow">→</span><span class="to">8.0.1</span></span><button class="btn">Update</button></div></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">ML</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Logging</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div><div class="desc">Logging infrastructure default implementation.</div></div><div class="side"><span class="version"><span class="from">8.0.0</span><span class="arrow">→</span><span class="to">8.0.1</span></span><button class="btn">Update</button></div></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">OA</div><div class="main"><div class="title"><span class="name">Microsoft.AspNetCore.OpenApi</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div><div class="desc">APIs for annotating route handler endpoints.</div></div><div class="side"><span class="version"><span class="from">8.0.4</span><span class="arrow">→</span><span class="to">8.0.15</span></span><button class="btn">Update</button></div></div>
+          <div class="group">net9.0 <span class="chip">3</span></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">MH</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div><div class="desc">The HttpClient factory for configuring named clients.</div></div><div class="side"><span class="version"><span class="from">8.0.0</span><span class="arrow">→</span><span class="to">9.0.5</span></span><button class="btn">Update</button></div></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">ML</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Logging</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div><div class="desc">Logging infrastructure default implementation.</div></div><div class="side"><span class="version"><span class="from">8.0.0</span><span class="arrow">→</span><span class="to">9.0.5</span></span><button class="btn">Update</button></div></div>
+          <div class="card"><div class="icon" style="background:#5b21b6">OA</div><div class="main"><div class="title"><span class="name">Microsoft.AspNetCore.OpenApi</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div><div class="desc">APIs for annotating route handler endpoints.</div></div><div class="side"><span class="version"><span class="from">8.0.4</span><span class="arrow">→</span><span class="to">9.0.5</span></span><button class="btn">Update</button></div></div>
+        </div>
+      </div>
+
+      <div class="screen" data-screen="consolidate">
+        <div class="list-head"><div><div class="list-title">Consolidate versions</div><div class="list-sub">2 packages have inconsistent versions within a framework line</div></div><div class="list-actions"><button class="btn">Consolidate all</button></div></div>
+        <div class="list">
+          <div class="con-card"><div class="con-head"><div class="icon" style="background:#c99700;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff">NJ</div><span class="name">Newtonsoft.Json</span><span class="tfm shared">shared</span><div class="actions"><select class="select" style="height:30px"><option>13.0.1</option><option>12.0.3</option></select><button class="btn">Consolidate</button></div></div><div class="con-versions"><span class="con-version"><b>12.0.3</b> MyApp.csproj</span><span class="con-version"><b>13.0.1</b> MyApp.Tests.csproj</span></div></div>
+          <div class="con-card"><div class="con-head"><div class="icon" style="background:#5b21b6;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff">MH</div><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net8.0</span><div class="actions"><select class="select" style="height:30px"><option>8.0.1</option><option>8.0.0</option></select><button class="btn">Consolidate</button></div></div><div class="con-versions"><span class="con-version"><b>8.0.0</b> MyApp.csproj</span><span class="con-version"><b>8.0.1</b> MyApp.Tests.csproj</span></div></div>
+        </div>
+      </div>
+
+      <div class="screen" data-screen="vuln">
+        <div class="list-head"><div><div class="list-title">Vulnerabilities</div><div class="list-sub">2 packages with known advisories</div></div><div class="list-actions"><button class="btn ghost">Refresh</button></div></div>
+        <div class="list">
+          <div class="vuln-card"><span class="sev high">HIGH</span><div><div class="vuln-title"><span class="name">Newtonsoft.Json</span></div><div class="vuln-detail">Installed <b>12.0.3</b> · Affected <b>(, 13.0.1)</b></div><div class="vuln-projects"><span class="pchip">MyApp.csproj</span><span class="pchip">MyApp.Tests.csproj</span></div></div><a class="advisory" href="#">Advisory ↗</a></div>
+          <div class="vuln-card"><span class="sev high">HIGH</span><div><div class="vuln-title"><span class="name">AutoMapper</span></div><div class="vuln-detail">Installed <b>11.0.1</b> · Affected <b>(, 15.1.1)</b></div><div class="vuln-projects"><span class="pchip">MyApp.csproj</span><span class="pchip">MyApp.Core.csproj</span></div></div><a class="advisory" href="#">Advisory ↗</a></div>
+        </div>
+      </div>
+
+      <div class="screen" data-screen="browse">
+        <div class="list-head"><div><div class="list-title">Browse NuGet</div><div class="list-sub">Search nuget.org and configured feeds</div></div></div>
+        <div class="empty-state"><div class="big">⌕</div><div class="title">Search for a package</div><div class="hint">Type a name in the search box above. Use the source and framework filters to narrow results.</div></div>
+      </div>
+    </section>
+
+    <aside class="details">
+      <div class="details-head"><div class="details-icon" style="background:linear-gradient(135deg,#7c5cff,#2f80ed)">ML</div><div><div class="details-title">Microsoft.Extensions.Logging</div><div class="details-meta"><span class="verified">✔ verified</span> · by Microsoft · <span style="color:var(--blue)">nuget.org</span></div></div></div>
+      <div class="details-body">
+        <div class="field"><span class="label">Selected version</span><div class="version-picker"><select><option>8.0.1 (latest for net8.0)</option><option>8.0.0 (installed)</option><option>9.0.5 (latest overall)</option></select><button class="btn">Update</button></div></div>
+        <div class="stat-grid"><div class="stat"><b>3</b><span>projects installed</span></div><div class="stat"><b>2</b><span>framework lines</span></div></div>
+        <div class="section"><div class="section-title">Installed in</div><table class="mini-table"><tr><td>MyApp</td><td>8.0.0 · net8.0</td></tr><tr><td>MyApp.Core</td><td>8.0.0 · net8.0</td></tr><tr><td>MyApp.Api</td><td>8.0.0 · net8.0</td></tr></table></div>
+        <div class="section"><div class="section-title">Framework lines</div><table class="mini-table"><tr><td><span class="tfm">net8.0</span></td><td>8.0.0 → 8.0.1</td></tr><tr><td><span class="tfm">net9.0</span></td><td>9.0.0 → 9.0.5</td></tr></table></div>
+        <div class="section"><div class="section-title">About</div><div style="font-size:12px;color:var(--muted)">Logging infrastructure default implementation for Microsoft.Extensions.Logging. Supports structured logging, scopes and providers.</div></div>
+        <div class="section"><div class="section-title">Actions</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn secondary">Open project file</button><button class="btn ghost">Copy package ID</button></div></div>
+      </div>
+    </aside>
+  </main>
+</div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const initial = params.get('screen') || 'installed';
+  const tabs = [...document.querySelectorAll('.tab')];
+  const screens = [...document.querySelectorAll('.screen')];
+  function show(name){
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.screen === name));
+    screens.forEach(s => s.classList.toggle('active', s.dataset.screen === name));
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.screen)));
+  show(initial);
+</script>
+</body>
+</html>

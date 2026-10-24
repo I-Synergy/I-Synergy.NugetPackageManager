@@ -53,6 +53,7 @@ export function createRpcClient(
       const timer = setTimeout(() => {
         pending.delete(id);
         cleanup?.();
+        postMessage({ type: "rpc-cancel", id } satisfies RpcCancel);
         resolve(fail(`RPC timeout after ${timeoutMs}ms for method: ${method}`));
       }, timeoutMs);
 

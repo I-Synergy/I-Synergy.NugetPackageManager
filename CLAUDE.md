@@ -59,7 +59,7 @@ All host-web communication uses a **typed RPC layer** with `Result<T>`:
 
 Install/update operations stream dotnet stdout via `child_process.spawn`:
 
-- `TaskExecutor.ExecuteCommand` in `src/host/utilities/task-executor.ts` — spawns dotnet, parses output lines into progress stages, stores in `Map<string, OperationProgress>`
+- `TaskExecutor.ExecuteCommandAsync` in `src/host/utilities/task-executor.ts` — spawns dotnet, parses output lines into progress stages, stores in `Map<string, OperationProgress>`
 - `getOperationProgress` RPC method — webview polls every 300ms during an active operation
 - `project-row` component manages poll lifecycle: start on request, stop on `Active=false` or `disconnectedCallback`
 
@@ -100,7 +100,7 @@ Tests use **VSCode Test CLI** with Mocha (bundled in `@vscode/test-cli`) + Sinon
 - Web component tests: Mock `hostApi` via `Object.defineProperty(registrations, 'hostApi', { value: mock })`
 - Lit updates: Use `await element.updateComplete` instead of manual DOM tick
 
-Run a single test file by modifying `.vscode-test.mjs` config or using the test explorer.
+Run a single test file by modifying `.vscode-test.js` config or using the test explorer.
 
 ## Central Package Management (multi-framework)
 
@@ -134,9 +134,9 @@ These apply to this project specifically:
 | Area | Rule |
 |------|------|
 | Nonce generation | Use `globalThis.crypto.randomUUID()` — works in both Node.js 19+ and browser |
-| Path validation | Always validate project paths are inside a workspace folder before passing to dotnet |
+| Path validation | Use `src/host/utilities/workspace-path.ts` (resolve + realpath + relative check) before passing any path to dotnet or a file write |
 | URL validation | Validate source URLs with `new URL()` before passing to dotnet CLI |
-| Script execution | Password scripts restricted to `.ps1`, `.bat`, `.cmd`, `.sh` — reject unknown extensions |
+| Script execution | Password scripts require a trusted workspace and a path under the machine-scoped `passwordScriptAllowlist`; only `.ps1`, `.bat`, `.cmd`, `.sh` are accepted |
 | Sort/filter input | Validate against explicit allowlist before use |
 | Event listeners | Store as class fields for proper cleanup; always remove in `disconnectedCallback` |
 

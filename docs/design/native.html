@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NuGet Package Manager — Native Polish</title>
+<style>
+  :root{
+    --bg:#1e1e1e; --panel:#252526; --panel2:#2d2d30; --border:#3c3c3c;
+    --fg:#cccccc; --muted:#9d9d9d; --accent:#0e639c; --accentHover:#1177bb;
+    --badge:#4d4d4d; --chip:#37373d; --green:#4ec9b0; --yellow:#dcdcaa; --red:#f48771;
+    --blue:#75beff; --purple:#c586c0;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:12px/1.45 "Segoe UI",system-ui,sans-serif;overflow:hidden}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  .app{height:100vh;display:flex;flex-direction:column}
+  .topbar{height:42px;display:flex;align-items:center;gap:14px;padding:0 12px;border-bottom:1px solid var(--border);background:var(--panel)}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;white-space:nowrap}
+  .logo{width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,#6c5ce7,#0984e3);display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff}
+  .tabs{display:flex;gap:2px;align-items:center;flex:1}
+  .tab{padding:6px 10px;border-radius:4px;color:var(--muted);display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.4px}
+  .tab:hover{background:var(--chip);color:var(--fg)}
+  .tab.active{background:var(--chip);color:#fff;box-shadow:inset 0 -2px 0 var(--blue)}
+  .count{min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--badge);color:#ddd;font-size:10px;display:grid;place-items:center}
+  .top-actions{display:flex;gap:2px;align-items:center}
+  .icon-btn{width:28px;height:28px;border-radius:4px;display:grid;place-items:center;color:var(--muted)}
+  .icon-btn:hover{background:var(--chip);color:var(--fg)}
+  .toolbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--bg)}
+  .search{position:relative;flex:1;max-width:340px}
+  .search input{width:100%;height:28px;background:#3c3c3c;border:1px solid #3c3c3c;color:var(--fg);padding:0 28px 0 9px;border-radius:2px;outline:none}
+  .search input:focus{border-color:var(--blue)}
+  .search .kbd{position:absolute;right:7px;top:5px;color:var(--muted);font-size:10px;border:1px solid var(--border);border-radius:3px;padding:0 4px}
+  .select{height:28px;background:#3c3c3c;border:1px solid #3c3c3c;color:var(--fg);border-radius:2px;padding:0 22px 0 8px}
+  .check{display:flex;align-items:center;gap:5px;color:var(--muted);white-space:nowrap}
+  .filter-chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border-radius:12px;background:var(--chip);color:var(--fg);font-size:11px}
+  .filter-chip b{font-weight:600;color:var(--blue)}
+  .spacer{flex:1}
+  .layout{flex:1;display:grid;grid-template-columns:225px minmax(0,1fr) 390px;min-height:0}
+  .projects{border-right:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+  .panel-head{display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:.3px;color:var(--muted)}
+  .panel-head .spacer{flex:1}
+  .tree{overflow:auto;padding:6px}
+  .tree-group{display:flex;align-items:center;gap:6px;padding:5px 6px;color:var(--muted);font-size:11px;font-weight:600}
+  .tree-item{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:4px;color:var(--fg)}
+  .tree-item:hover{background:var(--chip)}
+  .tree-item .cb{width:13px;height:13px;border:1px solid #6b6b6b;border-radius:2px;display:grid;place-items:center;font-size:9px;color:#fff;background:var(--accent)}
+  .tree-item .cb.off{background:transparent;color:transparent}
+  .tree-item .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+  .tree-item .muted{color:var(--muted);margin-left:auto;font-size:10px}
+  .list-panel{display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+  .list-head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)}
+  .list-title{font-size:13px;font-weight:600}
+  .list-sub{color:var(--muted);font-size:11px}
+  .list-actions{display:flex;gap:6px;margin-left:auto}
+  .btn{height:26px;padding:0 10px;border-radius:3px;background:var(--accent);color:#fff;display:inline-flex;align-items:center;gap:5px;font-size:11px}
+  .btn:hover{background:var(--accentHover)}
+  .btn.secondary{background:#3a3d41;color:var(--fg)}
+  .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--fg)}
+  .list{overflow:auto;flex:1}
+  .group{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--panel);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;letter-spacing:.7px;color:var(--muted);text-transform:uppercase}
+  .group .chip{font-size:9px;letter-spacing:0;text-transform:none;background:var(--chip);color:var(--fg);padding:1px 5px;border-radius:8px}
+  .row{display:flex;align-items:center;gap:9px;min-height:40px;padding:5px 12px;border-bottom:1px solid #2a2a2a}
+  .row:hover{background:#2a2d2e}
+  .row.selected{background:#094771}
+  .row .icon{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0}
+  .row .main{min-width:0;flex:1}
+  .row .title{display:flex;align-items:center;gap:6px;min-width:0}
+  .row .name{font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .authors{color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+  .tfm{font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;background:#2f4f4f;color:#9fe7d8;border:1px solid #3d6b6b;white-space:nowrap}
+  .tfm.shared{background:#3b3b3b;color:#c9c9c9;border-color:#4c4c4c}
+  .row .version{font-family:var(--vscode-editor-font-family,ui-monospace,Consolas,monospace);font-size:11px;color:var(--fg);white-space:nowrap;margin-left:auto}
+  .row .version .from{color:var(--muted)}
+  .row .version .arrow{color:var(--muted);margin:0 4px}
+  .row .version .to{color:var(--green);font-weight:600}
+  .row .rowbtn{width:24px;height:24px;border-radius:4px;display:grid;place-items:center;color:var(--muted);flex-shrink:0}
+  .row .rowbtn:hover{background:var(--chip);color:var(--fg)}
+  .details{border-left:1px solid var(--border);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+  .details-head{display:flex;gap:10px;padding:12px;border-bottom:1px solid var(--border)}
+  .details-icon{width:38px;height:38px;border-radius:9px;display:grid;place-items:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+  .details-title{font-size:15px;font-weight:700;line-height:1.25}
+  .details-meta{display:flex;gap:6px;align-items:center;color:var(--muted);font-size:11px;margin-top:3px;flex-wrap:wrap}
+  .verified{color:var(--blue)}
+  .details-body{overflow:auto;padding:12px;display:flex;flex-direction:column;gap:12px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .label{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--muted)}
+  .value{font-size:12px}
+  .version-picker{display:flex;gap:6px}
+  .version-picker select{flex:1;height:28px;background:#3c3c3c;border:1px solid #3c3c3c;color:var(--fg);border-radius:2px;padding:0 8px}
+  .mini-table{width:100%;border-collapse:collapse;font-size:11px}
+  .mini-table td{padding:4px 0;border-bottom:1px solid #333}
+  .mini-table td:last-child{text-align:right;color:var(--muted)}
+  .section{border-top:1px solid var(--border);padding-top:10px}
+  .section-title{font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
+  .project-line{display:flex;align-items:center;gap:6px;padding:4px 0;color:var(--fg)}
+  .project-line .cb{width:12px;height:12px;border:1px solid #6b6b6b;border-radius:2px;display:grid;place-items:center;font-size:8px;background:var(--accent);color:#fff}
+  .project-line .path{margin-left:auto;color:var(--muted);font-size:10px}
+  .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;height:100%;padding:24px;text-align:center;color:var(--muted)}
+  .empty-state .big{font-size:28px;opacity:.5}
+  .empty-state .title{color:var(--fg);font-weight:600;font-size:13px}
+  .empty-state .hint{font-size:11px;max-width:240px}
+  .banner{display:flex;align-items:center;gap:8px;padding:7px 12px;background:#2a2d2e;border-bottom:1px solid var(--border);color:var(--muted);font-size:11px}
+  .banner .codicon{color:var(--blue)}
+  .screen{display:none;height:100%;flex-direction:column;min-height:0}
+  .screen.active{display:flex}
+  .sev{font-size:9px;font-weight:800;letter-spacing:.5px;padding:2px 6px;border-radius:3px;color:#1e1e1e}
+  .sev.high{background:#f0b429}.sev.critical{background:#f48771}.sev.med{background:#dcdcaa}
+  .vuln-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:start;padding:9px 12px;border-bottom:1px solid #2a2a2a}
+  .vuln-row:hover{background:#2a2d2e}
+  .vuln-title{display:flex;align-items:center;gap:7px}
+  .vuln-detail{color:var(--muted);font-size:11px;margin-top:2px}
+  .vuln-detail b{color:var(--fg);font-weight:600}
+  .vuln-projects{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+  .pchip{font-size:10px;padding:1px 6px;border-radius:8px;background:var(--chip);color:var(--muted)}
+  .advisory{color:var(--blue);font-size:11px;white-space:nowrap}
+  .con-row{padding:9px 12px;border-bottom:1px solid #2a2a2a}
+  .con-head{display:flex;align-items:center;gap:8px}
+  .con-head .name{font-weight:700;font-size:12px}
+  .con-head .actions{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .con-versions{display:flex;gap:14px;margin-top:5px;flex-wrap:wrap}
+  .con-version{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted)}
+  .con-version b{color:var(--yellow);font-family:ui-monospace,Consolas,monospace}
+  .toolbar-right{display:flex;align-items:center;gap:8px;margin-left:auto}
+  @media (max-width: 1050px){.layout{grid-template-columns:1fr 340px}.projects{display:none}}
+  @media (max-width: 820px){.layout{grid-template-columns:1fr}.details{display:none}.toolbar{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="logo">N</span> NuGet</div>
+    <nav class="tabs">
+      <button class="tab" data-screen="browse">BROWSE</button>
+      <button class="tab active" data-screen="installed">INSTALLED <span class="count">12</span></button>
+      <button class="tab" data-screen="updates">UPDATES <span class="count">9</span></button>
+      <button class="tab" data-screen="consolidate">CONSOLIDATE <span class="count">2</span></button>
+      <button class="tab" data-screen="vuln">VULNERABILITIES <span class="count">2</span></button>
+    </nav>
+    <div class="top-actions">
+      <button class="icon-btn" title="Toggle project tree">▤</button>
+      <button class="icon-btn" title="Refresh">↻</button>
+      <button class="icon-btn" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="search"><input value="" placeholder="Search installed packages…" /><span class="kbd">⌘K</span></div>
+    <select class="select"><option>All sources</option><option>nuget.org</option><option>Azure DevOps</option></select>
+    <select class="select"><option>All frameworks</option><option>net8.0</option><option>net9.0</option></select>
+    <label class="check"><input type="checkbox" /> Prerelease</label>
+    <select class="select"><option>Relevance</option><option>Downloads</option><option>Recently updated</option></select>
+    <div class="spacer"></div>
+    <span class="filter-chip">Scope <b>All projects</b> ×</span>
+    <span class="filter-chip">Framework <b>All</b> ×</span>
+  </div>
+
+  <main class="layout">
+    <aside class="projects">
+      <div class="panel-head">PROJECTS <span class="spacer"></span><button class="icon-btn" title="Select all">☑</button></div>
+      <div class="tree">
+        <div class="tree-group">SOLUTION</div>
+        <div class="tree-item"><span class="cb">✓</span><span class="dot"></span> MyApp <span class="muted">net8.0 / net9.0</span></div>
+        <div class="tree-item"><span class="cb">✓</span><span class="dot"></span> MyApp.Core <span class="muted">net8.0 / net9.0</span></div>
+        <div class="tree-item"><span class="cb">✓</span><span class="dot"></span> MyApp.Api <span class="muted">net8.0</span></div>
+        <div class="tree-item"><span class="cb off">✓</span><span class="dot" style="background:#6b6b6b"></span> MyApp.Tests <span class="muted">net9.0</span></div>
+        <div class="tree-group" style="margin-top:8px">FILTERS</div>
+        <div class="tree-item">⚠ 2 vulnerabilities <span class="muted">review</span></div>
+        <div class="tree-item">↑ 9 updates <span class="muted">ready</span></div>
+      </div>
+    </aside>
+
+    <section class="list-panel">
+      <div class="screen active" data-screen="installed">
+        <div class="list-head">
+          <div><div class="list-title">Installed packages</div><div class="list-sub">12 packages across 4 projects</div></div>
+          <div class="list-actions"><button class="btn ghost">Select all</button><button class="btn">Update all</button></div>
+        </div>
+        <div class="list">
+          <div class="group">Shared <span class="chip">6</span></div>
+          <div class="row"><div class="icon" style="background:#d6a400">NJ</div><div class="main"><div class="title"><span class="name">Newtonsoft.Json</span><span class="verified">✔</span></div><div class="authors">by James Newton-King</div></div><div class="version">13.0.3</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#2f6f8f">SE</div><div class="main"><div class="title"><span class="name">Serilog</span></div><div class="authors">by Serilog Contributors</div></div><div class="version">2.11.0</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#8e44ad">AM</div><div class="main"><div class="title"><span class="name">AutoMapper</span></div><div class="authors">by Jimmy Bogard</div></div><div class="version">11.0.1</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#2d7d46">TS</div><div class="main"><div class="title"><span class="name">Microsoft.NET.Test.Sdk</span></div><div class="authors">by Microsoft</div></div><div class="version">17.0.0</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#1f5f8b">MD</div><div class="main"><div class="title"><span class="name">MediatR</span></div><div class="authors">by Jimmy Bogard</div></div><div class="version">10.0.0</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#2d6a4f">PO</div><div class="main"><div class="title"><span class="name">Polly</span></div><div class="authors">by App-vNext</div></div><div class="version">8.4.2</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="group">net8.0 <span class="chip">3</span></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">MH</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div></div><div class="version">8.0.0</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">OA</div><div class="main"><div class="title"><span class="name">Microsoft.AspNetCore.OpenApi</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div></div><div class="version">8.0.4</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row selected"><div class="icon" style="background:#6c5ce7">ML</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Logging</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div></div><div class="version">8.0.0</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="group">net9.0 <span class="chip">3</span></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">MH</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div></div><div class="version">9.0.0</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">OA</div><div class="main"><div class="title"><span class="name">Microsoft.AspNetCore.OpenApi</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div></div><div class="version">9.0.0</div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">ML</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Logging</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div></div><div class="version">9.0.0</div><button class="rowbtn" title="Update">↑</button></div>
+        </div>
+      </div>
+
+      <div class="screen" data-screen="updates">
+        <div class="list-head"><div><div class="list-title">Updates</div><div class="list-sub">9 updates available · 6 shared · 3 framework-scoped</div></div><div class="list-actions"><button class="btn ghost">Select all</button><button class="btn">Update selected</button><button class="btn secondary">Update all TFMs</button></div></div>
+        <div class="banner">ℹ Framework-aligned packages stay on the TFM's major line. Use “latest overall” only when you intend to cross it.</div>
+        <div class="list">
+          <div class="group">Shared <span class="chip">6</span></div>
+          <div class="row"><div class="icon" style="background:#d6a400">NJ</div><div class="main"><div class="title"><span class="name">Newtonsoft.Json</span></div><div class="authors">by James Newton-King</div></div><div class="version"><span class="from">12.0.3</span><span class="arrow">→</span><span class="to">13.0.3</span></div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#2f6f8f">SE</div><div class="main"><div class="title"><span class="name">Serilog</span></div><div class="authors">by Serilog Contributors</div></div><div class="version"><span class="from">2.11.0</span><span class="arrow">→</span><span class="to">4.2.0</span></div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#8e44ad">AM</div><div class="main"><div class="title"><span class="name">AutoMapper</span></div><div class="authors">by Jimmy Bogard</div></div><div class="version"><span class="from">11.0.1</span><span class="arrow">→</span><span class="to">13.0.1</span></div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="group">net8.0 <span class="chip">3</span></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">MH</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div></div><div class="version"><span class="from">8.0.0</span><span class="arrow">→</span><span class="to">8.0.1</span></div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">ML</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Logging</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div></div><div class="version"><span class="from">8.0.0</span><span class="arrow">→</span><span class="to">8.0.1</span></div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">OA</div><div class="main"><div class="title"><span class="name">Microsoft.AspNetCore.OpenApi</span><span class="tfm">net8.0</span></div><div class="authors">by Microsoft</div></div><div class="version"><span class="from">8.0.4</span><span class="arrow">→</span><span class="to">8.0.15</span></div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="group">net9.0 <span class="chip">3</span></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">MH</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div></div><div class="version"><span class="from">8.0.0</span><span class="arrow">→</span><span class="to">9.0.5</span></div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">ML</div><div class="main"><div class="title"><span class="name">Microsoft.Extensions.Logging</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div></div><div class="version"><span class="from">8.0.0</span><span class="arrow">→</span><span class="to">9.0.5</span></div><button class="rowbtn" title="Update">↑</button></div>
+          <div class="row"><div class="icon" style="background:#6c5ce7">OA</div><div class="main"><div class="title"><span class="name">Microsoft.AspNetCore.OpenApi</span><span class="tfm">net9.0</span></div><div class="authors">by Microsoft</div></div><div class="version"><span class="from">8.0.4</span><span class="arrow">→</span><span class="to">9.0.5</span></div><button class="rowbtn" title="Update">↑</button></div>
+        </div>
+      </div>
+
+      <div class="screen" data-screen="consolidate">
+        <div class="list-head"><div><div class="list-title">Consolidate versions</div><div class="list-sub">2 packages have inconsistent versions within a framework line</div></div><div class="list-actions"><button class="btn">Consolidate all</button></div></div>
+        <div class="list">
+          <div class="con-row">
+            <div class="con-head"><div class="icon" style="background:#d6a400;width:24px;height:24px;border-radius:5px;display:grid;place-items:center;font-size:9px;font-weight:700;color:#fff">NJ</div><span class="name">Newtonsoft.Json</span><span class="tfm shared">shared</span><div class="actions"><select class="select" style="height:26px"><option>13.0.1</option><option>12.0.3</option></select><button class="btn">Consolidate</button></div></div>
+            <div class="con-versions"><span class="con-version"><b>12.0.3</b> MyApp.csproj</span><span class="con-version"><b>13.0.1</b> MyApp.Tests.csproj</span></div>
+          </div>
+          <div class="con-row">
+            <div class="con-head"><div class="icon" style="background:#6c5ce7;width:24px;height:24px;border-radius:5px;display:grid;place-items:center;font-size:9px;font-weight:700;color:#fff">MH</div><span class="name">Microsoft.Extensions.Http</span><span class="tfm">net8.0</span><div class="actions"><select class="select" style="height:26px"><option>8.0.1</option><option>8.0.0</option></select><button class="btn">Consolidate</button></div></div>
+            <div class="con-versions"><span class="con-version"><b>8.0.0</b> MyApp.csproj</span><span class="con-version"><b>8.0.1</b> MyApp.Tests.csproj</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="screen" data-screen="vuln">
+        <div class="list-head"><div><div class="list-title">Vulnerabilities</div><div class="list-sub">2 packages with known advisories</div></div><div class="list-actions"><button class="btn ghost">Refresh</button></div></div>
+        <div class="list">
+          <div class="vuln-row"><span class="sev high">HIGH</span><div><div class="vuln-title"><span class="name">Newtonsoft.Json</span></div><div class="vuln-detail">Installed <b>12.0.3</b> · Affected <b>(, 13.0.1)</b></div><div class="vuln-projects"><span class="pchip">MyApp.csproj</span><span class="pchip">MyApp.Tests.csproj</span></div></div><a class="advisory" href="#">Advisory ↗</a></div>
+          <div class="vuln-row"><span class="sev high">HIGH</span><div><div class="vuln-title"><span class="name">AutoMapper</span></div><div class="vuln-detail">Installed <b>11.0.1</b> · Affected <b>(, 15.1.1)</b></div><div class="vuln-projects"><span class="pchip">MyApp.csproj</span><span class="pchip">MyApp.Core.csproj</span></div></div><a class="advisory" href="#">Advisory ↗</a></div>
+        </div>
+      </div>
+
+      <div class="screen" data-screen="browse">
+        <div class="list-head"><div><div class="list-title">Browse NuGet</div><div class="list-sub">Search nuget.org and configured feeds</div></div></div>
+        <div class="empty-state"><div class="big">⌕</div><div class="title">Search for a package</div><div class="hint">Type a name in the search box above. Use the source and framework filters to narrow results.</div></div>
+      </div>
+    </section>
+
+    <aside class="details">
+      <div class="details-head">
+        <div class="details-icon" style="background:#6c5ce7">ML</div>
+        <div><div class="details-title">Microsoft.Extensions.Logging</div><div class="details-meta"><span class="verified">✔ verified</span> · by Microsoft · <span style="color:var(--blue)">nuget.org</span></div></div>
+      </div>
+      <div class="details-body">
+        <div class="field"><span class="label">Selected version</span><div class="version-picker"><select><option>8.0.1 (latest for net8.0)</option><option>8.0.0 (installed)</option><option>9.0.5 (latest overall)</option></select><button class="btn">Update</button></div></div>
+        <div class="section"><div class="section-title">Installed in</div><table class="mini-table"><tr><td>MyApp</td><td>8.0.0 · net8.0</td></tr><tr><td>MyApp.Core</td><td>8.0.0 · net8.0</td></tr><tr><td>MyApp.Api</td><td>8.0.0 · net8.0</td></tr></table></div>
+        <div class="section"><div class="section-title">Framework lines</div><table class="mini-table"><tr><td><span class="tfm">net8.0</span></td><td>8.0.0 → 8.0.1</td></tr><tr><td><span class="tfm">net9.0</span></td><td>9.0.0 → 9.0.5</td></tr></table></div>
+        <div class="section"><div class="section-title">About</div><div style="font-size:11px;color:var(--muted)">Logging infrastructure default implementation for Microsoft.Extensions.Logging. Supports structured logging, scopes and providers.</div></div>
+        <div class="section"><div class="section-title">Actions</div><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn secondary">Open project file</button><button class="btn ghost">Copy package ID</button></div></div>
+      </div>
+    </aside>
+  </main>
+</div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const initial = params.get('screen') || 'installed';
+  const tabs = [...document.querySelectorAll('.tab')];
+  const screens = [...document.querySelectorAll('.screen')];
+  function show(name){
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.screen === name));
+    screens.forEach(s => s.classList.toggle('active', s.dataset.screen === name));
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.screen)));
+  show(initial);
+</script>
+</body>
+</html>

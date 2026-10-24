@@ -45,9 +45,15 @@ console.log('Taking screenshots...');
 await waitForContent();
 await shot('screenshot-browse.png');
 
+// Installed tab
+await clickTab('Installed');
+await shot('screenshot-installed.png');
+await shot('screenshot-installed-frameworks.png');
+
 // Updates tab
 await clickTab('Updates');
 await shot('screenshot-updates.png');
+await shot('screenshot-updates-frameworks.png');
 
 // Consolidate tab
 await clickTab('Consolidate');
@@ -56,6 +62,10 @@ await shot('screenshot-consolidate.png');
 // Vulnerabilities tab
 await clickTab('Vulnerabilities');
 await shot('screenshot-vulnerabilities.png');
+
+// Cleanup tab (must be last)
+await clickTab('Cleanup');
+await shot('screenshot-cleanup.png');
 
 await browser.close();
 console.log('Done. Screenshots saved to docs/images/');

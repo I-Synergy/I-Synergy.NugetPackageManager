@@ -28,17 +28,17 @@ export class UpdatesView extends LitElement {
         height: 100%;
         width: 100%;
         overflow: hidden;
-
         .outdated-row {
           display: flex;
           align-items: center;
-          gap: 4px;
-          padding: 0 4px 0 2px;
-          border-bottom: 1px solid var(--vscode-panelSection-border);
+          gap: 10px;
+          margin: 5px 8px 0;
+          padding: 10px 12px;
+          border: 1px solid var(--npm-border, var(--vscode-panelSection-border));
+          border-radius: var(--npm-radius, 10px);
+          background: var(--npm-surface-raised, var(--vscode-editorWidget-background));
+        }
 
-          .row-checkbox {
-            flex-shrink: 0;
-          }
 
           package-row {
             flex: 1;
@@ -81,10 +81,7 @@ export class UpdatesView extends LitElement {
     onComplete: (packages) => {
       packages.forEach((p) => (p.Selected = true));
       this.packages = packages;
-      this.statusText =
-        packages.length > 0
-          ? `${packages.length} update${packages.length !== 1 ? "s" : ""} available`
-          : "";
+      this.statusText = "";
       this.dispatchEvent(new CustomEvent<number>("count-changed", {
         detail: packages.length,
         bubbles: true,
@@ -117,6 +114,65 @@ export class UpdatesView extends LitElement {
     return list.filter((p) => p.Id.toLowerCase().includes(q));
   }
 
+  private get groupedVisiblePackages(): Array<{ key: string; label: string; packages: OutdatedPackageViewModel[] }> {
+    const groups = new Map<string, OutdatedPackageViewModel[]>();
+    for (const pkg of this.visiblePackages) {
+      const key = pkg.CpmFramework || "";
+      const list = groups.get(key) ?? [];
+      list.push(pkg);
+      groups.set(key, list);
+    }
+    return [...groups.entries()]
+      .map(([key, packages]) => ({ key, label: key || "Shared", packages }))
+      .sort((a, b) => {
+        if (a.key === "" && b.key !== "") return -1;
+        if (a.key !== "" && b.key === "") return 1;
+        return a.key.localeCompare(b.key);
+      });
+  }
+
+  private get hasMultipleTfmsSelected(): boolean {
+    const counts = new Map<string, number>();
+    for (const pkg of this.visiblePackages) {
+      if (!pkg.Selected || pkg.CpmFramework === "") continue;
+      counts.set(pkg.Id, (counts.get(pkg.Id) ?? 0) + 1);
+    }
+    return [...counts.values()].some((count) => count > 1);
+  }
+
+  private async updateAllSelectedAsync(): Promise<void> {
+    const selected = this.visiblePackages.filter((pkg) => pkg.Selected && !pkg.IsUpdating);
+    if (selected.length === 0) return;
+
+    const confirm = await hostApi.showConfirmationAsync({
+      Message: `Update ${selected.length} package${selected.length !== 1 ? "s" : ""}?`,
+      Detail: selected.map((pkg) => `${pkg.Id}: ${pkg.InstalledVersion} -> ${pkg.LatestVersion}`).join("\n"),
+    });
+    if (!confirm.ok || !confirm.value.Confirmed) return;
+
+    await this.updatePackagesSequentiallyAsync(selected);
+  }
+
+  private async updateAllTfmsAsync(): Promise<void> {
+    const selectedIds = new Set(
+      this.visiblePackages.filter((pkg) => pkg.Selected).map((pkg) => pkg.Id)
+    );
+    const targets = this.packages.filter(
+      (pkg) => selectedIds.has(pkg.Id) && pkg.CpmFramework !== "" && !pkg.IsUpdating
+    );
+    if (targets.length === 0) return;
+
+    const confirm = await hostApi.showConfirmationAsync({
+      Message: `Update ${targets.length} framework-scoped package version${targets.length !== 1 ? "s" : ""}?`,
+      Detail: targets
+        .map((pkg) => `${pkg.Id} [${pkg.CpmFramework}]: ${pkg.InstalledVersion} -> ${pkg.LatestVersion}`)
+        .join("\n"),
+    });
+    if (!confirm.ok || !confirm.value.Confirmed) return;
+
+    await this.updatePackagesSequentiallyAsync(targets);
+  }
+
   private get allVisibleSelected(): boolean {
     const visible = this.visiblePackages;
     return visible.length > 0 && visible.every((p) => p.Selected);
@@ -138,26 +194,37 @@ export class UpdatesView extends LitElement {
     }
   }
 
-  private async updateSingleAsync(pkg: OutdatedPackageViewModel, skipRestore = false): Promise<void> {
+  private async updateSingleAsync(
+    pkg: OutdatedPackageViewModel,
+    skipRestore = false,
+    version = pkg.LatestVersion
+  ): Promise<boolean> {
     pkg.IsUpdating = true;
     this.requestUpdate();
     try {
       const result = await hostApi.batchUpdatePackagesAsync({
+        // The host runs the whole transaction: snapshot, write, restore and
+        // roll back if restore fails.
         SkipRestore: skipRestore,
+        Transactional: true,
         Updates: [
           {
             PackageId: pkg.Id,
-            Version: pkg.LatestVersion,
+            Version: version,
             ProjectPaths: pkg.Projects.map((p) => p.Path),
             ...(pkg.CpmCondition ? { CpmCondition: pkg.CpmCondition } : {}),
+            ...(pkg.CpmFramework ? { CpmTfm: pkg.CpmFramework } : {}),
+            Scope: pkg.CpmCondition ? "group" : "unconditional",
           },
         ],
       });
-      const succeeded = result.ok && result.value.Results.every((r) => r.Success);
+      const succeeded = result.ok && !result.value.RolledBack && result.value.Results.every((r) => r.Success);
       if (succeeded) {
-        // Use CpmCondition as the unique key so updating net8.0 doesn't also
-        // remove the net9.0 entry for the same package ID.
-        this.packages = this.packages.filter((p) => !(p.Id === pkg.Id && p.CpmCondition === pkg.CpmCondition));
+        // Condition + TFM identify a framework-scoped row, so updating the
+        // net10.0 line does not also remove the net11.0 entry.
+        this.packages = this.packages.filter(
+          (p) => !(p.Id === pkg.Id && p.CpmCondition === pkg.CpmCondition && p.CpmFramework === pkg.CpmFramework)
+        );
         this.dispatchEvent(new CustomEvent<number>("count-changed", {
           detail: this.packages.length,
           bubbles: true,
@@ -167,47 +234,78 @@ export class UpdatesView extends LitElement {
           this.packages.length > 0
             ? `${this.packages.length} update${this.packages.length !== 1 ? "s" : ""} available`
             : "All packages are up to date";
+        await hostApi.updateBadgeAsync({ Count: this.packages.length });
       } else {
-        const error = result.ok ? result.value.Results.find((r) => !r.Success)?.Error : result.error;
-        this.statusText = `Failed to update ${pkg.Id}${error ? `: ${error}` : ""}`;
+        const error = result.ok
+          ? (result.value.RestoreError ?? result.value.RollbackError ?? result.value.Results.find((r) => !r.Success)?.Error)
+          : result.error;
+        this.statusText = result.ok && result.value.RolledBack
+          ? `Update rolled back${error ? `: ${error}` : ""}`
+          : `Failed to update ${pkg.Id}${error ? `: ${error}` : ""}`;
+        return false;
       }
+
+      return true;
     } finally {
       pkg.IsUpdating = false;
       this.requestUpdate();
     }
   }
 
-  private async updateAllSelectedAsync(): Promise<void> {
-    const selected = this.visiblePackages.filter((p) => p.Selected);
-    if (selected.length === 0) return;
+  private async updatePackagesSequentiallyAsync(
+    packages: OutdatedPackageViewModel[]
+  ): Promise<void> {
+    if (packages.length === 0) return;
 
-    const confirm = await hostApi.showConfirmationAsync({
-      Message: `Update ${selected.length} package${selected.length !== 1 ? "s" : ""}?`,
-      Detail: selected.map((p) => `${p.Id}: ${p.InstalledVersion} -> ${p.LatestVersion}`).join("\n"),
-    });
-    if (!confirm.ok || !confirm.value.Confirmed) return;
+    const updates = packages.map((pkg) => ({
+      PackageId: pkg.Id,
+      Version: pkg.LatestVersion,
+      ProjectPaths: pkg.Projects.map((project) => project.Path),
+      ...(pkg.CpmCondition ? { CpmCondition: pkg.CpmCondition } : {}),
+      ...(pkg.CpmFramework ? { CpmTfm: pkg.CpmFramework } : {}),
+      Scope: pkg.CpmCondition ? "group" as const : "unconditional" as const,
+    }));
 
-    const projectPaths = [...new Set(selected.flatMap((p) => p.Projects.map((proj) => proj.Path)))];
     this.isUpdating = true;
+    packages.forEach((pkg) => { pkg.IsUpdating = true; });
+    this.statusText = `Updating ${packages.length} package${packages.length !== 1 ? "s" : ""} transactionally...`;
     this.requestUpdate();
     try {
-      // Update each package reference in parallel with restore skipped.
-      // Each succeeds as soon as the version is written to the .csproj — the
-      // package is removed from the list immediately, clearing progressively.
-      await Promise.allSettled(selected.map((pkg) => this.updateSingleAsync(pkg, true)));
-      // Run dotnet restore once for all affected projects after all writes are done.
-      const restoreResult = await hostApi.restoreProjectsAsync({ ProjectPaths: projectPaths });
-      if (!restoreResult.ok) {
-        this.statusText = restoreResult.error;
+      const result = await hostApi.batchUpdatePackagesAsync({
+        Updates: updates,
+        Transactional: true,
+        SkipRestore: false,
+      });
+
+      if (!result.ok) {
+        this.statusText = `Update failed: ${result.error}`;
+        return;
       }
+      if (result.value.RolledBack) {
+        const reason = result.value.RestoreError ?? result.value.RollbackError;
+        this.statusText = `Update rolled back${reason ? `: ${reason}` : ""}`;
+        await hostApi.updateBadgeAsync({ Count: this.packages.length });
+        return;
+      }
+
+      // The transaction succeeded, so every selected row can be removed.
+      this.packages = this.packages.filter((pkg) => !packages.includes(pkg));
+      this.dispatchEvent(new CustomEvent<number>("count-changed", {
+        detail: this.packages.length,
+        bubbles: true,
+        composed: true,
+      }));
+      this.statusText = `${packages.length} package${packages.length !== 1 ? "s" : ""} updated and restored`;
+      await hostApi.updateBadgeAsync({ Count: this.packages.length });
     } finally {
+      packages.forEach((pkg) => { pkg.IsUpdating = false; });
       this.isUpdating = false;
       this.requestUpdate();
     }
   }
 
   private toPackageViewModel(pkg: OutdatedPackageViewModel): PackageViewModel {
-    return new PackageViewModel({
+    const vm = new PackageViewModel({
       Id: pkg.Id,
       Name: pkg.Id,
       IconUrl: "",
@@ -223,6 +321,8 @@ export class UpdatesView extends LitElement {
       Tags: [],
       Registration: "",
     }, "Detailed");
+    vm.CpmFramework = pkg.CpmFramework;
+    return vm;
   }
 
   private renderPackageRow(pkg: OutdatedPackageViewModel): unknown {
@@ -244,6 +344,7 @@ export class UpdatesView extends LitElement {
             `}
         <package-row
           .package=${this.toPackageViewModel(pkg)}
+          .embedded=${true}
           .updateVersion=${pkg.LatestVersion}
           @click=${() => this.dispatchEvent(new CustomEvent("package-selected", {
             detail: { packageId: pkg.Id, sourceUrl: pkg.SourceUrl },
@@ -251,11 +352,24 @@ export class UpdatesView extends LitElement {
             composed: true,
           }))}
         ></package-row>
-        ${pkg.CpmFramework && !this.selectedFramework
-          ? html`<span class="framework-badge">${pkg.CpmFramework}</span>`
+        ${!pkg.CpmMatched
+          ? html`<span class="codicon codicon-warning" title="This condition matches none of the project's target frameworks"></span>`
           : nothing}
         <div class="row-actions">
-          <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" ?disabled=${pkg.IsUpdating} @click=${async () => await this.updateSingleAsync(pkg)}>
+          ${pkg.LatestOverallVersion
+            ? html`
+                <button
+                  class="icon-btn"
+                  aria-label="Update ${pkg.Id} to latest overall ${pkg.LatestOverallVersion}"
+                  title="Update ${pkg.Id} to latest overall ${pkg.LatestOverallVersion} (crosses the framework's major version)"
+                  ?disabled=${this.isUpdating || pkg.IsUpdating}
+                  @click=${async () => await this.updateSingleAsync(pkg, false, pkg.LatestOverallVersion)}
+                >
+                  <span class="codicon codicon-arrow-up"></span>
+                </button>
+              `
+            : nothing}
+          <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" ?disabled=${this.isUpdating || pkg.IsUpdating} @click=${async () => await this.updateSingleAsync(pkg)}>
             <span class="codicon codicon-arrow-circle-up"></span>
           </button>
         </div>
@@ -269,25 +383,51 @@ export class UpdatesView extends LitElement {
     const visible = this.visiblePackages;
     const totalSelectedCount = visible.filter((p) => p.Selected).length;
     const allVisibleSelected = this.allVisibleSelected;
-    const updateBtnLabel = allVisibleSelected ? "Update All" : "Update Selected";
+    const updateBtnLabel = allVisibleSelected
+      ? `Update all (${totalSelectedCount})`
+      : `Update selected (${totalSelectedCount})`;
 
     return html`
       <div class="updates-container" aria-busy=${isLoading}>
-        <div class="toolbar">
-          <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
-          <div class="toolbar-right">
+        <div class="list-header">
+          <div>
+            <div class="list-title">Updates</div>
+            <div class="list-subtitle">
+              ${visible.length} update${visible.length !== 1 ? "s" : ""} available
+              ${this.statusText ? html` · ${this.statusText}` : nothing}
+            </div>
+          </div>
+          <div class="list-actions">
             ${visible.length > 0
               ? html`
-                  <button class="icon-btn" title="${allVisibleSelected ? "Deselect all" : "Select all"}" aria-label="${allVisibleSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
-                    <span class="codicon ${allVisibleSelected ? "codicon-check-all" : "codicon-circle-large-outline"}"></span>
+                  <button class="ghost-btn" title="${allVisibleSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
+                    ${allVisibleSelected ? "Deselect all" : "Select all"}
                   </button>
                   <button class="primary-btn" ?disabled=${this.isUpdating || totalSelectedCount === 0} @click=${async () => await this.updateAllSelectedAsync()}>
                     ${updateBtnLabel}
                   </button>
+                  ${this.hasMultipleTfmsSelected
+                    ? html`
+                        <button
+                          class="secondary-btn"
+                          ?disabled=${this.isUpdating}
+                          title="Update every selected package for all of its target frameworks"
+                          @click=${async () => await this.updateAllTfmsAsync()}
+                        >
+                          Update all TFMs
+                        </button>
+                      `
+                    : nothing}
                 `
               : nothing}
           </div>
         </div>
+        ${visible.length > 0
+          ? html`<div class="info-banner">
+              <span class="codicon codicon-info"></span>
+              <span>Framework-aligned packages stay on the target framework's major line. Use the separate latest-overall action only when you intend to cross it.</span>
+            </div>`
+          : nothing}
 
         ${isLoading
           ? html`
@@ -324,7 +464,15 @@ export class UpdatesView extends LitElement {
         ${!isLoading && visible.length > 0
           ? html`
               <div class="package-list" role="list" aria-label="Outdated packages">
-                ${visible.map((pkg) => this.renderPackageRow(pkg))}
+                ${this.groupedVisiblePackages.map(
+                  (group) => html`
+                    <div class="group-header">
+                      ${group.label}
+                      <span class="group-count">${group.packages.length}</span>
+                    </div>
+                    ${group.packages.map((pkg) => this.renderPackageRow(pkg))}
+                  `
+                )}
               </div>
             `
           : nothing}

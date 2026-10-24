@@ -258,6 +258,18 @@ suite('PackageRow Component', () => {
         assert.ok(row?.classList.contains('package-row-error'), 'Row should have error class');
     });
 
+    test('should render an inline framework badge', async () => {
+        const pkg = createPackageViewModel();
+        pkg.CpmFramework = 'net8.0';
+        packageRow.package = pkg;
+
+        await packageRow.updateComplete;
+
+        const badge = packageRow.shadowRoot?.querySelector('.tfm-badge');
+        assert.ok(badge, 'TFM badge should be rendered inline');
+        assert.strictEqual(badge?.textContent?.trim(), 'net8.0');
+    });
+
     test('should add selected class when selected', async () => {
         const pkg = createPackageViewModel({
             Selected: true

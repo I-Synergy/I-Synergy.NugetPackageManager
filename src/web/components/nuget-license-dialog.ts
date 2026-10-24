@@ -148,12 +148,32 @@ export class NugetLicenseDialog extends LitElement {
     await hostApi.openUrlAsync({ Url: url });
   }
 
+  override updated(changed: Map<string, unknown>): void {
+    if (changed.has("isOpen") && this.isOpen) {
+      this.shadowRoot?.querySelector<HTMLElement>(".dialog")?.focus();
+    }
+  }
+
+  private onKeydown(e: KeyboardEvent): void {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      this.decline();
+    }
+  }
+
   override render() {
     if (!this.isOpen) return nothing;
 
     return html`
-      <div class="overlay" @click=${() => this.decline()}>
-        <div class="dialog" @click=${(e: Event) => e.stopPropagation()}>
+      <div class="overlay" @click=${() => this.decline()} @keydown=${(e: KeyboardEvent) => this.onKeydown(e)}>
+        <div
+          class="dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-label="License Acceptance Required"
+          tabindex="-1"
+          @click=${(e: Event) => e.stopPropagation()}
+        >
           <div class="dialog-title">
             <span class="codicon codicon-law"></span>
             License Acceptance Required
