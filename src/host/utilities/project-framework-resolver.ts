@@ -74,8 +74,11 @@ export default class ProjectFrameworkResolver {
     }
 
     let info: TargetFrameworkInfo;
-    const fromAssets = await this.TryResolveFromAssetsAsync(projectPath);
-    if (fromAssets) {
+    const fromLiteralXml = await this.TryParseUnconditionalFrameworksAsync(projectPath);
+    const fromAssets = fromLiteralXml ? null : await this.TryResolveFromAssetsAsync(projectPath);
+    if (fromLiteralXml) {
+      info = fromLiteralXml;
+    } else if (fromAssets) {
       info = fromAssets;
     } else {
       try {
@@ -131,6 +134,41 @@ export default class ProjectFrameworkResolver {
     const workers = Array.from({ length: Math.min(concurrency, projectPaths.length) }, () => worker());
     await Promise.all(workers);
     return result;
+  }
+
+  /**
+   * Fast path for a single, unconditional, literal `<TargetFramework(s)>`.
+   * Any condition, property expression, import or multiple declarations can
+   * change the effective list, so those projects fall through to assets/MSBuild.
+   */
+  private static async TryParseUnconditionalFrameworksAsync(
+    projectPath: string
+  ): Promise<TargetFrameworkInfo | null> {
+    try {
+      const content = await fs.promises.readFile(projectPath, "utf8");
+      const document = new DOMParser().parseFromString(content);
+      const nodes = xpath.select(
+        "//*[local-name()='TargetFramework' or local-name()='TargetFrameworks']",
+        document
+      ) as Node[];
+
+      if (nodes.length !== 1) return null;
+
+      const element = nodes[0] as Element;
+      let ancestor: Node | null = element;
+      while (ancestor && ancestor.nodeType === 1) {
+        if ((ancestor as Element).attributes?.getNamedItem("Condition")) return null;
+        ancestor = ancestor.parentNode;
+      }
+
+      const raw = String(element.textContent ?? "").trim();
+      if (!raw || /[$@%]\(/.test(raw)) return null;
+
+      const frameworks = this.normalizeFrameworks(raw.split(";"));
+      return frameworks.length > 0 ? { Frameworks: frameworks, Source: "xml" } : null;
+    } catch {
+      return null;
+    }
   }
 
   /**

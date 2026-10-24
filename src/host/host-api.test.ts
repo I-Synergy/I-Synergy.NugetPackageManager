@@ -410,7 +410,8 @@ suite('HostAPI Tests', () => {
 
         teardown(() => {
             ProjectFrameworkResolver.SetEvaluatorForTests(null);
-            fs.rmSync(workspaceDir, { recursive: true, force: true });
+            ProjectFrameworkResolver.ClearCache();
+            fs.rmSync(workspaceDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
         });
 
         test('attaches per-TFM resolutions to each project variant', async () => {

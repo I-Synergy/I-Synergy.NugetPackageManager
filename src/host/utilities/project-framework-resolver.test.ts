@@ -45,6 +45,44 @@ suite('ProjectFrameworkResolver Tests', () => {
         assert.strictEqual(calls, 1, 'second call should be served from cache');
     });
 
+    test('uses a single unconditional literal TFM without MSBuild or assets', async () => {
+        const projectPath = path.join(tmpDir, 'App.csproj');
+        fs.writeFileSync(
+            projectPath,
+            '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFrameworks>net10.0;net11.0</TargetFrameworks></PropertyGroup></Project>'
+        );
+
+        let calls = 0;
+        ProjectFrameworkResolver.SetEvaluatorForTests(async () => {
+            calls++;
+            return ['should-not-be-used'];
+        });
+
+        const info = await ProjectFrameworkResolver.GetTargetFrameworksAsync(projectPath);
+        assert.deepStrictEqual(info.Frameworks, ['net10.0', 'net11.0']);
+        assert.strictEqual(info.Source, 'xml');
+        assert.strictEqual(calls, 0);
+    });
+
+    test('does not use literal XML when TFM declarations are conditional', async () => {
+        const projectPath = path.join(tmpDir, 'App.csproj');
+        fs.writeFileSync(
+            projectPath,
+            '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFrameworks>net10.0</TargetFrameworks><TargetFrameworks Condition="true">$(TargetFrameworks);net11.0</TargetFrameworks></PropertyGroup></Project>'
+        );
+
+        let calls = 0;
+        ProjectFrameworkResolver.SetEvaluatorForTests(async () => {
+            calls++;
+            return ['net10.0', 'net11.0'];
+        });
+
+        const info = await ProjectFrameworkResolver.GetTargetFrameworksAsync(projectPath);
+        assert.deepStrictEqual(info.Frameworks, ['net10.0', 'net11.0']);
+        assert.strictEqual(info.Source, 'msbuild');
+        assert.strictEqual(calls, 1);
+    });
+
     test('uses project.assets.json without invoking MSBuild', async () => {
         const projectPath = path.join(tmpDir, 'App.csproj');
         fs.writeFileSync(projectPath, '<Project Sdk="Microsoft.NET.Sdk" />');
