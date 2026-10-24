@@ -1,4 +1,6 @@
 {
+	"include": ["src/**/*.ts"],
+	"exclude": ["**/*.test.ts", "src/web/web-setup.ts"],
 	"compilerOptions": {
 		"module": "ESNext",
 		"target": "ES6",
