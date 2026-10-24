@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.9 (2026-10-24)
+
+- fix: hard-exclude `.ai/` and `.reasonix/` from every project, props and cleanup scan, so scratch/fake projects can never break Cleanup or be treated as solution projects.
+- test: add Cleanup coverage proving `.ai/tmp/...` projects are ignored.
+
 ## 1.2.8 (2026-10-24)
 
 - fix: use light/dark tab icons so the NuGet Package Manager editor-tab icon is visible in dark and light themes.

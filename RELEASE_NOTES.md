@@ -1,6 +1,8 @@
-# NuGet Package Manager 1.2.8
+# NuGet Package Manager 1.2.9
 
 ## Fixes and UI
+
+- Hard-excluded `.ai/` and `.reasonix/` from all scans; malformed scratch projects no longer break the Cleanup report.
 
 - Fixed the invisible NuGet tab icon in dark themes with theme-aware icons.
 - Added a guarded literal TFM fast path for faster project loading.

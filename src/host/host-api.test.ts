@@ -359,6 +359,28 @@ suite('HostAPI Tests', () => {
         });
     });
 
+    test('cleanup ignores projects under .ai scratch directories', async () => {
+        const fake = { fsPath: '/ws/.ai/tmp/fakesrc/fake.csproj' } as vscode.Uri;
+        const real = { fsPath: '/ws/Real.csproj' } as vscode.Uri;
+        sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+            get: () => undefined,
+        } as unknown as vscode.WorkspaceConfiguration);
+        sandbox.stub(vscode.workspace, 'findFiles').callsFake(async (pattern: vscode.GlobPattern) =>
+            String(pattern).includes('Directory.Packages.props') ? [] : [fake, real]
+        );
+        const parseStub = sandbox.stub(ProjectParser, 'ParseAsync').callsFake(async (projectPath: string) => {
+            if (projectPath === fake.fsPath) throw new Error('invalid content');
+            return { Name: 'Real', Path: real.fsPath, Packages: [] } as unknown as Project;
+        });
+
+        const api = createHostAPI();
+        const result = await api.getCleanupReportAsync({});
+
+        assert.ok(result.ok);
+        assert.strictEqual(parseStub.callCount, 1);
+        assert.ok(!parseStub.calledWith(fake.fsPath));
+    });
+
     // ----------------------------------------------------------------
     // CPM multi-framework projects
     // ----------------------------------------------------------------

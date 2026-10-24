@@ -200,9 +200,20 @@ async function parseProjectWithCpmAsync(
   return { project, cpmMap, tfms: tfmInfo.Frameworks };
 }
 
+const INTERNAL_EXCLUDED_DIRECTORIES = [".ai", ".reasonix"];
+
+/** Keeps agent/context scratch trees out of every package and project scan. */
+function isInternalExcludedPath(fsPath: string): boolean {
+  const normalized = fsPath.replace(/\\/g, "/").toLowerCase();
+  return INTERNAL_EXCLUDED_DIRECTORIES.some((directory) =>
+    normalized.includes(`/${directory}/`)
+  );
+}
+
 /** Excludes configured globs (for example bin and obj folders) from project discovery. */
 function applyExcludeGlobs<T extends { fsPath: string }>(files: T[], excludeGlobs: string[]): T[] {
-  if (excludeGlobs.length === 0) return files;
+  const visibleFiles = files.filter((file) => !isInternalExcludedPath(file.fsPath));
+  if (excludeGlobs.length === 0) return visibleFiles;
   const patterns = excludeGlobs.map(
     (glob) =>
       new RegExp(
@@ -216,7 +227,7 @@ function applyExcludeGlobs<T extends { fsPath: string }>(files: T[], excludeGlob
         "i"
       )
   );
-  return files.filter((file) => {
+  return visibleFiles.filter((file) => {
     const normalized = file.fsPath.replace(/\\/g, "/");
     return !patterns.some((pattern) => pattern.test(normalized));
   });
