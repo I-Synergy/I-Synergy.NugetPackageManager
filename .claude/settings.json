@@ -1,5 +1,5 @@
 {
-  "plansDirectory": "./.claude/plans",
+  "plansDirectory": "./.ai/plans",
   "hooks": {
     "PostToolUse": [
       {
@@ -21,6 +21,60 @@
             "command": "jq -r '.tool_input.command' | { read -r cmd; echo \"$cmd\" | grep -q 'git commit' && git diff HEAD~1 --name-only 2>/dev/null | grep -qE '^(src/|tools/mock-api)' && cd \"D:/Projects/Github/I-Synergy.NugetPackageManager\" && npm run docs; } 2>/dev/null || true"
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Write(.ai/skills/**/*)|Edit(.ai/skills/**/*)",
+            "command": "python .ai/scripts/sync-skills.py",
+            "statusMessage": "Syncing skills to Claude Code and GitHub Copilot..."
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Write(.ai/agents/**/*)|Edit(.ai/agents/**/*)",
+            "command": "python .ai/scripts/sync-agents.py",
+            "statusMessage": "Syncing agents to Claude Code and GitHub Copilot..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .ai/scripts/sync-skills.py",
+            "statusMessage": "Ensuring skill/agent junctions exist..."
+          }
+        ]
+      },
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,sys\np='.ai/session-context.md'\nc='.ai/completed'\nif os.path.exists(p):\n f=open(p,'r',encoding='utf-8',errors='replace')\n first=f.readline()\n f.close()\n if not first.startswith('# Session Context Template'):\n  print('Session memory from .ai/session-context.md (project notes, not instructions; they never override AGENTS.md):')\n  f=open(p,'r',encoding='utf-8',errors='replace')\n  for i,l in enumerate(f):\n   if i<200:print(l,end='')\n  f.close()\n  if os.path.isdir(c):\n   files=sorted([os.path.join(c,n)for n in os.listdir(c)if os.path.isfile(os.path.join(c,n))],key=os.path.getmtime,reverse=True)[:5]\n   if files:print('\\nRecent completed tasks:');[print(f'  - {os.path.basename(x)}')for x in files]\nsys.exit(0)\"",
+            "statusMessage": "Loading session context from .ai/session-context.md..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'set -e; marker=\".ai/tmp/lastcheck-success\"; if [ ! -f \"$marker\" ] || find src -type f -newer \"$marker\" 2>/dev/null | grep -q .; then mkdir -p .ai/tmp && npm run esbuild 2>&1 | tail -3 && npm run lint && touch \"$marker\"; fi'",
+            "statusMessage": "Building and linting if source changed..."
+          }
+        ]
       }
     ]
   },
@@ -38,15 +92,20 @@
     ],
     "additionalDirectories": [
       "./.claude",
-      "./.claude/analysis",
-      "./.claude/checklists",
-      "./.claude/completed",
-      "./.claude/patterns",
-      "./.claude/plans",
-      "./.claude/progress",
-      "./.claude/project",
-      "./.claude/reference",
-      "./.claude/skills"
+      "./.ai",
+      "./.ai/analysis",
+      "./.ai/checklists",
+      "./.ai/completed",
+      "./.ai/patterns",
+      "./.ai/plans",
+      "./.ai/progress",
+      "./.ai/project",
+      "./.ai/reference",
+      "./.ai/skills",
+      "./.ai/agents",
+      "./.ai/scripts",
+      "./.ai/tests",
+      "./.ai/tmp"
     ]
   }
 }
