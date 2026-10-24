@@ -200,14 +200,19 @@ async function parseProjectWithCpmAsync(
   return { project, cpmMap, tfms: tfmInfo.Frameworks };
 }
 
-const INTERNAL_EXCLUDED_DIRECTORIES = [".ai", ".reasonix"];
-
-/** Keeps agent/context scratch trees out of every package and project scan. */
+/** Keeps hidden/scratch directories out of every package and project scan. */
 function isInternalExcludedPath(fsPath: string): boolean {
   const normalized = fsPath.replace(/\\/g, "/").toLowerCase();
-  return INTERNAL_EXCLUDED_DIRECTORIES.some((directory) =>
-    normalized.includes(`/${directory}/`)
+  const workspaceRoots = (vscode.workspace.workspaceFolders ?? [])
+    .map((folder) => folder.uri.fsPath.replace(/\\/g, "/").toLowerCase().replace(/\/$/, ""))
+    .filter(Boolean);
+  const root = workspaceRoots.find(
+    (candidate) => normalized === candidate || normalized.startsWith(`${candidate}/`)
   );
+  const relative = root ? normalized.slice(root.length).replace(/^\/+/, "") : normalized;
+  const segments = relative.split("/");
+  // The final segment is the file; any hidden directory above it is excluded.
+  return segments.slice(0, -1).some((segment) => segment.startsWith("."));
 }
 
 /** Excludes configured globs (for example bin and obj folders) from project discovery. */

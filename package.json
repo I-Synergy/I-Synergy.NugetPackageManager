@@ -212,9 +212,7 @@
             "**/obj/**",
             "**/TestResults/**",
             "**/packages/**",
-            "**/.git/**",
-            "**/.ai/**",
-            "**/.reasonix/**"
+            "**/.*/**"
           ],
           "description": "Glob patterns excluded from project discovery."
         }
