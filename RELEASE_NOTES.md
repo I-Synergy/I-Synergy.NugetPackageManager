@@ -1,9 +1,10 @@
-# NuGet Package Manager 1.2.1
+# NuGet Package Manager 1.2.2
 
 ## Maintenance
 
-- Updated `@vscode/vsce` and pinned patched Azure identity/MSAL dependencies.
-- `npm audit --audit-level=high` now passes in CI.
+- Aligned production/test TypeScript scopes and added an ESLint-specific tsconfig.
+- Aligned dependency peers so `npm ci` no longer needs legacy flags.
+- `npm audit --audit-level=high` passes in CI.
 
 ## Highlights
 

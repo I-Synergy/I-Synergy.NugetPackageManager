@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.2 (2026-10-24)
+
+- fix: separate production and test TypeScript checks and add an ESLint-specific all-source tsconfig, resolving the final CI type-check failure.
+- chore: align dependency versions so `npm ci` succeeds without legacy peer flags and the high-severity audit gate passes.
+
 ## 1.2.1 (2026-10-24)
 
 - fix: update `@vscode/vsce` and pin patched `@azure/identity` / `@azure/msal-node` versions so `npm audit --audit-level=high` passes in CI.
