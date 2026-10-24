@@ -281,6 +281,16 @@ NuGet Package Manager supports private package feeds out of the box.
 
 The extension reads credentials stored in any `NuGet.config` file in your workspace or the global `%APPDATA%\NuGet\NuGet.Config`. If your feed credentials are already configured there, no extra setup is needed.
 
+### Local folder feeds
+
+Local folder sources are supported as well. A `nuget.config` source whose value is a directory is scanned recursively for `.nupkg` files; package metadata and versions come from the embedded `.nuspec`. Flat folders and the standard `package-id/version/*.nupkg` layout both work. Local sources have no vulnerability endpoint, so vulnerability results are empty for those packages.
+
+```xml
+<packageSources>
+  <add key="Local packages" value="D:\LocalNuGetPackages" />
+</packageSources>
+```
+
 ### Azure Artifacts Credential Provider
 
 Install the [Microsoft Artifacts Credential Provider](https://github.com/microsoft/artifacts-credprovider) and authenticate once via the .NET CLI:

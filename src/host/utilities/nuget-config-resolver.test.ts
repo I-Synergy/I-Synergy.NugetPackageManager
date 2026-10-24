@@ -467,6 +467,21 @@ suite('NuGetConfigResolver Tests', () => {
     });
 
     suite('GetSourcesAndDecodePasswords', () => {
+        test('Keeps local folder sources alongside HTTP feeds', async () => {
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({
+                sources: [
+                    { Name: 'LocalSDK', Url: 'C:/Program Files (x86)/Microsoft SDKs/NuGetPackages/' },
+                    { Name: 'Remote', Url: 'https://api.nuget.org/v3/index.json' },
+                ],
+                clearFound: false,
+            });
+            vscodeGetConfigurationStub.returns({ get: () => [] });
+
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
+
+            assert.deepStrictEqual(sources.map((source) => source.Name), ['LocalSDK', 'Remote']);
+        });
+
         test('Uses VS Code configuration sources', async () => {
             // Stub ResolveConfigsAsync with no file-based sources and no workspace <clear />
             sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [], clearFound: false });

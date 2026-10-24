@@ -7,6 +7,7 @@ import * as vscode from "vscode";
 import PasswordScriptExecutor from "./password-script-executor";
 import { isPathInside } from "./workspace-path";
 import { Logger } from "../../common/logger";
+import LocalNuGetFeed from "../nuget/local-feed";
 
 export type SourceWithCredentials = {
   Name: string;
@@ -101,7 +102,24 @@ export default class NuGetConfigResolver {
       }
     }
 
-    return sources;
+    const supportedSources = sources.filter(
+      (source) => this.IsHttpSource(source.Url) || LocalNuGetFeed.IsLocalSource(source.Url)
+    );
+    for (const source of sources) {
+      if (!this.IsHttpSource(source.Url) && !LocalNuGetFeed.IsLocalSource(source.Url)) {
+        Logger.info(`NuGetConfigResolver: Skipping unsupported source ${source.Name} (${source.Url})`);
+      }
+    }
+    return supportedSources;
+  }
+
+  private static IsHttpSource(url: string): boolean {
+    try {
+      const protocol = new URL(url).protocol;
+      return protocol === "http:" || protocol === "https:";
+    } catch {
+      return false;
+    }
   }
 
   private static async IsPasswordScriptAllowedAsync(

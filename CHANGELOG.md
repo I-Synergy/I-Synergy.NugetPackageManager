@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.2.12 (2026-10-24)
+
+- feat: support local folder NuGet sources by scanning `.nupkg` files and reading embedded `.nuspec` metadata, versions and dependencies.
+- fix: keep local folder sources during source resolution instead of treating the drive letter as an unsupported URL protocol.
+- chore: add `jszip` as a runtime dependency for local package archives.
+
 ## 1.2.11 (2026-10-24)
 
 - feat: framework selectors now collapse platform TFMs (windows/android/ios) to their base `.NET` line and expose **Shared** as a separate option; selecting a `.NET` line excludes shared packages.

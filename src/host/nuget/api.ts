@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosInstance, AxiosProxyConfig, AxiosRequestConfig,
 import * as vscode from "vscode";
 import { Logger } from "../../common/logger";
 import { compareVersions } from "../utilities/version";
+import LocalNuGetFeed from "./local-feed";
 
 type RawPackageSearchItem = {
   "@id": string;
@@ -76,12 +77,16 @@ export default class NuGetApi {
 
   private _sourceHost: string = "";
   private readonly _trustedHosts = new Set<string>();
+  private readonly _localFeed: LocalNuGetFeed | null;
 
   constructor(
     private readonly _url: string,
     private readonly _username?: string,
     private readonly _password?: string
   ) {
+    this._localFeed = LocalNuGetFeed.IsLocalSource(this._url)
+      ? new LocalNuGetFeed(this._url)
+      : null;
     const proxy = this.getProxy();
     this.http = axios.create({
       ...(proxy !== undefined && { proxy }),
@@ -124,6 +129,11 @@ export default class NuGetApi {
     signal?: AbortSignal
   ): Promise<GetPackagesResponse> {
     Logger.debug(`NuGetApi.GetPackagesAsync: Fetching packages (filter: '${filter}', prerelease: ${prerelease}, skip: ${skip}, take: ${take})`);
+    if (this._localFeed) {
+      return {
+        data: await this._localFeed.GetPackagesAsync(filter, prerelease, skip, take, signal),
+      };
+    }
     await this.EnsureSearchUrlAsync();
     const result = await this.ExecuteGetAsync(this._searchUrl, {
       params: {
@@ -162,6 +172,12 @@ export default class NuGetApi {
   }
 
   async GetPackageAsync(id: string, prerelease: boolean = true, signal?: AbortSignal): Promise<GetPackageResponse> {
+    if (this._localFeed) {
+      const pkg = await this._localFeed.GetPackageAsync(id, prerelease, signal);
+      return pkg
+        ? { data: pkg, isError: false, errorMessage: undefined }
+        : { data: undefined, isError: true, errorMessage: "Package couldn't be found" };
+    }
     const cacheKey = `${id.toLowerCase()}::${prerelease}`;
     const cached = this._packageCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp < this._cacheTtl)) {
@@ -253,6 +269,7 @@ export default class NuGetApi {
   }
 
   public ClearPackageCache(packageId?: string) {
+    this._localFeed?.ClearCache();
     if (packageId) {
       // Cache keys are "${id}::${prerelease}" — delete all variants for this id.
       const prefix = packageId.toLowerCase() + "::";
@@ -272,6 +289,9 @@ export default class NuGetApi {
 
   async GetPackageDetailsAsync(packageVersionUrl: string, signal?: AbortSignal): Promise<GetPackageDetailsResponse> {
     try {
+      if (this._localFeed) {
+        return { data: await this._localFeed.GetPackageDetailsAsync(packageVersionUrl) };
+      }
       await this.EnsureSearchUrlAsync();
       if (!this.isTrustedSourceUrl(packageVersionUrl)) {
         throw new Error("Refusing to fetch package details from an untrusted source host");
@@ -349,6 +369,7 @@ export default class NuGetApi {
   }
 
   async GetVulnerabilitiesAsync(signal?: AbortSignal): Promise<Map<string, VulnerabilityEntry[]>> {
+    if (this._localFeed) return new Map();
     // Return cached data if fresh
     if (this._vulnerabilityCache && (Date.now() - this._vulnerabilityCache.timestamp < this._vulnCacheTtl)) {
       Logger.debug("NuGetApi.GetVulnerabilitiesAsync: Returning cached vulnerability data");

@@ -1,4 +1,9 @@
-# NuGet Package Manager 1.2.11
+# NuGet Package Manager 1.2.12
+
+## Local Package Sources
+
+- Local folder feeds are supported by scanning `.nupkg` files and reading `.nuspec` metadata.
+- Fixes `Unsupported protocol c:` when a machine NuGet.config contains an offline packages folder.
 
 ## Framework Selection
 

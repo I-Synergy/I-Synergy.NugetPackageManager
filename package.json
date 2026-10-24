@@ -3,7 +3,7 @@
   "publisher": "I-Synergy",
   "displayName": "I-Synergy NuGet Package Manager",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
-  "version": "1.2.11",
+  "version": "1.2.12",
   "license": "MIT",
   "icon": "docs/images/icon.png",
   "galleryBanner": {
@@ -275,6 +275,7 @@
     "@xmldom/xmldom": "^0.8.15",
     "async-mutex": "^0.5.0",
     "axios": "^1.7.4",
+    "jszip": "^3.10.2",
     "lit": "^3.3.3",
     "lodash": "^4.17.21",
     "split.js": "^1.6.5",
