@@ -150,14 +150,16 @@ suite('PackageRow Component', () => {
         const img = shadowRoot?.querySelector('img.icon') as HTMLImageElement;
         assert.ok(img);
 
-        // Simulate error event
-        img.dispatchEvent(new Event('error'));
+        // jsdom 30 no longer raises image error events; invoke the same handler
+        // the template binds to @error.
+        (packageRow as unknown as { onIconError(): void }).onIconError();
 
         await packageRow.updateComplete;
 
         assert.strictEqual(packageRow.iconUrl, 'https://nuget.org/Content/gallery/img/default-package-icon.svg');
         await packageRow.updateComplete;
-        assert.strictEqual(img.getAttribute('src'), 'https://nuget.org/Content/gallery/img/default-package-icon.svg');
+        const updatedImg = shadowRoot?.querySelector('img.icon') as HTMLImageElement;
+        assert.strictEqual(updatedImg.getAttribute('src'), 'https://nuget.org/Content/gallery/img/default-package-icon.svg');
     });
 
     test('should display version when showInstalledVersion is false', async () => {
@@ -256,6 +258,18 @@ suite('PackageRow Component', () => {
 
         const row = shadowRoot?.querySelector('.package-row');
         assert.ok(row?.classList.contains('package-row-error'), 'Row should have error class');
+    });
+
+    test('should render an inline framework badge', async () => {
+        const pkg = createPackageViewModel();
+        pkg.CpmFramework = 'net8.0';
+        packageRow.package = pkg;
+
+        await packageRow.updateComplete;
+
+        const badge = packageRow.shadowRoot?.querySelector('.tfm-badge');
+        assert.ok(badge, 'TFM badge should be rendered inline');
+        assert.strictEqual(badge?.textContent?.trim(), 'net8.0');
     });
 
     test('should add selected class when selected', async () => {

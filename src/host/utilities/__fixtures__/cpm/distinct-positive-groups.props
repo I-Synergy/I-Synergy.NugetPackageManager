@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Shared.Library" Version="1.0.0" />
+  </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net8.0'))">
+    <PackageVersion Include="Pkg.Net8" Version="8.0.1" />
+  </ItemGroup>
+  <ItemGroup Condition="$(TargetFramework.StartsWith('net9.0'))">
+    <PackageVersion Include="Pkg.Net9" Version="9.0.1" />
+  </ItemGroup>
+</Project>

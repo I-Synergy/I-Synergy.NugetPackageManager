@@ -25,11 +25,12 @@
   - [Updates](#updates)
   - [Vulnerabilities](#vulnerabilities)
   - [Consolidate](#consolidate)
+  - [Cleanup](#cleanup)
 - [Project Tree](#project-tree)
 - [Commands](#commands)
 - [Configuration](#configuration)
 - [Private Feed Authentication](#private-feed-authentication)
-- [Central Package Management (CPM)](#central-package-management-cpm)
+- [Central Package Management](#central-package-management-cpm)
 - [Inline Version Decorations](#inline-version-decorations)
 - [Contributing](#contributing)
 - [Architecture](#architecture)
@@ -46,7 +47,9 @@
 | 📊 | **Real-time Progress** | Animated spinner during install/update operations, showing which package is being processed |
 | 🔄 | **One-click Updates** | See all outdated packages with version diffs, update individually or all at once |
 | 🛡️ | **Vulnerability Scanning** | Color-coded CVE severity badges (Critical / High / Medium / Low) with advisory links |
+| 🗑️ | **Remove from Solution** | Remove a package reference from one project or from every project in the solution at once |
 | 🔀 | **Version Consolidation** | Find and fix version inconsistencies across projects in a single click |
+| 🧹 | **Cleanup** | Find and remove unused `PackageVersion` entries from `Directory.Packages.props`, with automatic backups |
 | 🌲 | **Project Tree** | Checkbox-based project selector — scope every operation to exactly the projects you want |
 | 🔐 | **Private Feeds** | Reads `NuGet.config`, supports Azure Artifacts Credential Provider and custom password scripts |
 | 📌 | **CPM Support** | Full Central Package Management — detects `Directory.Packages.props`, tracks version sources |
@@ -93,7 +96,7 @@ Or via the Extensions panel: click **···** → **Install from VSIX…**
 ## Getting Started
 
 1. Open a folder or workspace that contains `.csproj` / `.fsproj` / `.sln` files — the extension activates automatically.
-2. Open the **NuGet** panel at the bottom of VS Code (next to Terminal, Problems, etc.).
+2. Click the **NuGet** icon in the Activity Bar. The full-page workspace opens in an editor tab; the sidebar icon stays available as a launcher.
 3. Your projects appear in the **project tree** on the left. All are selected by default.
 4. Use the **BROWSE** tab to search for and install packages.
 5. Run **UPDATES** to check for outdated packages, **VULNERABILITIES** for security issues, and **CONSOLIDATE** to fix version drift across projects.
@@ -121,7 +124,12 @@ Search nuget.org (or any configured feed) and install packages into your project
 
 ### Installed
 
-Shows every package installed across all selected projects. Use this tab to quickly uninstall or change versions without leaving the package list.
+Shows every package installed across all selected projects. Select a package to open its details:
+
+- **Per-project uninstall** — use the remove action on an individual project row
+- **Remove from all projects** — removes the package reference from every project in the solution, confirms the project list first, and restores once after the removals
+- **CPM cleanup** — when the last project reference is removed, the matching `PackageVersion` entry is deleted from `Directory.Packages.props` so no stale global reference remains
+- **Version changes** — install, update, or change a package version per project without leaving the package list
 
 ### Updates
 
@@ -161,6 +169,22 @@ Detects packages that are installed at different versions across your projects.
 
 ---
 
+### Cleanup
+
+Finds `PackageVersion` entries in `Directory.Packages.props` that no project references and removes them safely.
+
+- Compares global CPM versions against every `PackageReference` in the workspace
+- Groups unused entries by props file
+- Shows **used but not defined** references so missing CPM entries are visible
+- Creates a timestamped backup of each props file before removing anything
+- Removes all conditional groups for a package when the package is unused
+
+![Cleanup](docs/images/screenshot-cleanup.png)
+
+Use **Remove unused** after reviewing the list. This replaces the PowerShell `Remove-UnusedPackages.ps1` workflow with an in-editor report and confirmation.
+
+---
+
 ## Project Tree
 
 The collapsible project tree on the left of the main view lets you scope operations:
@@ -178,10 +202,10 @@ Access these from the Command Palette (`Ctrl+Shift+P`):
 
 | Command | ID | Description |
 |---|---|---|
-| **NuGet Package Manager: Open Packages** | `nugetpackage.open` | Focus the NuGet panel |
+| **NuGet Package Manager: Open Packages** | `nugetpackage.open` | Open or reveal the full-page NuGet editor tab |
 | **NuGet Package Manager: Add Package** | `nugetpackage.install` | Prompt for a package ID and open Browse with it pre-searched |
-| **NuGet Package Manager: Update Package** | `nugetpackage.update` | Focus the NuGet panel and switch to the Updates tab |
-| **NuGet Package Manager: Remove Package** | `nugetpackage.remove` | Focus the NuGet panel and switch to the Installed tab |
+| **NuGet Package Manager: Update Package** | `nugetpackage.update` | Open the editor tab and switch to Updates |
+| **NuGet Package Manager: Remove Package** | `nugetpackage.remove` | Open the editor tab and switch to Installed |
 | **Settings** | `nugetpackage.openSettings` | Open the NuGet Package Manager settings view |
 | **Report Problem** | `nugetpackage.reportProblem` | Open a new GitHub issue |
 
@@ -199,6 +223,13 @@ Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or ed
 | `i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo` | `boolean` | `false` | Show inline gutter decorations in `.csproj` files with available update versions. |
 | `i-synergy-nugetpackagemanager.statusBarLoadingIndicator` | `boolean` | `false` | Show a loading progress indicator in the VS Code status bar. |
 | `i-synergy-nugetpackagemanager.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Package Manager output channel. |
+| `i-synergy-nugetpackagemanager.frameworkAlignedPackages` | `string[]` | `["Microsoft.Extensions.*", "Microsoft.AspNetCore.*", "Microsoft.EntityFrameworkCore.*", "Microsoft.Maui.*", "System.*"]` | Package patterns whose major version follows the target framework (net10.0 → 10.x). Keeps framework-scoped update suggestions on the matching major line. |
+| `i-synergy-nugetpackagemanager.extraTargetFrameworks` | `string[]` | `[]` | Target frameworks added when MSBuild evaluation is unavailable or incomplete (for example `net11.0`). |
+| `i-synergy-nugetpackagemanager.excludeGlobs` | `string[]` | `["**/bin/**", "**/obj/**", "**/TestResults/**", "**/packages/**", "**/.git/**"]` | Glob patterns excluded from project discovery. |
+| `i-synergy-nugetpackagemanager.passwordScriptAllowlist` | `string[]` (machine scope) | `[]` | Directories from which password scripts may run. Workspace-provided script paths outside this list are refused; scripts also require a trusted workspace. |
+| `i-synergy-nugetpackagemanager.enableTelemetry` | `boolean` | `false` | Opt in to anonymous OTLP telemetry (requires VS Code telemetry and `TELEMETRY_ADDRESS`). |
+
+> **Security:** the extension declares `capabilities.untrustedWorkspaces.supported: false` and refuses password scripts unless the workspace is trusted. `%VAR%` expansion in a workspace `nuget.config` is deliberately not performed, so a repository cannot read your environment variables.
 
 ### Example `settings.json`
 
@@ -256,8 +287,40 @@ NuGet Package Manager has first-class support for [Central Package Management](h
 
 - **Auto-detection** — projects using `Directory.Packages.props` are detected and labelled in the project tree
 - **Version source tracking** — each installed package shows whether its version comes from `project`, `central`, or `override`
-- **Consolidate** — understands CPM boundaries and applies consolidation correctly
+- **Framework-scoped versions** — conditional `<ItemGroup Condition="...">` groups are evaluated per target framework, so the same package can show and update different versions for `net10.0` and `net11.0`
+- **Aligned updates** — for runtime-aligned packages (`Microsoft.Extensions.*`, `Microsoft.AspNetCore.*`, `Microsoft.EntityFrameworkCore.*`, `Microsoft.Maui.*`, `System.*`), the primary update stays on the framework's major line; the overall latest version is offered as a separate action
+- **Consolidate** — understands CPM boundaries and applies consolidation correctly, scoped to the same framework group
 - **Restore handling** — uses the correct `dotnet` invocation for CPM workspaces
+- **Source mapping** — `<packageSourceMapping>` in `nuget.config` is honoured when looking up package versions
+
+### Multi-framework version management
+
+A `Directory.Packages.props` file can define several version lines for the same package:
+
+```xml
+<ItemGroup>
+  <PackageVersion Include="Common.Library" Version="1.0.0" />
+</ItemGroup>
+<ItemGroup Condition="!$(TargetFramework.StartsWith('net11.0'))">
+  <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.13" />
+</ItemGroup>
+<ItemGroup Condition="$(TargetFramework.StartsWith('net11.0'))">
+  <PackageVersion Include="Microsoft.Extensions.Logging" Version="11.0.0-rc.2.26504.105" />
+</ItemGroup>
+```
+
+The extension evaluates each condition against the project's real target frameworks (using `dotnet msbuild -getProperty`), then:
+
+1. shows one row per framework line in **Installed**, **Updates** and **Consolidate**;
+2. labels negated groups distinctly (`not net11.0`) so positive and negated conditions do not collapse;
+3. writes only inside the `ItemGroup` that produced the row;
+4. batches all changes for a shared props file into a single read/write cycle.
+
+Use the framework dropdown to focus on one line, or **Update all TFMs** in the Updates tab to bump every selected package on each of its framework lines at once. Values that do not follow the TFM major — for example a stable `10.x` package in a `net11.0` line — require the explicit *latest overall* action, which is shown with a warning.
+
+![Installed packages grouped per target framework](docs/images/screenshot-installed-frameworks.png)
+
+![Updates with per-framework rows and the Update all TFMs action](docs/images/screenshot-updates-frameworks.png)
 
 ---
 
@@ -269,7 +332,7 @@ Enable `i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo` to see ava
 <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />  ← 13.0.3 available
 ```
 
-Decorations appear in the gutter next to `<PackageReference>` entries whenever a newer version exists on your configured sources. Click the decoration to open the package in the NuGet panel.
+Decorations appear in the gutter next to `<PackageReference>` entries whenever a newer version exists on your configured sources. They are informational.
 
 ---
 
@@ -332,7 +395,7 @@ npm run lint:fix      # Auto-fix fixable issues
 
 ```bash
 npm test              # Full test suite (VSCode Test CLI + Mocha)
-npm run test-compile  # Type-check tests only (no execution)
+npm run test-compile  # Compile tests to out/ (required before npm test)
 ```
 
 Tests live alongside source files as `*.test.ts`. The test runner opens a headless VS Code Extension Host.
@@ -343,10 +406,10 @@ After UI changes, regenerate the screenshots and animated GIF automatically:
 
 ```bash
 npm run esbuild          # Rebuild bundles first
-npm run screenshot       # Generates docs/images/*.png and docs/images/demo.gif
+npm run docs             # Generates docs/images/*.png and docs/images/demo.gif
 ```
 
-The script (`tools/take-screenshots.mjs`) starts a local HTTP server, loads the UI with mock data in a headless Chromium browser via Playwright, captures each tab, and assembles the animated GIF.
+The script (`tools/generate-docs.mjs`) starts a local HTTP server, loads the UI with mock data in a headless Chromium browser via Playwright, captures each tab, and assembles the animated GIF.
 
 ### Building a .vsix Package
 
@@ -388,7 +451,8 @@ The extension runs in two isolated processes that communicate via a typed RPC la
 **Key design decisions:**
 
 - **Typed RPC** — `HostAPI` interface in `src/common/rpc/types.ts` is the single source of truth for all IPC. Every method returns `Result<T>` (a discriminated union), so error paths are always explicit.
-- **Lit web components** — the entire UI is built with LitElement + native HTML elements styled via VS Code CSS variables. No frameworks, no heavy dependencies in the webview bundle.
+- **Marketplace-style full-page UI** — the entire interface opens in an editor tab with framework-grouped cards, a sidebar launcher and VS Code theme-aware surfaces.
+- **Lit web components** — built with LitElement + native HTML elements styled via VS Code CSS variables. No frameworks, no heavy dependencies in the webview bundle.
 - **Dual bundle** — esbuild produces two separate bundles: `dist/extension.js` (Node.js CommonJS for the host) and `dist/web.js` (ESM for the webview).
 
 **Source layout:**
@@ -399,7 +463,7 @@ src/
 │   ├── rpc/           # RpcHost, RpcClient, types, Result<T>
 │   └── types.ts       # Domain types (Package, Project, Configuration, …)
 ├── host/              # Extension host (Node.js context)
-│   ├── extension.ts   # Activation, command registration, WebviewViewProvider
+│   ├── extension.ts   # Activation, full-page WebviewPanel, activity-bar launcher
 │   ├── host-api.ts    # HostAPI implementation
 │   └── nuget/         # NuGet API client (axios), .csproj / .sln parsing
 └── web/               # Webview UI (browser context)

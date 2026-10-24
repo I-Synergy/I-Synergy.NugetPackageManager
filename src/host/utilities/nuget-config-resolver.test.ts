@@ -6,15 +6,14 @@ import * as os from 'os';
 import * as vscode from 'vscode';
 import NuGetConfigResolver from './nuget-config-resolver';
 import PasswordScriptExecutor from './password-script-executor';
-import CredentialsCache from './credentials-cache';
 import { Logger } from '../../common/logger';
 
 suite('NuGetConfigResolver Tests', () => {
     let sandbox: sinon.SinonSandbox;
     // let osHomedirStub: sinon.SinonStub; // Cannot stub immutable property
     let vscodeGetConfigurationStub: sinon.SinonStub;
+    let isTrustedStub: sinon.SinonStub;
     let executeScriptStub: sinon.SinonStub;
-    let credentialsCacheSetStub: sinon.SinonStub;
     let originalPlatform: string;
     let originalEnv: NodeJS.ProcessEnv;
 
@@ -33,8 +32,8 @@ suite('NuGetConfigResolver Tests', () => {
         // Node's os.homedir() reads HOME on POSIX and USERPROFILE on Windows.
 
         vscodeGetConfigurationStub = sandbox.stub(vscode.workspace, 'getConfiguration');
+        isTrustedStub = sandbox.stub(vscode.workspace, 'isTrusted').value(true);
         executeScriptStub = sandbox.stub(PasswordScriptExecutor, 'ExecuteScriptAsync');
-        credentialsCacheSetStub = sandbox.stub(CredentialsCache, 'set');
         sandbox.stub(Logger, 'debug');
         sandbox.stub(Logger, 'error');
         sandbox.stub(Logger, 'info');
@@ -42,7 +41,6 @@ suite('NuGetConfigResolver Tests', () => {
         originalPlatform = process.platform;
         originalEnv = { ...process.env };
 
-        NuGetConfigResolver.ClearCache();
 
         // Setup temp directories
         tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nuget-test-'));
@@ -535,6 +533,9 @@ suite('NuGetConfigResolver Tests', () => {
                             JSON.stringify({ name: 'SecureSource', passwordScriptPath: '/path/to/script.sh' })
                         ];
                     }
+                    if (key === 'passwordScriptAllowlist') {
+                        return ['/path/to'];
+                    }
                     return undefined;
                 }
             });
@@ -544,7 +545,6 @@ suite('NuGetConfigResolver Tests', () => {
             const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
 
             assert.strictEqual(sources[0]!.Password, 'Decrypted');
-            assert.ok(credentialsCacheSetStub.calledWith('SecureSource', undefined, 'Decrypted'));
         });
 
         test('Handles password decoding failure', async () => {
@@ -558,6 +558,9 @@ suite('NuGetConfigResolver Tests', () => {
                             JSON.stringify({ name: 'SecureSource', passwordScriptPath: '/path/to/script.sh' })
                         ];
                     }
+                    if (key === 'passwordScriptAllowlist') {
+                        return ['/path/to'];
+                    }
                     return undefined;
                 }
             });
@@ -570,7 +573,6 @@ suite('NuGetConfigResolver Tests', () => {
             assert.strictEqual(sources[0]!.Password, 'Encrypted');
             assert.ok((Logger.error as sinon.SinonStub).called);
              // Should cache original credential?
-            assert.ok(credentialsCacheSetStub.calledWith('SecureSource', undefined, 'Encrypted'));
         });
 
         test('Caches credentials even without script', async () => {
@@ -580,7 +582,69 @@ suite('NuGetConfigResolver Tests', () => {
 
              await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
 
-             assert.ok(credentialsCacheSetStub.calledWith('PlainSource', 'user', 'password'));
+        });
+
+        test('refuses a password script in an untrusted workspace', async () => {
+            isTrustedStub.value(false);
+            const source = { Name: 'SecureSource', Url: 'http://secure', Password: 'Encrypted' };
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [source], clearFound: false });
+
+            vscodeGetConfigurationStub.returns({
+                get: (key: string) => {
+                    if (key === 'sources') {
+                        return [JSON.stringify({ name: 'SecureSource', passwordScriptPath: '/path/to/script.sh' })];
+                    }
+                    if (key === 'passwordScriptAllowlist') {
+                        return ['/path/to'];
+                    }
+                    return undefined;
+                }
+            });
+
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
+
+            assert.strictEqual(sources[0]!.Password, 'Encrypted');
+            assert.strictEqual(executeScriptStub.called, false);
+        });
+
+        test('refuses a password script outside the machine allowlist', async () => {
+            const source = { Name: 'SecureSource', Url: 'http://secure', Password: 'Encrypted' };
+            sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [source], clearFound: false });
+
+            vscodeGetConfigurationStub.returns({
+                get: (key: string) => {
+                    if (key === 'sources') {
+                        return [JSON.stringify({ name: 'SecureSource', passwordScriptPath: '/path/to/script.sh' })];
+                    }
+                    if (key === 'passwordScriptAllowlist') {
+                        return ['/different/directory'];
+                    }
+                    return undefined;
+                }
+            });
+
+            const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
+
+            assert.strictEqual(sources[0]!.Password, 'Encrypted');
+            assert.strictEqual(executeScriptStub.called, false);
+        });
+
+        test('does not expand %VAR% in workspace config credentials', async () => {
+            process.env.MY_NUGET_TOKEN = 'secret-value';
+            const configPath = writeConfig(
+                workspaceDir,
+                'nuget.config',
+                '<configuration><packageSourceCredentials><SecureSource>' +
+                '<add key="Username" value="user" />' +
+                '<add key="ClearTextPassword" value="%MY_NUGET_TOKEN%" />' +
+                '</SecureSource></packageSourceCredentials></configuration>'
+            );
+
+            const workspaceResult = await (NuGetConfigResolver as any).ParseConfigFileAsync(configPath, false);
+            assert.strictEqual(workspaceResult.credentials.get('SecureSource')?.Password, '%MY_NUGET_TOKEN%');
+
+            const userResult = await (NuGetConfigResolver as any).ParseConfigFileAsync(configPath, true);
+            assert.strictEqual(userResult.credentials.get('SecureSource')?.Password, 'secret-value');
         });
     });
 });

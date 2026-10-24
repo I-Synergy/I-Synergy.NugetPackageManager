@@ -38,6 +38,7 @@ export type GetPackagesRequest = SourceContext &
   CacheControl & {
     Filter: string;
     Prerelease: boolean;
+    Sort?: "relevance" | "downloads" | "recent" | "name-asc";
   };
 
 export type GetPackageRequest = SourceContext &
@@ -71,6 +72,8 @@ export type UpdateProjectRequest = {
   Type: "INSTALL" | "UNINSTALL" | "UPDATE";
   SourceUrl?: string;
   OperationId?: string;
+  CpmCondition?: string;
+  CpmTfm?: string;
 };
 
 export type GetOperationProgressRequest = {
@@ -89,18 +92,46 @@ export type BatchUpdateRequest = {
     Version: string;
     ProjectPaths: string[];
     CpmCondition?: string;  // raw XML Condition for framework-scoped CPM updates
+    CpmTfm?: string;        // resolved TFM for display/telemetry
+    Scope?: "group" | "unconditional" | "all" | "first";
   }>;
   SkipRestore?: boolean;
+  /** Snapshot affected files, restore once, and roll back on failure. */
+  Transactional?: boolean;
 };
 
 export type RestoreProjectsRequest = {
   ProjectPaths: string[];
 };
 
+export type UpdateBadgeRequest = {
+  Count: number;
+};
+
 export type ConsolidateRequest = {
   PackageId: string;
   TargetVersion: string;
   ProjectPaths: string[];
+  CpmCondition?: string;
+  Scope?: "group" | "unconditional" | "all" | "first";
+};
+
+export type CleanupReport = {
+  PropsFiles: Array<{ Path: string; Defined: string[]; Unused: string[] }>;
+  Used: string[];
+  Missing: string[];
+  Unused: string[];
+};
+
+export type CleanupUnusedRequest = {
+  ProjectPaths?: string[];
+};
+
+export type CleanupUnusedResponse = {
+  Report: CleanupReport;
+  Removed: string[];
+  Backups: string[];
+  Errors: string[];
 };
 
 export type UpdateConfigurationRequest = {
@@ -169,6 +200,12 @@ export type BatchUpdateResponse = {
     Success: boolean;
     Error?: string;
   }>;
+  /** True when the host restored the pre-update file contents after a failure. */
+  RolledBack?: boolean;
+  /** The restore failure that triggered a rollback. */
+  RestoreError?: string;
+  /** A failure while restoring the snapshots or re-restoring the old versions. */
+  RollbackError?: string;
 };
 
 export type GetConfigurationResponse = {
@@ -208,16 +245,19 @@ export interface HostAPI {
   getPackagesAsync(req: GetPackagesRequest, signal?: AbortSignal): Promise<Result<GetPackagesResponse>>;
   getPackageAsync(req: GetPackageRequest, signal?: AbortSignal): Promise<Result<GetPackageResponse>>;
   getPackageDetailsAsync(req: GetPackageDetailsRequest, signal?: AbortSignal): Promise<Result<GetPackageDetailsResponse>>;
-  updateProjectAsync(req: UpdateProjectRequest): Promise<Result<UpdateProjectResponse>>;
+  updateProjectAsync(req: UpdateProjectRequest, signal?: AbortSignal): Promise<Result<UpdateProjectResponse>>;
   getConfigurationAsync(): Promise<Result<GetConfigurationResponse>>;
   updateConfigurationAsync(req: UpdateConfigurationRequest): Promise<Result<void>>;
   openUrlAsync(req: OpenUrlRequest): Promise<Result<void>>;
   updateStatusBarAsync(req: UpdateStatusBarRequest): Promise<Result<void>>;
   getOutdatedPackagesAsync(req: GetOutdatedPackagesRequest, signal?: AbortSignal): Promise<Result<GetOutdatedPackagesResponse>>;
-  batchUpdatePackagesAsync(req: BatchUpdateRequest): Promise<Result<BatchUpdateResponse>>;
-  restoreProjectsAsync(req: RestoreProjectsRequest): Promise<Result<void>>;
+  batchUpdatePackagesAsync(req: BatchUpdateRequest, signal?: AbortSignal): Promise<Result<BatchUpdateResponse>>;
+  restoreProjectsAsync(req: RestoreProjectsRequest, signal?: AbortSignal): Promise<Result<void>>;
+  updateBadgeAsync(req: UpdateBadgeRequest): Promise<Result<void>>;
   getInconsistentPackagesAsync(req: GetInconsistentPackagesRequest, signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>>;
-  consolidatePackagesAsync(req: ConsolidateRequest): Promise<Result<void>>;
+  consolidatePackagesAsync(req: ConsolidateRequest, signal?: AbortSignal): Promise<Result<void>>;
+  getCleanupReportAsync(req: CleanupUnusedRequest, signal?: AbortSignal): Promise<Result<CleanupReport>>;
+  cleanupUnusedPackagesAsync(req: CleanupUnusedRequest, signal?: AbortSignal): Promise<Result<CleanupUnusedResponse>>;
   getVulnerablePackagesAsync(req: GetVulnerablePackagesRequest, signal?: AbortSignal): Promise<Result<GetVulnerablePackagesResponse>>;
   showConfirmationAsync(req: ShowConfirmationRequest): Promise<Result<ShowConfirmationResponse>>;
   getOperationProgressAsync(req: GetOperationProgressRequest): Promise<Result<GetOperationProgressResponse>>;

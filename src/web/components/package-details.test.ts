@@ -207,10 +207,12 @@ suite('PackageDetails Component', () => {
         // First change — trigger separate Lit update cycle
         packageDetails.packageVersionUrl = 'url1';
         await packageDetails.updateComplete;
+        await new Promise(resolve => setTimeout(resolve, 20));
 
         // Second change — triggers a new reloadDependencies call
         packageDetails.packageVersionUrl = 'url2';
         await packageDetails.updateComplete;
+        await new Promise(resolve => setTimeout(resolve, 20));
 
         assert.strictEqual(callCount, 2, 'Should have made two API calls');
 
@@ -250,8 +252,10 @@ suite('PackageDetails Component', () => {
         packageDetails.source = 'https://source.url';
         packageDetails.packageVersionUrl = 'https://package.url';
 
-        // Wait for async reloadDependencies to complete
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // Wait for the reactive task to settle under the current jsdom runtime.
+        for (let attempt = 0; attempt < 20 && !packageDetails.packageDetails; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+        }
         await packageDetails.updateComplete;
 
         // Verify the data was loaded

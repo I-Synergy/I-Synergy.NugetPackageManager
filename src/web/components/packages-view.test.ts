@@ -50,6 +50,9 @@ suite('PackagesView Component', () => {
         mockHostApi = {
             getPackagesAsync: sandbox.stub().resolves(ok({ Packages: [] })),
             getProjectsAsync: sandbox.stub().resolves(ok({ Projects: [] })),
+            getVulnerablePackagesAsync: sandbox.stub().resolves(ok({ Packages: [] })),
+            getOutdatedPackagesAsync: sandbox.stub().resolves(ok({ Packages: [] })),
+            updateBadgeAsync: sandbox.stub().resolves(ok(undefined)),
             getPackageAsync: sandbox.stub().resolves(ok({ Package: createMockPackage(), SourceUrl: '' })),
             updateStatusBarAsync: sandbox.stub().resolves(ok(undefined)),
         };
@@ -650,6 +653,52 @@ suite('PackagesView Component', () => {
             // Last call should hide the status bar
             const lastCall = statusBarCalls[statusBarCalls.length - 1]!;
             assert.strictEqual(lastCall.args[0].Percentage, null);
+        });
+    });
+    suite('Package deletion and tab order', () => {
+        test('removes a package from every project and restores once', async () => {
+            const projectA = new ProjectViewModel(createMockProject('A', [{ Id: 'Pkg.Delete', Version: '1.0.0' }]));
+            const projectB = new ProjectViewModel(createMockProject('B', [{ Id: 'Pkg.Delete', Version: '1.0.0' }]));
+            packagesView.projects = [projectA, projectB];
+            packagesView.selectedPackage = new PackageViewModel(createMockPackage({
+                Id: 'Pkg.Delete',
+                Name: 'Pkg.Delete',
+            }));
+
+            const updateRequests: Array<{ Type: string; ProjectPath: string; PackageId: string }> = [];
+            mockHostApi.updateProjectAsync = async (request) => {
+                updateRequests.push(request);
+                return ok({ Project: createMockProject('Updated'), IsCpmEnabled: false });
+            };
+            const restoreStub = sandbox.stub().resolves(ok(undefined));
+            mockHostApi.restoreProjectsAsync = restoreStub;
+            mockHostApi.showConfirmationAsync = sandbox.stub().resolves(ok({ Confirmed: true }));
+            sandbox.stub(packagesView, 'LoadProjectsAsync').resolves();
+
+            await (packagesView as unknown as {
+                removePackageFromAllProjectsAsync(): Promise<void>;
+            }).removePackageFromAllProjectsAsync();
+
+            assert.strictEqual(updateRequests.length, 2);
+            assert.ok(updateRequests.every((request) => request.Type === 'UNINSTALL'));
+            assert.deepStrictEqual(
+                updateRequests.map((request) => request.ProjectPath).sort(),
+                projectA.Path && projectB.Path ? [projectA.Path, projectB.Path].sort() : []
+            );
+            assert.strictEqual(restoreStub.callCount, 1);
+            assert.strictEqual(packagesView.selectedPackage, null);
+        });
+
+        test('keeps Cleanup as the last tab', async () => {
+            const visited: string[] = [];
+            sandbox.stub(packagesView, 'setTabAsync').callsFake(async (tab) => { visited.push(tab); });
+            const event = { key: 'End', preventDefault: () => undefined } as KeyboardEvent;
+
+            await (packagesView as unknown as {
+                handleTabKeydownAsync(e: KeyboardEvent): Promise<void>;
+            }).handleTabKeydownAsync(event);
+
+            assert.deepStrictEqual(visited, ['cleanup']);
         });
     });
 });

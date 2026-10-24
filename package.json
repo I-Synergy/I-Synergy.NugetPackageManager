@@ -3,7 +3,7 @@
   "publisher": "I-Synergy",
   "displayName": "I-Synergy NuGet Package Manager",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
-  "version": "1.1.3",
+  "version": "1.2.1",
   "license": "MIT",
   "icon": "docs/images/icon.png",
   "galleryBanner": {
@@ -12,6 +12,11 @@
   },
   "engines": {
     "vscode": "^1.110.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    }
   },
   "keywords": [
     "nuget",
@@ -36,7 +41,10 @@
   "activationEvents": [
     "workspaceContains:**/*.csproj",
     "workspaceContains:**/*.fsproj",
-    "workspaceContains:**/*.sln"
+    "workspaceContains:**/*.sln",
+    "workspaceContains:**/*.slnx",
+    "onWebviewPanel:nugetpackage.panel",
+    "workspaceContains:**/*.vbproj"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -72,52 +80,49 @@
       "view/title": [
         {
           "command": "nugetpackage.reportProblem",
-          "when": "view == i-synergy-nugetpackagemanager.packageView",
+          "when": "view == i-synergy-nugetpackagemanager.launcherView",
           "group": "navigation@1"
         },
         {
           "command": "nugetpackage.openSettings",
-          "when": "view == i-synergy-nugetpackagemanager.packageView",
+          "when": "view == i-synergy-nugetpackagemanager.launcherView",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "nugetpackage.openSettings",
+          "when": "activeWebviewPanelId == nugetpackage.panel",
+          "group": "navigation@1"
+        },
+        {
+          "command": "nugetpackage.reportProblem",
+          "when": "activeWebviewPanelId == nugetpackage.panel",
           "group": "navigation@2"
         }
       ]
     },
     "viewsContainers": {
-      "panel": [
+      "activitybar": [
         {
-          "id": "i-synergy-nugetpackagemanagerview",
+          "id": "i-synergy-nugetpackagemanager",
           "title": "NuGet",
           "icon": "resources/nuget.svg"
         }
       ]
     },
     "views": {
-      "i-synergy-nugetpackagemanagerview": [
+      "i-synergy-nugetpackagemanager": [
         {
-          "type": "webview",
-          "id": "i-synergy-nugetpackagemanager.packageView",
-          "name": "NuGet Packages"
+          "id": "i-synergy-nugetpackagemanager.launcherView",
+          "name": "NuGet",
+          "when": "nuget.hasSupportedProjects"
         }
       ]
     },
     "configuration": {
       "title": "NuGet Package Manager",
       "properties": {
-        "i-synergy-nugetpackagemanager.defaultSource": {
-          "type": "string",
-          "default": "",
-          "description": "Default package source URL. If empty, uses the default from nuget.config."
-        },
-        "i-synergy-nugetpackagemanager.pageSize": {
-          "type": "number",
-          "default": 20,
-          "description": "Number of packages per search page."
-        },
-        "i-synergy-nugetpackagemanager.showOutputOnError": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically expand the output log when an operation fails."
-        },
         "i-synergy-nugetpackagemanager.skipRestore": {
           "type": "boolean",
           "default": false,
@@ -134,6 +139,15 @@
             "{\"name\": \"nuget.org\",\"url\": \"https://api.nuget.org/v3/index.json\"}"
           ],
           "description": "NuGet sources"
+        },
+        "i-synergy-nugetpackagemanager.passwordScriptAllowlist": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "machine",
+          "description": "Machine-scoped directories from which password scripts may be executed. Workspace-provided script paths outside this allowlist are refused."
         },
         "i-synergy-nugetpackagemanager.logLevel": {
           "type": "string",
@@ -160,6 +174,47 @@
           "type": "boolean",
           "default": false,
           "description": "Show a loading indicator in the status bar when loading packages"
+        },
+        "i-synergy-nugetpackagemanager.enableTelemetry": {
+          "type": "boolean",
+          "default": false,
+          "description": "Send anonymous usage telemetry to the configured OTLP endpoint. Requires VS Code telemetry to be enabled and a TELEMETRY_ADDRESS environment variable."
+        },
+        "i-synergy-nugetpackagemanager.frameworkAlignedPackages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "Microsoft.Extensions.*",
+            "Microsoft.AspNetCore.*",
+            "Microsoft.EntityFrameworkCore.*",
+            "Microsoft.Maui.*",
+            "System.*"
+          ],
+          "description": "Package patterns whose major version follows the target framework (net10.0 to 10.x). Used to keep framework-scoped update suggestions on the matching major line."
+        },
+        "i-synergy-nugetpackagemanager.extraTargetFrameworks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Target frameworks to add when MSBuild evaluation is unavailable or incomplete (for example net11.0)."
+        },
+        "i-synergy-nugetpackagemanager.excludeGlobs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/bin/**",
+            "**/obj/**",
+            "**/TestResults/**",
+            "**/packages/**",
+            "**/.git/**"
+          ],
+          "description": "Glob patterns excluded from project discovery."
         }
       }
     }
@@ -169,6 +224,7 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "test": "vscode-test",
+    "pretest": "npm run test-compile",
     "esbuild": "node ./esbuild.js",
     "dev": "node ./esbuild.js && node ./tools/dev-server.mjs",
     "test-compile": "tsc -p ./tsconfig.test.json",
@@ -181,24 +237,23 @@
     "@types/jsdom": "^28.0.0",
     "@types/lodash": "^4.17.0",
     "@types/mocha": "^10.0.6",
-    "@types/node": "^20.19.37",
-    "@types/object-hash": "^3.0.6",
-    "@types/sinon": "^21.0.0",
+    "@types/node": "^20.19.43",
+    "@types/sinon": "^22.0.1",
     "@types/vscode": "^1.110.0",
     "@types/vscode-webview": "^1.57.5",
-    "@vscode/codicons": "^0.0.45",
-    "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.3.9",
-    "@vscode/vsce": "^3.7.1",
-    "esbuild": "^0.27.4",
-    "eslint": "^9.39.2",
+    "@vscode/codicons": "^0.0.46-24",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^29.0.0",
-    "sinon": "^21.0.3",
+    "sinon": "^22.1.0",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.3.3",
-    "typescript-eslint": "^8.56.0"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.0"
   },
   "overrides": {
     "@tsconfig/node14": "1.0.3",
@@ -206,19 +261,23 @@
     "core-util-is": "1.0.3",
     "glob": "13.0.6",
     "serialize-javascript": "7.0.3",
-    "diff": "8.0.3"
+    "diff": "8.0.3",
+    "@azure/msal-node": "7.1.1",
+    "@azure/identity": "4.14.0"
   },
   "dependencies": {
     "@lit/task": "^1.0.3",
-    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "^0.213.0",
-    "@xmldom/xmldom": "^0.8.10",
+    "@opentelemetry/resources": "^2.12.0",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
+    "@xmldom/xmldom": "^0.8.15",
     "async-mutex": "^0.5.0",
     "axios": "^1.7.4",
-    "lit": "^3.3.2",
+    "lit": "^3.3.3",
     "lodash": "^4.17.21",
-    "object-hash": "^3.0.0",
     "split.js": "^1.6.5",
-    "xpath": "^0.0.34"
+    "xpath": "^0.0.35"
   }
 }

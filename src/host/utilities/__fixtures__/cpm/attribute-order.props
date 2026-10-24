@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Version='1.2.3' Include='Pkg.VersionFirst' />
+    <PackageVersion Include='Pkg.SingleQuoted' Version='2.0.0' Extra='x' />
+    <PackageVersion Include="Pkg.DoubleQuoted" Version="3.0.0" />
+  </ItemGroup>
+</Project>

@@ -12,6 +12,7 @@ import "./components/package-details";
 import "./components/search-bar";
 import "./components/updates-view";
 import "./components/consolidate-view";
+import "./components/cleanup-view";
 import "./components/vulnerabilities-view";
 import "./components/project-tree";
 import "./components/nuget-output-log";

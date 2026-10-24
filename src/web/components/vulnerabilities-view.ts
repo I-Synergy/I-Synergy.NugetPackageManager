@@ -36,8 +36,11 @@ export class VulnerabilitiesView extends LitElement {
         overflow: hidden;
 
         .vuln-row {
-          padding: 6px;
-          border-bottom: 1px solid var(--vscode-panelSection-border);
+          padding: 12px;
+          margin: 5px 8px;
+          border: 1px solid var(--npm-border, var(--vscode-panelSection-border));
+          border-radius: var(--npm-radius, 10px);
+          background: var(--npm-surface-raised, var(--vscode-editorWidget-background));
 
           .row-header {
             display: flex;
@@ -75,6 +78,23 @@ export class VulnerabilitiesView extends LitElement {
               white-space: nowrap;
             }
 
+            .tfm-list {
+              display: flex;
+              gap: 4px;
+              flex-wrap: wrap;
+            }
+
+            .transitive-badge {
+              font-size: 9px;
+              font-weight: 700;
+              letter-spacing: 0.4px;
+              text-transform: uppercase;
+              color: var(--vscode-descriptionForeground);
+              border: 1px solid var(--vscode-panelSection-border);
+              border-radius: 999px;
+              padding: 2px 6px;
+            }
+
             .advisory-link:hover {
               text-decoration: underline;
             }
@@ -102,7 +122,10 @@ export class VulnerabilitiesView extends LitElement {
 
             .project-list {
               color: var(--vscode-descriptionForeground);
-              margin-top: 2px;
+              margin-top: 4px;
+              display: flex;
+              gap: 4px;
+              flex-wrap: wrap;
             }
           }
         }
@@ -126,10 +149,7 @@ export class VulnerabilitiesView extends LitElement {
     args: () => [this.projectPaths, false] as [string[], boolean],
     onComplete: (packages) => {
       this.packages = packages;
-      this.statusText =
-        packages.length > 0
-          ? `${packages.length} vulnerabilit${packages.length !== 1 ? "ies" : "y"} found`
-          : "";
+      this.statusText = "";
       this.dispatchEvent(new CustomEvent<number>("count-changed", {
         detail: packages.length,
         bubbles: true,
@@ -160,8 +180,8 @@ export class VulnerabilitiesView extends LitElement {
     }));
   }
 
-  private openAdvisory(url: string): void {
-    hostApi.openUrlAsync({ Url: url });
+  private async openAdvisoryAsync(url: string): Promise<void> {
+    await hostApi.openUrlAsync({ Url: url });
   }
 
   private renderPackageRow(pkg: VulnerablePackageViewModel): unknown {
@@ -178,13 +198,19 @@ export class VulnerabilitiesView extends LitElement {
             ${pkg.SeverityLabel}
           </span>
           <span class="package-name" @click=${() => this.selectPackage(pkg.Id)}>${pkg.Id}</span>
+          ${pkg.IsTransitive
+            ? html`<span class="transitive-badge" title="Transitive dependency">transitive</span>`
+            : nothing}
+          <span class="tfm-list">
+            ${pkg.CpmFrameworks.map((tfm) => html`<span class="tfm-badge">${tfm}</span>`)}
+          </span>
           <a
             class="advisory-link"
             href=${pkg.AdvisoryUrl}
             role="link"
             tabindex="0"
             aria-label="View advisory for ${pkg.Id}"
-            @click=${(e: Event) => { e.preventDefault(); this.openAdvisory(pkg.AdvisoryUrl); }}
+            @click=${async (e: Event) => { e.preventDefault(); await this.openAdvisoryAsync(pkg.AdvisoryUrl); }}
           >
             <span class="codicon codicon-link-external"></span> Advisory
           </a>
@@ -198,8 +224,14 @@ export class VulnerabilitiesView extends LitElement {
             <span class="label">Affected:</span>
             <span class="value">${pkg.AffectedVersionRange}</span>
           </div>
+          ${pkg.DependencyOf.length > 0
+            ? html`<div class="detail-row">
+                <span class="label">Via:</span>
+                <span class="value">${pkg.DependencyOf.join(", ")}</span>
+              </div>`
+            : nothing}
           <div class="project-list">
-            ${pkg.Projects.map((p) => p.Name).join(", ")}
+            ${pkg.Projects.map((p) => html`<span class="chip">${p.Name}</span>`)}
           </div>
         </div>
       </div>
@@ -212,8 +244,19 @@ export class VulnerabilitiesView extends LitElement {
 
     return html`
       <div class="vuln-container" aria-busy=${isLoading}>
-        <div class="toolbar">
-          <span class="status-text" role="status" aria-live="polite">${this.statusText}</span>
+        <div class="list-header">
+          <div>
+            <div class="list-title">Vulnerabilities</div>
+            <div class="list-subtitle">
+              ${this.packages.length} package${this.packages.length !== 1 ? "s" : ""} with known advisories
+              ${this.statusText ? html` · ${this.statusText}` : nothing}
+            </div>
+          </div>
+          <div class="list-actions">
+            <button class="ghost-btn" ?disabled=${isLoading} @click=${async () => await this.LoadVulnerablePackagesAsync(true)}>
+              Refresh
+            </button>
+          </div>
         </div>
 
         ${isLoading
@@ -228,7 +271,8 @@ export class VulnerabilitiesView extends LitElement {
           ? html`
               <div class="empty">
                 <span class="codicon codicon-shield"></span>
-                No known vulnerabilities found
+                <div class="empty-title">No known vulnerabilities found</div>
+                <div class="empty-hint">The selected projects have no advisories on the configured feeds.</div>
               </div>
             `
           : nothing}
@@ -236,7 +280,8 @@ export class VulnerabilitiesView extends LitElement {
           ? html`
               <div class="error" role="alert">
                 <span class="codicon codicon-error"></span>
-                Failed to scan for vulnerabilities
+                <div class="empty-title">Failed to scan for vulnerabilities</div>
+                <div class="empty-hint">Check the output channel and try refreshing.</div>
               </div>
             `
           : nothing}

@@ -27,3 +27,9 @@ RELEASE_NOTES.md
 **/node_modules/**
 **/package-lock.json
 **/yarn.lock
+
+.ai/**
+docs/design/**
+.reasonix/**
+AGENTS.md
+test-path-register.cjs

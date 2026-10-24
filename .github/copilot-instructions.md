@@ -4,7 +4,11 @@
 
 **NuGet Package Manager** is a Visual Studio Code extension (TypeScript/Node.js) for browsing, installing, updating, and auditing NuGet packages across .NET projects. It is NOT a .NET/C# project.
 
-See `CLAUDE.md` for the full development guide.
+See `AGENTS.md` for the canonical agent guide and `.ai/project/` for architecture, technology and preferences. `CLAUDE.md` retains the detailed engineering guide.
+
+## Session Memory
+
+`.ai/session-context.md` is the shared memory for every client. Read it before starting work and update it before ending a session that changed project state. In this template repository the file stays the unfilled placeholder; in this project it is populated with real session state. Completed task records live in `.ai/completed/`; active work is tracked in `.ai/progress/`.
 
 ## Architecture
 

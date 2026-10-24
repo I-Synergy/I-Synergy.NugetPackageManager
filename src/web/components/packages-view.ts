@@ -13,10 +13,11 @@ import type { SearchBar } from "./search-bar";
 import type { UpdatesView } from "./updates-view";
 import type { ConsolidateView } from "./consolidate-view";
 import type { VulnerabilitiesView } from "./vulnerabilities-view";
+import type { CleanupView } from "./cleanup-view";
 import type { DropdownOption } from "./dropdown";
 import "./dropdown";
 
-type TabId = "browse" | "installed" | "updates" | "consolidate" | "vulnerabilities";
+type TabId = "browse" | "installed" | "updates" | "consolidate" | "cleanup" | "vulnerabilities";
 
 const PACKAGE_FETCH_TAKE = 50;
 const PACKAGE_CONTAINER_SCROLL_MARGIN = 196;
@@ -32,6 +33,8 @@ export class PackagesView extends LitElement {
       .container {
         display: flex;
         height: 100%;
+        padding: 8px;
+        gap: 8px;
 
         .error {
           display: flex;
@@ -48,11 +51,14 @@ export class PackagesView extends LitElement {
 
         .col {
           overflow: hidden;
+          border: 1px solid var(--npm-border, var(--vscode-panelSection-border));
+          border-radius: var(--npm-radius, 10px);
+          background: var(--npm-surface, var(--vscode-sideBar-background));
         }
 
         .gutter {
           display: flex;
-          margin: 0 6px;
+          margin: 0 2px;
           justify-content: center;
           transition: background-color 0.1s ease-out;
 
@@ -84,9 +90,19 @@ export class PackagesView extends LitElement {
           .tab-bar {
             display: flex;
             align-items: center;
-            gap: 2px;
-            padding: 4px 4px 0;
-            margin-bottom: 6px;
+            gap: 1px;
+            padding: 8px 6px 6px;
+            margin-bottom: 0;
+            border-bottom: 1px solid var(--npm-border, var(--vscode-panelSection-border));
+            overflow-x: auto;
+            scrollbar-width: none;
+          }
+
+          .scope-summary {
+            font-size: 9px;
+            color: var(--vscode-descriptionForeground);
+            white-space: nowrap;
+            margin: 0 8px 4px 2px;
           }
 
           .tab-tree-toggle {
@@ -100,12 +116,18 @@ export class PackagesView extends LitElement {
           .tab {
             background: transparent;
             border: 1px solid transparent;
-            color: var(--vscode-foreground);
-            padding: 3px 10px;
-            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            padding: 5px 8px;
+            font-size: 10px;
+            font-weight: 600;
             cursor: pointer;
-            border-radius: 3px;
-            opacity: 0.7;
+            border-radius: 8px;
+            opacity: 0.9;
+            flex-shrink: 0;
+          }
+
+          .tab-cleanup {
+            order: 99;
           }
 
           .tab:hover {
@@ -115,20 +137,20 @@ export class PackagesView extends LitElement {
 
           .tab.active {
             opacity: 1;
-            background-color: var(--vscode-toolbar-activeBackground, var(--vscode-list-activeSelectionBackground));
-            color: var(--vscode-panelTitle-activeForeground);
-            border-color: var(--vscode-focusBorder);
+            background: var(--npm-accent, var(--vscode-button-background));
+            color: var(--npm-accent-fg, var(--vscode-button-foreground));
+            box-shadow: 0 3px 10px color-mix(in srgb, var(--npm-accent, #6c5ce7) 30%, transparent);
           }
 
           .tab-badge {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-width: 16px;
-            height: 16px;
-            padding: 0 4px;
-            margin-left: 4px;
-            font-size: 10px;
+            min-width: 14px;
+            height: 14px;
+            padding: 0 3px;
+            margin-left: 3px;
+            font-size: 9px;
             font-weight: bold;
             border-radius: 8px;
             background-color: var(--vscode-badge-background);
@@ -136,11 +158,31 @@ export class PackagesView extends LitElement {
             line-height: 1;
           }
 
+          .vulnerability-banner {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin: 8px 8px 0;
+            padding: 8px 11px;
+            border: 1px solid var(--vscode-inputValidation-warningBorder, #cca700);
+            border-radius: 8px;
+            background: var(--vscode-inputValidation-warningBackground, rgba(204, 167, 0, 0.12));
+            color: var(--vscode-foreground);
+            font-size: 11px;
+            text-align: left;
+            cursor: pointer;
+          }
+
+          .vulnerability-banner:hover {
+            background: var(--vscode-inputValidation-warningBackground, rgba(204, 167, 0, 0.2));
+          }
+
           .tab-content {
             flex: 1;
             overflow: hidden;
             display: flex;
-            margin-top: 6px;
+            flex-direction: column;
+            margin-top: 4px;
           }
 
           .tab-content.hidden {
@@ -173,16 +215,47 @@ export class PackagesView extends LitElement {
             margin-top: 20px;
           }
 
+          .details-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 100%;
+            padding: 24px;
+            text-align: center;
+            color: var(--vscode-descriptionForeground);
+          }
+
+          .details-empty .big-icon {
+            font-size: 28px;
+            opacity: 0.45;
+          }
+
+          .details-empty .title {
+            color: var(--vscode-foreground);
+            font-size: 13px;
+            font-weight: 600;
+          }
+
+          .details-empty .hint {
+            font-size: 11px;
+            max-width: 220px;
+            line-height: 1.5;
+          }
+
           .package-header-panel {
             display: flex;
             align-items: flex-start;
-            gap: 10px;
-            padding: 8px 6px;
-            border-bottom: 1px solid var(--vscode-panelSection-border);
+            gap: 13px;
+            padding: 16px;
+            border-bottom: 1px solid var(--npm-border, var(--vscode-panelSection-border));
+            background: linear-gradient(135deg, color-mix(in srgb, var(--npm-accent, #6c5ce7) 12%, transparent), transparent);
 
             .package-icon-large {
-              width: 32px;
-              height: 32px;
+              width: 46px;
+              height: 46px;
+              border-radius: 12px;
               flex-shrink: 0;
             }
 
@@ -200,8 +273,8 @@ export class PackagesView extends LitElement {
                 gap: 8px;
 
                 .package-title {
-                  font-size: 14px;
-                  font-weight: bold;
+                  font-size: 16px;
+                  font-weight: 700;
                   overflow: hidden;
                   text-overflow: ellipsis;
                   white-space: nowrap;
@@ -231,6 +304,12 @@ export class PackagesView extends LitElement {
                     font-size: 12px;
                   }
                 }
+
+                .details-verified {
+                  color: var(--vscode-charts-blue, #3794ff);
+                  font-size: 10px;
+                  white-space: nowrap;
+                }
               }
 
               .package-authors-row {
@@ -247,20 +326,43 @@ export class PackagesView extends LitElement {
             display: flex;
             align-items: center;
             gap: 6px;
-            padding: 6px;
+            padding: 10px 16px;
+
+            .remove-all-btn {
+              margin-left: auto;
+            }
 
             .version-selector {
               display: flex;
               align-items: center;
-              gap: 4px;
+              gap: 6px;
               white-space: nowrap;
               min-width: 128px;
+
+              .detail-label {
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.4px;
+                text-transform: uppercase;
+                color: var(--vscode-descriptionForeground);
+              }
             }
+          }
+
+          .package-action-error {
+            margin: 0 16px 8px;
+            padding: 7px 9px;
+            border: 1px solid var(--vscode-inputValidation-errorBorder);
+            border-radius: 3px;
+            color: var(--vscode-errorForeground);
+            font-size: 11px;
+            white-space: pre-wrap;
           }
 
           .projects-panel-container {
             overflow-y: auto;
             overflow-x: hidden;
+            padding: 4px 0 10px;
 
             .no-projects {
               display: flex;
@@ -295,6 +397,7 @@ export class PackagesView extends LitElement {
   @state() projectsPackages: Array<PackageViewModel> = [];
   @state() updatesCount: number | null = null;
   @state() consolidateCount: number | null = null;
+  @state() cleanupCount: number | null = null;
   @state() vulnerabilitiesCount: number | null = null;
   @state() filters: FilterEvent = {
     Prerelease: true,
@@ -306,14 +409,20 @@ export class PackagesView extends LitElement {
   @state() packagesLoadingError: boolean = false;
   @state() packagesLoadingErrorMessage: string = "";
   @state() selectedProjectPaths: string[] = [];
-  @state() showProjectTree: boolean = false;
+  @state() showProjectTree: boolean = true;
   @state() private _installedFramework = "";
   @state() private _updatesFrameworkOptions: Array<{ value: string; label: string }> = [];
   @state() private _updatesFramework = "";
   @state() private _consolidateFrameworkOptions: Array<{ value: string; label: string }> = [];
   @state() private _consolidateFramework = "";
+  @state() private removingPackage = false;
+  @state() private removeError = "";
+  private _refreshAc: AbortController | undefined;
+  private _connected = false;
 
   override connectedCallback(): void {
+    this._connected = true;
+    this._refreshAc = new AbortController();
     super.connectedCallback();
     this.filters = {
       ...this.filters,
@@ -325,12 +434,17 @@ export class PackagesView extends LitElement {
     void this.LoadProjectsAsync();
   }
 
+
   override firstUpdated(): void {
     this.initSplitter();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._connected = false;
+    this._refreshAc?.abort();
+    this._refreshAc = undefined;
+    this.debouncedLoadProjectsPackages.cancel();
     this.splitter?.destroy();
     this._packagesAc?.abort();
     this._projectsAc?.abort();
@@ -340,10 +454,8 @@ export class PackagesView extends LitElement {
   private initSplitter(): void {
     this.splitter?.destroy();
     this.splitter = null;
-
     const packages = this.shadowRoot!.getElementById("packages")!;
     const projects = this.shadowRoot!.getElementById("projects")!;
-
     if (this.showProjectTree) {
       const projectTree = this.shadowRoot!.getElementById("project-tree")!;
       this.splitter = Split([projectTree, packages, projects], {
@@ -378,15 +490,12 @@ export class PackagesView extends LitElement {
     await this.reloadChildViewsAsync();
   }
 
-  get CurrentSource(): Source | undefined {
-    return configuration.Configuration?.Sources.find(
-      (s) => s.Url === this.filters.SourceUrl
-    );
+  get CurrentSource() {
+    return configuration.Configuration?.Sources.find((s) => s.Url === this.filters.SourceUrl);
   }
 
   get NugetOrgPackageUrl(): string | null {
-    const sourceUrl =
-      this.selectedPackage?.SourceUrl || this.filters.SourceUrl;
+    const sourceUrl = this.selectedPackage?.SourceUrl || this.filters.SourceUrl;
     if (sourceUrl.startsWith(NUGET_ORG_PREFIX)) {
       return `https://www.nuget.org/packages/${this.selectedPackage?.Name}/${this.selectedVersion}`;
     }
@@ -397,40 +506,30 @@ export class PackagesView extends LitElement {
     if (
       this.selectedPackage?.Status !== "Detailed" ||
       this.selectedPackage?.Model.Versions == undefined ||
-      this.selectedPackage?.Model.Versions.length < 1 ||
+      this.selectedPackage.Model.Versions.length < 1 ||
       !this.selectedPackage?.Model.Version
     ) {
       return "";
     }
-
     return (
-      this.selectedPackage?.Model.Versions.filter(
-        (x) => x.Version == this.selectedVersion
-      )[0]?.Id ?? ""
+      this.selectedPackage.Model.Versions.filter((x) => x.Version == this.selectedVersion)[0]?.Id ?? ""
     );
   }
-
-  // Stable empty-array reference so child Task args don't change on every render
-  private static readonly _emptyPaths: string[] = [];
 
   private get effectiveProjectPaths(): string[] {
     if (this.showProjectTree) return this.selectedProjectPaths;
     // When the project tree is hidden, still scope to the solution-filtered project list
     // so that updates/consolidate/vulnerabilities don't scan non-solution projects.
-    // Use the stable _allProjectPaths reference (not a mapped getter) to avoid
-    // creating a new array on every render, which would cause @lit/task to re-run infinitely.
     return this._allProjectPaths;
   }
 
   private get filteredProjects(): Array<ProjectViewModel> {
     if (!this.showProjectTree || this.selectedProjectPaths.length === 0) return this.projects;
-    return this.projects.filter((p) =>
-      this.selectedProjectPaths.includes(p.Path)
-    );
+    return this.projects.filter((p) => this.selectedProjectPaths.includes(p.Path));
   }
 
   private async handleTabKeydownAsync(e: KeyboardEvent): Promise<void> {
-    const tabs: TabId[] = ["browse", "installed", "updates", "consolidate", "vulnerabilities"];
+    const tabs: TabId[] = ["browse", "installed", "updates", "consolidate", "vulnerabilities", "cleanup"];
     const currentIdx = tabs.indexOf(this.activeTab);
     let newIdx = currentIdx;
 
@@ -453,7 +552,7 @@ export class PackagesView extends LitElement {
     e.preventDefault();
     await this.setTabAsync(tabs[newIdx] as TabId);
     const tabButtons = this.shadowRoot?.querySelectorAll('[role="tab"]');
-    (tabButtons?.[newIdx] as HTMLElement)?.focus();
+    (tabButtons?.[newIdx] as HTMLElement | undefined)?.focus();
   }
 
   async setTabAsync(tab: TabId): Promise<void> {
@@ -464,6 +563,8 @@ export class PackagesView extends LitElement {
       await (this.shadowRoot?.querySelector("updates-view") as UpdatesView | null)?.LoadOutdatedPackagesAsync();
     } else if (tab === "consolidate") {
       await (this.shadowRoot?.querySelector("consolidate-view") as ConsolidateView | null)?.LoadInconsistentPackagesAsync();
+    } else if (tab === "cleanup") {
+      await (this.shadowRoot?.querySelector("cleanup-view") as CleanupView | null)?.LoadCleanupReportAsync();
     } else if (tab === "vulnerabilities") {
       await (this.shadowRoot?.querySelector("vulnerabilities-view") as VulnerabilitiesView | null)?.LoadVulnerablePackagesAsync();
     }
@@ -472,40 +573,34 @@ export class PackagesView extends LitElement {
   private async onChildPackageSelectedAsync(e: CustomEvent<{ packageId: string; sourceUrl?: string }>): Promise<void> {
     const { packageId, sourceUrl } = e.detail;
 
-    // Check if we already have this package in projectsPackages (installed)
     const existing = this.projectsPackages.find((p) => p.Id === packageId);
     if (existing) {
       await this.SelectPackageAsync(existing);
       return;
     }
 
-    // Check if we have it in browse packages
     const browsePkg = this.packages.find((p) => p.Id === packageId);
     if (browsePkg) {
       await this.SelectPackageAsync(browsePkg);
       return;
     }
 
-    // Create a new PackageViewModel with MissingDetails — SelectPackage will fetch details
-    const pkg = new PackageViewModel(
-      {
-        Id: packageId,
-        Name: packageId,
-        IconUrl: "",
-        Authors: [],
-        Description: "",
-        LicenseUrl: "",
-        ProjectUrl: "",
-        TotalDownloads: 0,
-        Verified: false,
-        Version: "",
-        InstalledVersion: "",
-        Versions: [],
-        Tags: [],
-        Registration: "",
-      },
-      "MissingDetails"
-    );
+    const pkg = new PackageViewModel({
+      Id: packageId,
+      Name: packageId,
+      IconUrl: "",
+      Authors: [],
+      Description: "",
+      LicenseUrl: "",
+      ProjectUrl: "",
+      TotalDownloads: 0,
+      Verified: false,
+      Version: "",
+      InstalledVersion: "",
+      Versions: [],
+      Tags: [],
+      Registration: "",
+    }, "MissingDetails");
     if (sourceUrl) pkg.SourceUrl = sourceUrl;
     await this.SelectPackageAsync(pkg);
   }
@@ -520,6 +615,8 @@ export class PackagesView extends LitElement {
   private async OnProjectSelectionChangedAsync(paths: string[]): Promise<void> {
     this.selectedProjectPaths = paths;
     await this.reloadChildViewsAsync();
+    await this.RefreshVulnerabilityCountAsync();
+    await this.RefreshUpdateCountAsync();
     this.debouncedLoadProjectsPackages();
   }
 
@@ -536,7 +633,43 @@ export class PackagesView extends LitElement {
 
   private debouncedLoadProjectsPackages = lodash.debounce(async () => {
     await this.LoadProjectsPackagesAsync();
+    await this.RefreshVulnerabilityCountAsync();
   }, 300);
+
+  private async RefreshUpdateCountAsync(): Promise<void> {
+    if (!this._connected) return;
+    const paths = this.effectiveProjectPaths;
+    if (paths.length === 0) {
+      this.updatesCount = 0;
+      await hostApi.updateBadgeAsync({ Count: 0 });
+      return;
+    }
+    const signal = this._refreshAc?.signal;
+    const result = await hostApi.getOutdatedPackagesAsync(
+      { ProjectPaths: paths, Prerelease: this.filters.Prerelease },
+      signal
+    );
+    if (!this._connected || signal?.aborted) return;
+    if (result.ok) {
+      this.updatesCount = result.value.Packages.length;
+      await hostApi.updateBadgeAsync({ Count: this.updatesCount });
+    }
+  }
+
+  private async RefreshVulnerabilityCountAsync(): Promise<void> {
+    if (!this._connected) return;
+    const paths = this.effectiveProjectPaths;
+    if (paths.length === 0) {
+      this.vulnerabilitiesCount = null;
+      return;
+    }
+    const signal = this._refreshAc?.signal;
+    const result = await hostApi.getVulnerablePackagesAsync({ ProjectPaths: paths }, signal);
+    if (!this._connected || signal?.aborted) return;
+    if (result.ok) {
+      this.vulnerabilitiesCount = result.value.Packages.length;
+    }
+  }
 
   async LoadProjectsPackagesAsync(forceReload: boolean = false, _signal?: AbortSignal): Promise<void> {
     this._projectsPackagesAc?.abort();
@@ -551,7 +684,30 @@ export class PackagesView extends LitElement {
         : this.projects;
 
     const packages = projectsToUse
-      ?.flatMap((p) => p.Packages)
+      ?.flatMap((p) =>
+        p.Packages.flatMap((pkg) => {
+          if (!pkg.CpmResolutions || pkg.CpmResolutions.length === 0) {
+            return [pkg];
+          }
+
+          const conditional = pkg.CpmResolutions.filter((r) => r.Tfm !== "");
+          const unconditional = pkg.CpmResolutions.find((r) => r.Tfm === "");
+
+          if (conditional.length === 0) {
+            return [unconditional ? { ...pkg, Version: unconditional.Version } : pkg];
+          }
+
+          const entries = conditional.map((r) => ({
+            ...pkg,
+            Version: r.Version,
+            CpmFramework: r.Tfm,
+          }));
+          if (unconditional) {
+            entries.push({ ...pkg, Version: unconditional.Version, CpmFramework: "" });
+          }
+          return entries;
+        })
+      )
       .filter((x) =>
         x.Id.toLowerCase().includes(this.filters.Query?.toLowerCase())
       );
@@ -792,6 +948,7 @@ export class PackagesView extends LitElement {
         Skip: this.packagesPage * PACKAGE_FETCH_TAKE,
         Take: PACKAGE_FETCH_TAKE,
         ForceReload: forceReload,
+        Sort: this.filters.Sort,
       };
       if (this.CurrentSource?.Name !== undefined) req.SourceName = this.CurrentSource.Name;
       if (this.CurrentSource?.PasswordScriptPath !== undefined) req.PasswordScriptPath = this.CurrentSource.PasswordScriptPath;
@@ -845,6 +1002,7 @@ export class PackagesView extends LitElement {
         this.selectedProjectPaths = this._allProjectPaths;
       }
       await this.LoadProjectsPackagesAsync(forceReload);
+      await this.RefreshVulnerabilityCountAsync();
     }
   }
 
@@ -852,6 +1010,12 @@ export class PackagesView extends LitElement {
 
   private renderBrowseTab(): unknown {
     return html`
+      <div class="list-header">
+        <div>
+          <div class="list-title">Browse NuGet</div>
+          <div class="list-subtitle">Search nuget.org and your configured feeds</div>
+        </div>
+      </div>
       <div
         class="packages-container"
         @scroll=${async (e: Event) =>
@@ -895,12 +1059,34 @@ export class PackagesView extends LitElement {
     return this.projectsPackages.filter((pkg) => {
       const version = pkg.InstalledVersion;
       const isPrerelease = version.includes("-");
-      if (!(this.filters.Prerelease ? isPrerelease : !isPrerelease)) return false;
+      if (!this.filters.Prerelease && isPrerelease) return false;
       if (this._installedFramework !== "" && this.installedFrameworkOptions.length > 0) {
         return pkg.CpmFramework === this._installedFramework || pkg.CpmFramework === "";
       }
       return true;
     });
+  }
+
+  private get groupedInstalledPackages(): Array<{ key: string; label: string; packages: PackageViewModel[] }> {
+    const groups = new Map<string, PackageViewModel[]>();
+    for (const pkg of this.filteredInstalledPackages) {
+      const key = pkg.CpmFramework || "";
+      const list = groups.get(key) ?? [];
+      list.push(pkg);
+      groups.set(key, list);
+    }
+
+    return [...groups.entries()]
+      .map(([key, packages]) => ({
+        key,
+        label: key || "Shared",
+        packages: packages.sort((a, b) => a.Name.localeCompare(b.Name)),
+      }))
+      .sort((a, b) => {
+        if (a.key === "" && b.key !== "") return -1;
+        if (a.key !== "" && b.key === "") return 1;
+        return a.key.localeCompare(b.key);
+      });
   }
 
   private renderFrameworkSlot(): unknown {
@@ -932,35 +1118,101 @@ export class PackagesView extends LitElement {
 
   private renderInstalledTab(): unknown {
     const packages = this.filteredInstalledPackages;
+    const groups = this.groupedInstalledPackages;
+
     return html`
       <div class="packages-container installed-packages">
+        <div class="list-header">
+          <div>
+            <div class="list-title">Installed packages</div>
+            <div class="list-subtitle">
+              ${packages.length} package${packages.length !== 1 ? "s" : ""} across ${this.projects.length} project${this.projects.length !== 1 ? "s" : ""}
+            </div>
+          </div>
+          <div class="list-actions">
+            <button class="ghost-btn" ?disabled=${this.packagesLoadingInProgress} @click=${async () => await this.LoadProjectsAsync()}>
+              Refresh
+            </button>
+          </div>
+        </div>
         ${packages.length === 0 && this.projectsPackages.length > 0
           ? html`
               <div class="empty">
                 <span class="codicon codicon-info"></span>
-                No ${this.filters.Prerelease ? "prerelease" : "stable"} packages installed
+                <div class="empty-title">No packages match the current filters</div>
+                <div class="empty-hint">Try clearing the framework filter or enabling prerelease versions.</div>
               </div>
             `
-          : packages.map(
-              (pkg) => html`
-                <div class="installed-package-row-wrapper">
-                  <package-row
-                    class="installed-package-row"
-                    .showInstalledVersion=${true}
-                    .package=${pkg}
-                    .revision=${pkg.Revision}
-                    @click=${async () => await this.SelectPackageAsync(pkg)}
-                  ></package-row>
-                  ${pkg.CpmFramework && !this._installedFramework
-                    ? html`<span class="framework-badge">${pkg.CpmFramework}</span>`
-                    : nothing}
+          : groups.map(
+              (group) => html`
+                <div class="group-header">
+                  ${group.label}
+                  <span class="group-count">${group.packages.length}</span>
                 </div>
+                ${group.packages.map(
+                  (pkg) => html`
+                    <package-row
+                      class="installed-package-row"
+                      .showInstalledVersion=${true}
+                      .package=${pkg}
+                      .revision=${pkg.Revision}
+                      @click=${async () => await this.SelectPackageAsync(pkg)}
+                    ></package-row>
+                  `
+                )}
               `
             )}
       </div>
     `;
   }
 
+
+  private async removePackageFromAllProjectsAsync(): Promise<void> {
+    const pkg = this.selectedPackage;
+    if (!pkg || this.removingPackage) return;
+
+    const targets = this.projects.filter((project) =>
+      project.Packages.some((projectPackage) => projectPackage.Id.toLowerCase() === pkg.Id.toLowerCase())
+    );
+    if (targets.length === 0) return;
+
+    const confirm = await hostApi.showConfirmationAsync({
+      Message: `Remove ${pkg.Id} from ${targets.length} project${targets.length !== 1 ? "s" : ""}?`,
+      Detail: targets.map((project) => project.Name).join("\n"),
+    });
+    if (!confirm.ok || !confirm.value.Confirmed) return;
+
+    this.removingPackage = true;
+    this.removeError = "";
+    this.requestUpdate();
+    const errors: string[] = [];
+    try {
+      for (const project of targets) {
+        const result = await hostApi.updateProjectAsync({
+          Type: "UNINSTALL",
+          ProjectPath: project.Path,
+          PackageId: pkg.Id,
+        });
+        if (!result.ok) {
+          errors.push(`${project.Name}: ${result.error}`);
+        }
+      }
+
+      const restore = await hostApi.restoreProjectsAsync({
+        ProjectPaths: targets.map((project) => project.Path),
+      });
+      if (!restore.ok) errors.push(`Restore: ${restore.error}`);
+
+      await this.LoadProjectsAsync();
+      this.selectedPackage = null;
+      if (errors.length > 0) {
+        this.removeError = `Removed from some projects, but not all:\n${errors.join("\n")}`;
+      }
+    } finally {
+      this.removingPackage = false;
+      this.requestUpdate();
+    }
+  }
 
   private renderPackageTitle(): unknown {
     const nugetUrl = this.NugetOrgPackageUrl;
@@ -1003,6 +1255,12 @@ export class PackagesView extends LitElement {
         <div class="package-header-info">
           <div class="package-title-row">
             <span class="package-title">${this.renderPackageTitle()}</span>
+            ${this.selectedPackage?.Verified
+              ? html`<span class="details-verified">✔ verified</span>`
+              : nothing}
+            ${this.selectedPackage?.CpmFramework
+              ? html`<span class="tfm-badge">${this.selectedPackage.CpmFramework}</span>`
+              : nothing}
             ${sourceName
               ? html`<span class="source-badge">
                   <span class="codicon codicon-globe"></span>
@@ -1017,17 +1275,28 @@ export class PackagesView extends LitElement {
       </div>
       <div class="package-actions-row">
         <div class="version-selector">
+          <span class="detail-label">Version</span>
           <custom-dropdown
             .options=${(this.selectedPackage?.Versions || []).map((v): DropdownOption => ({ value: v, label: v }))}
             .value=${this.selectedVersion}
             ariaLabel="Package version"
             @change=${(e: CustomEvent<string>) => { this.selectedVersion = e.detail; }}
           ></custom-dropdown>
-          <button class="icon-btn" @click=${() => this.LoadProjectsAsync()}>
+          <button class="icon-btn" title="Refresh projects" aria-label="Refresh projects" @click=${async () => await this.LoadProjectsAsync()}>
             <span class="codicon codicon-refresh"></span>
           </button>
         </div>
+        <button
+          class="secondary-btn remove-all-btn"
+          ?disabled=${this.removingPackage || this.projects.every((project) => !project.Packages.some((pkg) => pkg.Id.toLowerCase() === this.selectedPackage?.Id.toLowerCase()))}
+          @click=${async () => await this.removePackageFromAllProjectsAsync()}
+        >
+          Remove from all projects
+        </button>
       </div>
+      ${this.removeError
+        ? html`<div class="package-action-error" role="alert">${this.removeError}</div>`
+        : nothing}
       <div class="projects-panel-container">
         ${this.projects.length > 0
           ? this.filteredProjects.map(
@@ -1070,7 +1339,15 @@ export class PackagesView extends LitElement {
   }
 
   private renderSelectedPackagePanel(): unknown {
-    if (this.selectedPackage == null) return nothing;
+    if (this.selectedPackage == null) {
+      return html`
+        <div class="details-empty">
+          <span class="codicon codicon-package big-icon"></span>
+          <div class="title">Select a package</div>
+          <div class="hint">Choose a package from Browse or Installed to see its versions, projects and actions.</div>
+        </div>
+      `;
+    }
 
     if (this.selectedPackage.Status === "Detailed") {
       return this.renderDetailedPackage();
@@ -1102,6 +1379,9 @@ export class PackagesView extends LitElement {
             >
               <span class="codicon codicon-list-tree"></span>
             </button>
+            ${this.projects.length > 0
+              ? html`<span class="scope-summary" title="Selected projects / total projects">${this.selectedProjectPaths.length}/${this.projects.length} projects</span>`
+              : nothing}
             <button
               class="tab ${this.activeTab === "browse" ? "active" : ""}"
               role="tab"
@@ -1109,7 +1389,7 @@ export class PackagesView extends LitElement {
               tabindex=${this.activeTab === "browse" ? 0 : -1}
               @click=${async () => await this.setTabAsync("browse")}
             >
-              BROWSE
+              Browse
             </button>
             <button
               class="tab ${this.activeTab === "installed" ? "active" : ""}"
@@ -1118,7 +1398,7 @@ export class PackagesView extends LitElement {
               tabindex=${this.activeTab === "installed" ? 0 : -1}
               @click=${async () => await this.setTabAsync("installed")}
             >
-              INSTALLED${this.filteredInstalledPackages.length > 0
+              Installed${this.filteredInstalledPackages.length > 0
                 ? html`<span class="tab-badge">${this.filteredInstalledPackages.length}</span>`
                 : nothing}
             </button>
@@ -1129,7 +1409,7 @@ export class PackagesView extends LitElement {
               tabindex=${this.activeTab === "updates" ? 0 : -1}
               @click=${async () => await this.setTabAsync("updates")}
             >
-              UPDATES${this.updatesCount !== null
+              Updates${this.updatesCount !== null
                 ? html`<span class="tab-badge">${this.updatesCount}</span>`
                 : nothing}
             </button>
@@ -1140,8 +1420,19 @@ export class PackagesView extends LitElement {
               tabindex=${this.activeTab === "consolidate" ? 0 : -1}
               @click=${async () => await this.setTabAsync("consolidate")}
             >
-              CONSOLIDATE${this.consolidateCount !== null
+              Consolidate${this.consolidateCount !== null
                 ? html`<span class="tab-badge">${this.consolidateCount}</span>`
+                : nothing}
+            </button>
+            <button
+              class="tab tab-cleanup ${this.activeTab === "cleanup" ? "active" : ""}"
+              role="tab"
+              aria-selected=${this.activeTab === "cleanup"}
+              tabindex=${this.activeTab === "cleanup" ? 0 : -1}
+              @click=${async () => await this.setTabAsync("cleanup")}
+            >
+              Cleanup${this.cleanupCount !== null
+                ? html`<span class="tab-badge">${this.cleanupCount}</span>`
                 : nothing}
             </button>
             <button
@@ -1151,7 +1442,7 @@ export class PackagesView extends LitElement {
               tabindex=${this.activeTab === "vulnerabilities" ? 0 : -1}
               @click=${async () => await this.setTabAsync("vulnerabilities")}
             >
-              VULNERABILITIES${this.vulnerabilitiesCount !== null
+              Vulnerabilities${this.vulnerabilitiesCount !== null
                 ? html`<span class="tab-badge">${this.vulnerabilitiesCount}</span>`
                 : nothing}
             </button>
@@ -1162,48 +1453,74 @@ export class PackagesView extends LitElement {
             @filter-changed=${async (e: CustomEvent<FilterEvent>) =>
               await this.UpdatePackagesFiltersAsync(e.detail)}
           >${this.renderFrameworkSlot()}</search-bar>
-          <div class="tab-content ${this.activeTab === "browse" ? "" : "hidden"}" role="tabpanel" aria-label="browse tab">
-            ${this.renderBrowseTab()}
-          </div>
-          <div class="tab-content ${this.activeTab === "installed" ? "" : "hidden"}" role="tabpanel" aria-label="installed tab">
-            ${this.renderInstalledTab()}
-          </div>
-          <div class="tab-content ${this.activeTab === "updates" ? "" : "hidden"}" role="tabpanel" aria-label="updates tab">
-            <updates-view
-              .prerelease=${this.filters.Prerelease}
-              .projectPaths=${this.effectiveProjectPaths}
-              .sourceUrl=${this.filters.SourceUrl}
-              .filterQuery=${this.filters.Query}
-              .selectedFramework=${this._updatesFramework}
-              @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
-              @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
-              @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
-                this._updatesFrameworkOptions = e.detail;
-                this._updatesFramework = "";
-              }}
-            ></updates-view>
-          </div>
-          <div class="tab-content ${this.activeTab === "consolidate" ? "" : "hidden"}" role="tabpanel" aria-label="consolidate tab">
-            <consolidate-view
-              .projectPaths=${this.effectiveProjectPaths}
-              .selectedFramework=${this._consolidateFramework}
-              @count-changed=${(e: CustomEvent<number>) => { this.consolidateCount = e.detail; }}
-              @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
-              @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
-                const previousFramework = this._consolidateFramework;
-                this._consolidateFrameworkOptions = e.detail;
-                const isStillValid = !!previousFramework && e.detail.some(option => option.value === previousFramework);
-                this._consolidateFramework = isStillValid ? previousFramework : "";
-              }}
-            ></consolidate-view>
-          </div>
-          <div class="tab-content ${this.activeTab === "vulnerabilities" ? "" : "hidden"}" role="tabpanel" aria-label="vulnerabilities tab">
-            <vulnerabilities-view
-              .projectPaths=${this.effectiveProjectPaths}
-              @count-changed=${(e: CustomEvent<number>) => { this.vulnerabilitiesCount = e.detail; }}
-              @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
-            ></vulnerabilities-view>
-          </div>
+          ${this.vulnerabilitiesCount && this.vulnerabilitiesCount > 0
+            ? html`<button class="vulnerability-banner" @click=${async () => await this.setTabAsync("vulnerabilities")}>
+                <span class="codicon codicon-warning"></span>
+                <span>${this.vulnerabilitiesCount} vulnerable package${this.vulnerabilitiesCount !== 1 ? "s" : ""} found — review vulnerabilities</span>
+              </button>`
+            : nothing}
+          ${this.activeTab === "browse"
+            ? html`<div class="tab-content" role="tabpanel" aria-label="browse tab">
+                ${this.renderBrowseTab()}
+              </div>`
+            : nothing}
+          ${this.activeTab === "installed"
+            ? html`<div class="tab-content" role="tabpanel" aria-label="installed tab">
+                ${this.renderInstalledTab()}
+              </div>`
+            : nothing}
+          ${this.activeTab === "updates"
+            ? html`<div class="tab-content" role="tabpanel" aria-label="updates tab">
+                <updates-view
+                  .prerelease=${this.filters.Prerelease}
+                  .projectPaths=${this.effectiveProjectPaths}
+                  .sourceUrl=${this.filters.SourceUrl}
+                  .filterQuery=${this.filters.Query}
+                  .selectedFramework=${this._updatesFramework}
+                  @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
+                  @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
+                  @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
+                    this._updatesFrameworkOptions = e.detail;
+                    this._updatesFramework = "";
+                  }}
+                ></updates-view>
+              </div>`
+            : nothing}
+          ${this.activeTab === "consolidate"
+            ? html`<div class="tab-content" role="tabpanel" aria-label="consolidate tab">
+                <consolidate-view
+                  .projectPaths=${this.effectiveProjectPaths}
+                  .selectedFramework=${this._consolidateFramework}
+                  @count-changed=${(e: CustomEvent<number>) => { this.consolidateCount = e.detail; }}
+                  @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
+                  @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
+                    const previousFramework = this._consolidateFramework;
+                    this._consolidateFrameworkOptions = e.detail;
+                    const isStillValid = !!previousFramework && e.detail.some(option => option.value === previousFramework);
+                    this._consolidateFramework = isStillValid ? previousFramework : "";
+                  }}
+                ></consolidate-view>
+              </div>`
+            : nothing}
+          ${this.activeTab === "cleanup"
+            ? html`<div class="tab-content" role="tabpanel" aria-label="cleanup tab">
+                <cleanup-view
+                  @count-changed=${(e: CustomEvent<number>) => { this.cleanupCount = e.detail; }}
+                  @cleanup-completed=${async () => {
+                    await this.LoadProjectsAsync();
+                  }}
+                ></cleanup-view>
+              </div>`
+            : nothing}
+          ${this.activeTab === "vulnerabilities"
+            ? html`<div class="tab-content" role="tabpanel" aria-label="vulnerabilities tab">
+                <vulnerabilities-view
+                  .projectPaths=${this.effectiveProjectPaths}
+                  @count-changed=${(e: CustomEvent<number>) => { this.vulnerabilitiesCount = e.detail; }}
+                  @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
+                ></vulnerabilities-view>
+              </div>`
+            : nothing}
         </div>
 
         <div class="col" id="projects">

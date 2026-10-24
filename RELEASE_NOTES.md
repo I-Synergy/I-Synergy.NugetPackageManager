@@ -1,1 +1,47 @@
-- fix: CPM `Directory.Packages.props` corruption when updating multiple packages in parallel — concurrent read-modify-write operations on the same file are now serialized via a per-file mutex, preventing interleaved writes that produced malformed XML (e.g. `</Project>Project>Project>` at end of file)
+# NuGet Package Manager 1.2.1
+
+## Maintenance
+
+- Updated `@vscode/vsce` and pinned patched Azure identity/MSAL dependencies.
+- `npm audit --audit-level=high` now passes in CI.
+
+## Highlights
+
+- **Full-page package workspace** — the NuGet UI now opens in an editor tab instead of the terminal area. A NuGet icon in the Activity Bar opens or reveals it, with a compact sidebar launcher.
+- **Marketplace-style interface** — rounded cards, grouped framework sections, pill tabs, richer package details and theme-aware surfaces across all screens.
+- **Cleanup tab** — replaces `Remove-UnusedPackages.ps1`. It reports unused `PackageVersion` entries, shows packages used but missing from `Directory.Packages.props`, backs up each props file, and removes unused entries across conditional groups.
+- **Solution-wide package removal** — remove a package from every project that references it, alongside the existing per-project uninstall.
+- **Transactional updates** — updates are written one package at a time, restored once after the full set, and rolled back if a write or restore fails.
+- **Deeper vulnerability scanning** — transitive packages from `project.assets.json` are included, marked as transitive, and shown with the direct packages that pull them in. A yellow banner appears across all tabs when vulnerabilities exist.
+- **Update badge** — the Activity Bar icon shows the number of available updates. Checks run from the extension host every 15 minutes while the icon is visible, even when the page is closed.
+
+## Multi-framework CPM
+
+- Conditional `ItemGroup`s are resolved against each project's real target frameworks instead of using first-match attribution.
+- Negated conditions are evaluated and labelled distinctly, e.g. `not net11.0`.
+- Framework lines are never consolidated accidentally; consolidation is scoped to one condition and target framework.
+- Runtime-aligned packages stay on the target framework's major line, with the overall latest version available as an explicit action.
+
+## Reliability and security
+
+- CPM writes use snapshots, single-read/write batches, verification and a per-file mutex.
+- Stale global `PackageVersion` entries are removed when the last project reference is uninstalled.
+- Project paths, package IDs, versions and source URLs are validated before writes.
+- Password scripts require a trusted workspace and a machine-scoped allowlist.
+- Workspace `%VAR%` expansion is disabled for credentials.
+- RPC cancellation and dotnet process timeouts release locks and stop work cleanly.
+
+## Upgrade notes
+
+- The NuGet view is no longer in the bottom panel. Use the Activity Bar icon or **`NuGet Package Manager: Open Packages`**.
+- The Activity Bar icon is hidden in workspaces without a supported `.csproj` / `.fsproj` / `.vbproj`.
+- Bulk update behavior is now transactional; on restore failure, file snapshots are restored and the operation reports a rollback.
+- The Cleanup tab creates timestamped backups before modifying `Directory.Packages.props`.
+
+## Fixes
+
+- Corrected per-framework Installed, Updates, Consolidate and Vulnerabilities results.
+- Fixed ambiguous updates, stale row removal, vulnerability case matching, SemVer latest selection, RPC cancellation and parallel CPM write corruption.
+- Fixed documentation, screenshots, packaging and CI release gating.
+
+**Full changelog:** [CHANGELOG.md](CHANGELOG.md)
