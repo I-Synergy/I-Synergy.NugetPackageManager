@@ -1,4 +1,9 @@
-# NuGet Package Manager 1.2.2
+# NuGet Package Manager 1.2.3
+
+## Documentation
+
+- Refreshed the README for the full-page workspace, Activity Bar badge and background checks, transactional updates, Cleanup tab, transitive vulnerabilities, global vulnerability banner and solution-wide removal.
+- Regenerated screenshots and the demo GIF for the current marketplace-style UI.
 
 ## Maintenance
 

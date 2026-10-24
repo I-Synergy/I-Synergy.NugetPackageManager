@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.3 (2026-10-24)
+
+- docs: refresh the README with the full-page workspace, Activity Bar badge/background checks, transactional updates, Cleanup tab, transitive vulnerability scanning, global vulnerability banner and solution-wide removal.
+- chore: publish the refreshed documentation in the extension package.
+
 ## 1.2.2 (2026-10-24)
 
 - fix: separate production and test TypeScript checks and add an ESLint-specific all-source tsconfig, resolving the final CI type-check failure.
