@@ -1,4 +1,8 @@
-# NuGet Package Manager 1.2.12
+# NuGet Package Manager 1.2.13
+
+## Updates
+
+- Project and package data now refresh immediately after a successful update.
 
 ## Local Package Sources
 

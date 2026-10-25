@@ -573,6 +573,12 @@ export class PackagesView extends LitElement {
     }
   }
 
+  private async onPackagesUpdatedAsync(): Promise<void> {
+    if (!this._connected) return;
+    await this.LoadProjectsAsync(true);
+    await this.reloadChildViewsAsync(true);
+  }
+
   private async onChildPackageSelectedAsync(e: CustomEvent<{ packageId: string; sourceUrl?: string }>): Promise<void> {
     const { packageId, sourceUrl } = e.detail;
 
@@ -1489,6 +1495,7 @@ export class PackagesView extends LitElement {
                   .availableFrameworks=${this.installedFrameworkOptions}
                   .selectedFramework=${this._updatesFramework}
                   @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
+                  @packages-updated=${async () => await this.onPackagesUpdatedAsync()}
                   @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
                   @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
                     this._updatesFrameworkOptions = e.detail;

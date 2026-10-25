@@ -250,6 +250,7 @@ export class UpdatesView extends LitElement {
             ? `${this.packages.length} update${this.packages.length !== 1 ? "s" : ""} available`
             : "All packages are up to date";
         await hostApi.updateBadgeAsync({ Count: this.packages.length });
+        this.dispatchEvent(new CustomEvent("packages-updated", { bubbles: true, composed: true }));
       } else {
         const error = result.ok
           ? (result.value.RestoreError ?? result.value.RollbackError ?? result.value.Results.find((r) => !r.Success)?.Error)
@@ -312,6 +313,7 @@ export class UpdatesView extends LitElement {
       }));
       this.statusText = `${packages.length} package${packages.length !== 1 ? "s" : ""} updated and restored`;
       await hostApi.updateBadgeAsync({ Count: this.packages.length });
+      this.dispatchEvent(new CustomEvent("packages-updated", { bubbles: true, composed: true }));
     } finally {
       packages.forEach((pkg) => { pkg.IsUpdating = false; });
       this.isUpdating = false;

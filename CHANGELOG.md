@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.2.13 (2026-10-25)
+
+- fix: refresh project and package data after a successful update so installed versions and update rows reflect the write immediately.
+- test: cover the post-update refresh event.
+
 ## 1.2.12 (2026-10-24)
 
 - feat: support local folder NuGet sources by scanning `.nupkg` files and reading embedded `.nuspec` metadata, versions and dependencies.

@@ -144,6 +144,20 @@ suite('UpdatesView', () => {
         assert.strictEqual(visible.length, 2);
     });
 
+    test('emits packages-updated after a successful update', async () => {
+        const pkg = makePackage("$(TargetFramework.StartsWith('net10.0'))", 'net10.0');
+        view.packages = [pkg];
+        let events = 0;
+        view.addEventListener('packages-updated', () => { events++; });
+
+        const succeeded = await (view as unknown as {
+            updateSingleAsync(p: OutdatedPackageViewModel, skip: boolean): Promise<boolean>;
+        }).updateSingleAsync(pkg, true);
+
+        assert.strictEqual(succeeded, true);
+        assert.strictEqual(events, 1);
+    });
+
     test('sends the group scope and condition for a framework row', async () => {
         const pkg = makePackage("$(TargetFramework.StartsWith('net10.0'))", 'net10.0');
         view.packages = [pkg];
