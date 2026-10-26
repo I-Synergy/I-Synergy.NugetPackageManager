@@ -7,6 +7,9 @@ dist
 .playwright-mcp/
 releases/
 
+# Fixture build output generated while resolving target frameworks in tests
+src/host/utilities/__fixtures__/**/obj/
+
 # AI template scratch and generated artifacts
 __pycache__/
 *.py[cod]
