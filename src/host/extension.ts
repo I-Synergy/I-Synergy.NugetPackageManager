@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "path";
 import nonce from "@/common/nonce";
 import { RpcHost } from "@/common/rpc/rpc-host";
 import { createHostAPI } from "./host-api";
@@ -6,24 +7,28 @@ import { Logger } from "../common/logger";
 import { PackageVersionDecorator } from "./utilities/package-version-decorator";
 import nugetApiFactory from "./nuget/api-factory";
 import { RegisterBadgeView, SetUpdateBadge } from "./view-badge";
+import { getSetting } from "../common/configuration";
 
 const NUGET_VIEW_CONTEXT = "nuget.hasSupportedProjects";
+const PANEL_ID = "theNugetPackageManager.panel";
+const VIEW_ID = "theNugetPackageManager.launcherView";
+
+const COMMAND_IDS = {
+  open: "theNugetPackageManager.open",
+  install: "theNugetPackageManager.install",
+  update: "theNugetPackageManager.update",
+  remove: "theNugetPackageManager.remove",
+  reportProblem: "theNugetPackageManager.reportProblem",
+  openSettings: "theNugetPackageManager.openSettings",
+} as const;
 
 export function activate(context: vscode.ExtensionContext) {
   Logger.configure(context);
   Logger.info("Extension.activate: Extension activated");
 
-  // One-time cleanup: remove legacy workspace-level settings that were previously
-  // incorrectly written at the workspace scope instead of global scope.
-  void (async () => {
-    try {
-      const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
-      await config.update("sources", undefined, vscode.ConfigurationTarget.Workspace);
-      await config.update("skipRestore", undefined, vscode.ConfigurationTarget.Workspace);
-    } catch { /* no workspace folder or settings don't exist — safe to ignore */ }
-  })();
+  nugetApiFactory.SetHttpCacheDirectory(path.join(context.globalStorageUri.fsPath, "nuget-http"));
 
-  const webviews = new NugetWebviewManager(context.extensionUri);
+  const webviews = new NugetWebviewManager(context.extensionUri, context);
   context.subscriptions.push(webviews);
 
   let badgeTimer: NodeJS.Timeout | undefined;
@@ -33,11 +38,9 @@ export function activate(context: vscode.ExtensionContext) {
     if (badgeRefreshInFlight) return;
     badgeRefreshInFlight = true;
     try {
-      const prerelease = vscode.workspace
-        .getConfiguration("i-synergy-nugetpackagemanager")
-        .get<boolean>("prerelease") ?? false;
-      const result = await createHostAPI().getOutdatedPackagesAsync({ Prerelease: prerelease });
-      if (result.ok) SetUpdateBadge(result.value.Packages.length);
+      const prerelease = getSetting<boolean>("prerelease", false);
+      const result = await createHostAPI(context).getOutdatedPackagesAsync({ Prerelease: prerelease });
+      if (result.ok) SetUpdateBadge(result.value.Packages.length, result.value.BlockedPackages?.length ?? 0);
     } catch (err) {
       Logger.warn(`NuGet badge refresh failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -103,15 +106,15 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(new PackageVersionDecorator());
 
-  const previousVersion: string | undefined = context.globalState.get("i-synergy-nugetpackagemanager.version");
-  context.globalState.update("i-synergy-nugetpackagemanager.version", context.extension.packageJSON.version);
+  const previousVersion: string | undefined = context.globalState.get("theNugetPackageManager.version");
+  context.globalState.update("theNugetPackageManager.version", context.extension.packageJSON.version);
   if (previousVersion == undefined) {
     Logger.info("Extension.activate: Extension installed");
   } else if (previousVersion != context.extension.packageJSON.version)
     Logger.info("Extension.activate: Extension upgraded from version %s", previousVersion);
 
   const launcherTree = vscode.window.createTreeView(
-    "i-synergy-nugetpackagemanager.launcherView",
+    VIEW_ID,
     { treeDataProvider: new NugetLauncherTreeProvider() }
   );
   RegisterBadgeView(launcherTree);
@@ -123,7 +126,7 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.window.registerWebviewPanelSerializer("nugetpackage.panel", {
+    vscode.window.registerWebviewPanelSerializer(PANEL_ID, {
       deserializeWebviewPanel: async (panel: vscode.WebviewPanel) => {
         webviews.restorePanel(panel);
       },
@@ -131,13 +134,13 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetpackage.open", () => {
+    vscode.commands.registerCommand(COMMAND_IDS.open, () => {
       webviews.openPanel();
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetpackage.install", async () => {
+    vscode.commands.registerCommand(COMMAND_IDS.install, async () => {
       const packageId = await vscode.window.showInputBox({
         prompt: "Enter the NuGet package ID to install",
         placeHolder: "e.g. Newtonsoft.Json",
@@ -149,29 +152,29 @@ export function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetpackage.update", () => {
+    vscode.commands.registerCommand(COMMAND_IDS.update, () => {
       webviews.openPanel();
       webviews.sendNavigateToTab("updates");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetpackage.remove", () => {
+    vscode.commands.registerCommand(COMMAND_IDS.remove, () => {
       webviews.openPanel();
       webviews.sendNavigateToTab("installed");
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetpackage.reportProblem", async () => {
+    vscode.commands.registerCommand(COMMAND_IDS.reportProblem, async () => {
       vscode.env.openExternal(
-        vscode.Uri.parse("https://github.com/I-Synergy/I-Synergy.NugetPackageManager/issues/new")
+        vscode.Uri.parse("https://github.com/I-Synergy/TheNugetPackageManager/issues/new")
       );
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("nugetpackage.openSettings", () => {
+    vscode.commands.registerCommand(COMMAND_IDS.openSettings, () => {
       webviews.openPanel();
       webviews.sendNavigateToRoute("SETTINGS");
     })
@@ -205,7 +208,10 @@ class NugetWebviewManager implements vscode.Disposable {
   private rpcHost: RpcHost | undefined;
   private panelDisposable: vscode.Disposable | undefined;
 
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    private readonly context: vscode.ExtensionContext
+  ) {}
 
   openPanel(): vscode.WebviewPanel {
     if (this.panel) {
@@ -214,7 +220,7 @@ class NugetWebviewManager implements vscode.Disposable {
     }
 
     const panel = vscode.window.createWebviewPanel(
-      "nugetpackage.panel",
+      PANEL_ID,
       "NuGet Package Manager",
       vscode.ViewColumn.Active,
       {
@@ -249,7 +255,7 @@ class NugetWebviewManager implements vscode.Disposable {
       localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "dist")],
     };
     panel.webview.html = this.getWebviewHtml(panel.webview);
-    this.rpcHost = new RpcHost(panel.webview, createHostAPI());
+    this.rpcHost = new RpcHost(panel.webview, createHostAPI(this.context));
 
     this.panelDisposable = panel.onDidDispose(() => {
       this.rpcHost?.dispose();
@@ -279,7 +285,7 @@ class NugetWebviewManager implements vscode.Disposable {
           <title>NuGet Package Manager</title>
         </head>
         <body>
-          <i-synergy-nugetpackagemanager></i-synergy-nugetpackagemanager>
+          <the-nuget-package-manager></the-nuget-package-manager>
           <script type="module" nonce="${nonceValue}" src="${webJsSrc}"></script>
         </body>
       </html>
@@ -337,7 +343,7 @@ class NugetLauncherTreeProvider implements vscode.TreeDataProvider<vscode.TreeIt
       "Open NuGet Package Manager",
       vscode.TreeItemCollapsibleState.None
     );
-    item.command = { command: "nugetpackage.open", title: "Open NuGet Package Manager" };
+    item.command = { command: COMMAND_IDS.open, title: "Open NuGet Package Manager" };
     item.iconPath = new vscode.ThemeIcon("package");
     item.description = "Full-page package workspace";
     return [item];

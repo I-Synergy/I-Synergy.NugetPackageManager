@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { Logger } from "../../common/logger";
 import { compareVersions } from "../utilities/version";
 import LocalNuGetFeed from "./local-feed";
+import { HttpCache } from "./http-cache";
 
 type RawPackageSearchItem = {
   "@id": string;
@@ -71,6 +72,7 @@ export default class NuGetApi {
   private _vulnerabilityUrl: string = "";
   private http: AxiosInstance;
   private _packageCache: Map<string, { data: Package, timestamp: number }> = new Map();
+  private _packageDetailsCache: Map<string, PackageDetails> = new Map();
   private _vulnerabilityCache: { data: Map<string, VulnerabilityEntry[]>, timestamp: number } | null = null;
   private readonly _cacheTtl: number = 5 * 60 * 1000; // 5 minutes
   private readonly _vulnCacheTtl: number = 60 * 60 * 1000; // 1 hour
@@ -78,12 +80,15 @@ export default class NuGetApi {
   private _sourceHost: string = "";
   private readonly _trustedHosts = new Set<string>();
   private readonly _localFeed: LocalNuGetFeed | null;
+  private readonly _httpCache: HttpCache;
 
   constructor(
     private readonly _url: string,
     private readonly _username?: string,
-    private readonly _password?: string
+    private readonly _password?: string,
+    httpCacheDirectory?: string
   ) {
+    this._httpCache = new HttpCache(httpCacheDirectory ?? null);
     this._localFeed = LocalNuGetFeed.IsLocalSource(this._url)
       ? new LocalNuGetFeed(this._url)
       : null;
@@ -191,26 +196,18 @@ export default class NuGetApi {
     const items: RawCatalogItem[] = [];
     try {
       Logger.debug(`NuGetApi.GetPackageAsync: GET ${url}`);
-      const result = await this.http.get(url, ...(signal ? [{ signal }] : []));
-      if (result instanceof AxiosError) {
-        Logger.error("NuGetApi.GetPackageAsync: Axios Error Data:", result.response?.data);
-        return {
-          isError: true,
-          errorMessage: "Package couldn't be found",
-          data: undefined,
-        };
-      }
+      const result = await this.ExecuteGetAsync(url, signal ? { signal } : undefined);
 
       for (let i = 0; i < result.data.count; i++) {
         if (signal?.aborted) break;
         const page: RawRegistrationPage = result.data.items[i];
         if (page.items) items.push(...page.items);
         else {
-          const pageData = await this.http.get(page["@id"] as string, ...(signal ? [{ signal }] : []));
-          if (pageData instanceof AxiosError) {
-            Logger.error("NuGetApi.GetPackageAsync: Axios Error while loading page data:", pageData.message);
-          } else {
+          try {
+            const pageData = await this.ExecuteGetAsync(page["@id"] as string, signal ? { signal } : undefined);
             items.push(...(pageData.data.items as RawCatalogItem[]));
+          } catch (err) {
+            Logger.error("NuGetApi.GetPackageAsync: Error while loading page data:", err);
           }
         }
       }
@@ -242,6 +239,21 @@ export default class NuGetApi {
     });
     const item = sortedItems[sortedItems.length - 1]!;
     const catalogEntry = item.catalogEntry as RawCatalogEntry;
+
+    // Registration entries often embed dependencyGroups. Keep them keyed by
+    // the version leaf URL so a later GetPackageDetailsAsync call for the same
+    // version is served locally instead of issuing another request.
+    for (const versionItem of itemsToUse) {
+      const entry = typeof versionItem.catalogEntry === "object"
+        ? versionItem.catalogEntry as RawCatalogEntry
+        : null;
+      if (entry?.dependencyGroups && versionItem["@id"]) {
+        this._packageDetailsCache.set(versionItem["@id"], {
+          dependencies: { frameworks: this.mapDependencyGroups(entry.dependencyGroups) },
+        });
+      }
+    }
+
     const packageObject: Package = {
       Id: item["@id"] || "",
       Name: catalogEntry?.id || "",
@@ -270,6 +282,9 @@ export default class NuGetApi {
 
   public ClearPackageCache(packageId?: string) {
     this._localFeed?.ClearCache();
+    if (!packageId) {
+      this._packageDetailsCache.clear();
+    }
     if (packageId) {
       // Cache keys are "${id}::${prerelease}" — delete all variants for this id.
       const prefix = packageId.toLowerCase() + "::";
@@ -287,10 +302,20 @@ export default class NuGetApi {
     this._vulnerabilityCache = null;
   }
 
+  /** Removes the persisted HTTP cache (used by ForceReload). */
+  public ClearHttpCache(): void {
+    this._httpCache.Clear();
+  }
+
   async GetPackageDetailsAsync(packageVersionUrl: string, signal?: AbortSignal): Promise<GetPackageDetailsResponse> {
     try {
       if (this._localFeed) {
         return { data: await this._localFeed.GetPackageDetailsAsync(packageVersionUrl) };
+      }
+      const cachedDetails = this._packageDetailsCache.get(packageVersionUrl);
+      if (cachedDetails) {
+        Logger.debug(`NuGetApi.GetPackageDetailsAsync: Returning cached dependency groups for ${packageVersionUrl}`);
+        return { data: cachedDetails };
       }
       await this.EnsureSearchUrlAsync();
       if (!this.isTrustedSourceUrl(packageVersionUrl)) {
@@ -339,27 +364,12 @@ export default class NuGetApi {
 
       const packageDetails: PackageDetails = {
         dependencies: {
-          frameworks: {},
+          frameworks: this.mapDependencyGroups(catalogData?.dependencyGroups ?? []),
         },
       };
 
-      const dependencyGroupCount = catalogData?.dependencyGroups?.length || 0;
-      Logger.debug(`NuGetApi.GetPackageDetailsAsync: Found ${dependencyGroupCount} dependency groups`);
-
-      catalogData?.dependencyGroups?.forEach((dependencyGroup: RawDependencyGroup) => {
-        const targetFramework = dependencyGroup.targetFramework;
-        packageDetails.dependencies.frameworks[targetFramework] = [];
-        dependencyGroup.dependencies?.forEach((dependency) => {
-          (packageDetails.dependencies.frameworks[targetFramework] as Array<{ package: string; versionRange: string }>).push({
-            package: dependency.id,
-            versionRange: dependency.range,
-          });
-        });
-        if (packageDetails.dependencies.frameworks[targetFramework].length == 0)
-          delete packageDetails.dependencies.frameworks[targetFramework];
-      });
-
       Logger.debug(`NuGetApi.GetPackageDetailsAsync: Returning ${Object.keys(packageDetails.dependencies.frameworks).length} frameworks with dependencies`);
+      this._packageDetailsCache.set(packageVersionUrl, packageDetails);
       return { data: packageDetails };
     }
     catch (err) {
@@ -474,10 +484,42 @@ export default class NuGetApi {
     else return "";
   }
 
+  private mapDependencyGroups(groups: RawDependencyGroup[]): Record<string, PackageDependency[]> {
+    const frameworks: Record<string, PackageDependency[]> = {};
+    for (const group of groups) {
+      const dependencies: PackageDependency[] = [];
+      for (const dependency of group.dependencies ?? []) {
+        dependencies.push({ package: dependency.id, versionRange: dependency.range });
+      }
+      if (dependencies.length > 0) {
+        frameworks[group.targetFramework] = dependencies;
+      }
+    }
+    return frameworks;
+  }
+
+  private buildHttpCacheKey(url: string, config?: AxiosRequestConfig): string {
+    const params = config?.params as Record<string, unknown> | undefined;
+    if (!params || typeof params !== "object") return url;
+    const query = Object.keys(params)
+      .sort()
+      .filter((key) => params[key] !== undefined)
+      .map((key) => `${key}=${String(params[key])}`)
+      .join("&");
+    return query ? `${url}?${query}` : url;
+  }
+
   private async ExecuteGetAsync(
     url: string,
     config?: AxiosRequestConfig | undefined
   ): Promise<AxiosResponse> {
+    const cacheKey = this.buildHttpCacheKey(url, config);
+    const cached = await this._httpCache.GetAsync<unknown>(cacheKey);
+    if (cached !== null) {
+      Logger.debug(`NuGetApi.ExecuteGet: Serving ${url} from the HTTP cache`);
+      return { data: cached } as AxiosResponse;
+    }
+
     Logger.debug(`NuGetApi.ExecuteGet: Requesting ${url}`);
     const response = await this.http.get(url, config);
     if (response instanceof AxiosError) {
@@ -487,6 +529,9 @@ export default class NuGetApi {
       };
     }
 
+    if (response?.data !== undefined) {
+      await this._httpCache.SetAsync(cacheKey, response.data);
+    }
     return response;
   }
 

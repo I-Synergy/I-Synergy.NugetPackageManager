@@ -6,6 +6,12 @@ import { Logger } from "../../common/logger";
 
 class NuGetApiFactory {
   private readonly _sourceApiCollection = new Map<string, NuGetApi>();
+  private _httpCacheDirectory: string | null = null;
+
+  /** Called once during activation with the extension's global storage path. */
+  public SetHttpCacheDirectory(directory: string | null): void {
+    this._httpCacheDirectory = directory;
+  }
 
   public async GetSourceApiAsync(url: string): Promise<NuGetApi> {
     const cached = this._sourceApiCollection.get(url);
@@ -31,14 +37,20 @@ class NuGetApiFactory {
       Logger.warn(`NuGetApiFactory.GetSourceApiAsync: No credentials found for ${url}. Available source URLs: [${sources.map(s => s.Url).join(", ")}]`);
     }
 
-    const api = new NuGetApi(url, sourceWithCreds?.Username, sourceWithCreds?.Password);
+    const api = new NuGetApi(
+      url,
+      sourceWithCreds?.Username,
+      sourceWithCreds?.Password,
+      this._httpCacheDirectory ?? undefined
+    );
     this._sourceApiCollection.set(url, api);
     return api;
   }
 
-  public ClearCache() {
+  public ClearCache(clearHttpCache = false) {
     for (const api of this._sourceApiCollection.values()) {
       api.ClearPackageCache();
+      if (clearHttpCache) api.ClearHttpCache();
     }
     this._sourceApiCollection.clear();
     PasswordScriptExecutor.ClearCache();

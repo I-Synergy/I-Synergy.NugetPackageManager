@@ -516,6 +516,43 @@ suite('NuGetApi Tests', () => {
             assert.strictEqual(result.data.dependencies.frameworks['netstandard2.0']!.length, 1);
         });
 
+        test('reuses dependencyGroups embedded in the registration index', async () => {
+            const api = new NuGetApi('https://api.nuget.org/v3/index.json');
+            const versionUrl = 'https://api.nuget.org/v3/registration/pkg/1.0.0.json';
+            const httpStub = sandbox.stub((api as any).http, 'get');
+            httpStub.onFirstCall().resolves(mockServiceIndex);
+            httpStub.onSecondCall().resolves({
+                data: {
+                    count: 1,
+                    items: [{
+                        items: [{
+                            '@id': versionUrl,
+                            catalogEntry: {
+                                id: 'TestPackage',
+                                version: '1.0.0',
+                                authors: [],
+                                tags: [],
+                                dependencyGroups: [{
+                                    targetFramework: 'net8.0',
+                                    dependencies: [{ id: 'Dep1', range: '[1.0.0]' }],
+                                }],
+                            },
+                        }],
+                    }],
+                },
+            });
+
+            const pkg = await api.GetPackageAsync('TestPackage');
+            assert.ok(pkg.data);
+
+            const details = await api.GetPackageDetailsAsync(versionUrl);
+
+            assert.deepStrictEqual(details.data.dependencies.frameworks['net8.0'], [
+                { package: 'Dep1', versionRange: '[1.0.0]' },
+            ]);
+            assert.strictEqual(httpStub.callCount, 2, 'the version leaf must not be fetched twice');
+        });
+
         test('should return empty dependencies when no catalogEntry', async () => {
             const api = new NuGetApi('https://api.nuget.org/v3/index.json');
             
