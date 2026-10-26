@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Release script for I-Synergy.NugetPackageManager.
+// Release script for NuGet Package Manager.
 // Usage: node scripts/release.mjs [patch|minor|major|X.Y.Z] [--dry-run]
 //
 // - Bumps version in package.json + package-lock.json

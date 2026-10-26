@@ -1,9 +1,9 @@
 {
-  "name": "i-synergy-nugetpackagemanager",
+  "name": "thenugetpackagemanager",
   "publisher": "I-Synergy",
-  "displayName": "I-Synergy NuGet Package Manager",
+  "displayName": "NuGet Package Manager",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
-  "version": "1.2.14",
+  "version": "2.0.0",
   "license": "MIT",
   "icon": "docs/images/icon.png",
   "galleryBanner": {
@@ -29,49 +29,49 @@
     "Programming Languages",
     "Other"
   ],
-  "homepage": "https://github.com/I-Synergy/I-Synergy.NugetPackageManager",
+  "homepage": "https://github.com/I-Synergy/TheNugetPackageManager",
   "bugs": {
-    "url": "https://github.com/I-Synergy/I-Synergy.NugetPackageManager/issues",
+    "url": "https://github.com/I-Synergy/TheNugetPackageManager/issues",
     "email": "daniel-rck@proton.me"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/I-Synergy/I-Synergy.NugetPackageManager.git"
+    "url": "https://github.com/I-Synergy/TheNugetPackageManager.git"
   },
   "activationEvents": [
     "workspaceContains:**/*.csproj",
     "workspaceContains:**/*.fsproj",
     "workspaceContains:**/*.sln",
     "workspaceContains:**/*.slnx",
-    "onWebviewPanel:nugetpackage.panel",
+    "onWebviewPanel:theNugetPackageManager.panel",
     "workspaceContains:**/*.vbproj"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "nugetpackage.open",
+        "command": "theNugetPackageManager.open",
         "title": "NuGet Package Manager: Open Packages"
       },
       {
-        "command": "nugetpackage.install",
+        "command": "theNugetPackageManager.install",
         "title": "NuGet Package Manager: Add Package"
       },
       {
-        "command": "nugetpackage.update",
+        "command": "theNugetPackageManager.update",
         "title": "NuGet Package Manager: Update Package"
       },
       {
-        "command": "nugetpackage.remove",
+        "command": "theNugetPackageManager.remove",
         "title": "NuGet Package Manager: Remove Package"
       },
       {
-        "command": "nugetpackage.openSettings",
+        "command": "theNugetPackageManager.openSettings",
         "title": "Settings",
         "icon": "$(extensions-manage)"
       },
       {
-        "command": "nugetpackage.reportProblem",
+        "command": "theNugetPackageManager.reportProblem",
         "title": "Report Problem",
         "icon": "$(report)"
       }
@@ -79,25 +79,25 @@
     "menus": {
       "view/title": [
         {
-          "command": "nugetpackage.reportProblem",
-          "when": "view == i-synergy-nugetpackagemanager.launcherView",
+          "command": "theNugetPackageManager.reportProblem",
+          "when": "view == theNugetPackageManager.launcherView",
           "group": "navigation@1"
         },
         {
-          "command": "nugetpackage.openSettings",
-          "when": "view == i-synergy-nugetpackagemanager.launcherView",
+          "command": "theNugetPackageManager.openSettings",
+          "when": "view == theNugetPackageManager.launcherView",
           "group": "navigation@2"
         }
       ],
       "editor/title": [
         {
-          "command": "nugetpackage.openSettings",
-          "when": "activeWebviewPanelId == nugetpackage.panel",
+          "command": "theNugetPackageManager.openSettings",
+          "when": "activeWebviewPanelId == theNugetPackageManager.panel",
           "group": "navigation@1"
         },
         {
-          "command": "nugetpackage.reportProblem",
-          "when": "activeWebviewPanelId == nugetpackage.panel",
+          "command": "theNugetPackageManager.reportProblem",
+          "when": "activeWebviewPanelId == theNugetPackageManager.panel",
           "group": "navigation@2"
         }
       ]
@@ -105,16 +105,16 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "i-synergy-nugetpackagemanager",
+          "id": "theNugetPackageManager",
           "title": "NuGet",
           "icon": "resources/nuget.svg"
         }
       ]
     },
     "views": {
-      "i-synergy-nugetpackagemanager": [
+      "theNugetPackageManager": [
         {
-          "id": "i-synergy-nugetpackagemanager.launcherView",
+          "id": "theNugetPackageManager.launcherView",
           "name": "NuGet",
           "when": "nuget.hasSupportedProjects"
         }
@@ -123,12 +123,12 @@
     "configuration": {
       "title": "NuGet Package Manager",
       "properties": {
-        "i-synergy-nugetpackagemanager.skipRestore": {
+        "theNugetPackageManager.skipRestore": {
           "type": "boolean",
           "default": false,
           "description": "Skip performing a restore preview and compatibility check"
         },
-        "i-synergy-nugetpackagemanager.sources": {
+        "theNugetPackageManager.sources": {
           "type": "array",
           "items": {
             "type": "string"
@@ -140,7 +140,7 @@
           ],
           "description": "NuGet sources"
         },
-        "i-synergy-nugetpackagemanager.passwordScriptAllowlist": {
+        "theNugetPackageManager.passwordScriptAllowlist": {
           "type": "array",
           "items": {
             "type": "string"
@@ -149,7 +149,7 @@
           "scope": "machine",
           "description": "Machine-scoped directories from which password scripts may be executed. Workspace-provided script paths outside this allowlist are refused."
         },
-        "i-synergy-nugetpackagemanager.logLevel": {
+        "theNugetPackageManager.logLevel": {
           "type": "string",
           "default": "INFO",
           "enum": [
@@ -160,27 +160,27 @@
           ],
           "description": "Minimum logging level"
         },
-        "i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo": {
+        "theNugetPackageManager.enablePackageVersionInlineInfo": {
           "type": "boolean",
           "default": false,
           "description": "Show inline information about newer package versions in project files"
         },
-        "i-synergy-nugetpackagemanager.prerelease": {
+        "theNugetPackageManager.prerelease": {
           "type": "boolean",
           "default": false,
           "description": "Include prerelease versions when checking for package updates"
         },
-        "i-synergy-nugetpackagemanager.statusBarLoadingIndicator": {
+        "theNugetPackageManager.statusBarLoadingIndicator": {
           "type": "boolean",
           "default": false,
           "description": "Show a loading indicator in the status bar when loading packages"
         },
-        "i-synergy-nugetpackagemanager.enableTelemetry": {
+        "theNugetPackageManager.enableTelemetry": {
           "type": "boolean",
           "default": false,
           "description": "Send anonymous usage telemetry to the configured OTLP endpoint. Requires VS Code telemetry to be enabled and a TELEMETRY_ADDRESS environment variable."
         },
-        "i-synergy-nugetpackagemanager.frameworkAlignedPackages": {
+        "theNugetPackageManager.frameworkAlignedPackages": {
           "type": "array",
           "items": {
             "type": "string"
@@ -194,7 +194,7 @@
           ],
           "description": "Package patterns whose major version follows the target framework (net10.0 to 10.x). Used to keep framework-scoped update suggestions on the matching major line."
         },
-        "i-synergy-nugetpackagemanager.extraTargetFrameworks": {
+        "theNugetPackageManager.extraTargetFrameworks": {
           "type": "array",
           "items": {
             "type": "string"
@@ -202,7 +202,7 @@
           "default": [],
           "description": "Target frameworks to add when MSBuild evaluation is unavailable or incomplete (for example net11.0)."
         },
-        "i-synergy-nugetpackagemanager.excludeGlobs": {
+        "theNugetPackageManager.excludeGlobs": {
           "type": "array",
           "items": {
             "type": "string"
@@ -215,6 +215,13 @@
             "**/.*/**"
           ],
           "description": "Glob patterns excluded from project discovery."
+        },
+        "theNugetPackageManager.updateCheckConcurrency": {
+          "type": "number",
+          "default": 8,
+          "minimum": 1,
+          "maximum": 32,
+          "description": "Number of packages whose latest version is checked concurrently in the Updates tab."
         }
       }
     }

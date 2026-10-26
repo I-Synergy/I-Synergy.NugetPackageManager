@@ -26,7 +26,7 @@ type HostCommand =
   | { type: "command"; command: "navigate-route"; route: string }
   | { type: "command"; command: "reload-configuration" };
 
-@customElement("i-synergy-nugetpackagemanager")
+@customElement("the-nuget-package-manager")
 export class NuGetPackageManager extends LitElement {
   @state() private configLoaded = configuration.Configuration != null;
   @state() private currentRoute = router.CurrentRoute;

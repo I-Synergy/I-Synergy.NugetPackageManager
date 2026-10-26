@@ -2,8 +2,8 @@
 
 **A full-featured NuGet package manager for Visual Studio Code** — browse, install, update, and audit packages across all your .NET projects without leaving the editor.
 
-[![Release](https://img.shields.io/github/v/release/I-Synergy/I-Synergy.NugetPackageManager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.i-synergy-nugetpackagemanager)
-[![CI](https://img.shields.io/github/actions/workflow/status/I-Synergy/I-Synergy.NugetPackageManager/ci.yml?label=CI)](https://github.com/I-Synergy/I-Synergy.NugetPackageManager/actions)
+[![Release](https://img.shields.io/github/v/release/I-Synergy/TheNugetPackageManager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.thenugetpackagemanager)
+[![CI](https://img.shields.io/github/actions/workflow/status/I-Synergy/TheNugetPackageManager/ci.yml?label=CI)](https://github.com/I-Synergy/TheNugetPackageManager/actions)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.110%2B-blue)](https://code.visualstudio.com/)
 
@@ -46,7 +46,7 @@
 |---|---|---|
 | 📦 | **Browse & Install** | Search nuget.org and private feeds, install into one or multiple projects at once |
 | 🖥️ | **Full-page workspace** | Opens in an editor tab from the NuGet Activity Bar icon, with a compact sidebar launcher and restored panel state |
-| 🔔 | **Update badge** | The Activity Bar icon shows the available-update count and refreshes from the extension host every 15 minutes while visible |
+| 🔔 | **Update badge** | The Activity Bar icon shows the available-update count, and its tooltip also reports updates blocked by dependency conflicts; it refreshes from the extension host every 15 minutes |
 | 📊 | **Real-time Progress** | Animated spinner during install/update operations, showing which package is being processed |
 | 🔄 | **Transactional updates** | Packages are written one at a time, restored once after the complete set, and rolled back if a write or restore fails |
 | 🛡️ | **Vulnerability Scanning** | Critical / High / Medium / Low severity, advisory links, transitive dependencies and a yellow banner across every tab |
@@ -81,15 +81,15 @@
 Or install directly from the command line:
 
 ```bash
-code --install-extension I-Synergy.i-synergy-nugetpackagemanager
+code --install-extension I-Synergy.thenugetpackagemanager
 ```
 
 ### From a .vsix file
 
-Download the latest `.vsix` from the [Releases page](https://github.com/I-Synergy/I-Synergy.NugetPackageManager/releases), then:
+Download the latest `.vsix` from the [Releases page](https://github.com/I-Synergy/TheNugetPackageManager/releases), then:
 
 ```bash
-code --install-extension i-synergy-nugetpackagemanager-x.x.x.vsix
+code --install-extension thenugetpackagemanager-x.x.x.vsix
 ```
 
 Or via the Extensions panel: click **···** → **Install from VSIX…**
@@ -147,7 +147,12 @@ Lists all packages where a newer version is available on the configured sources.
 - **Select individual packages** with checkboxes, then click **Update selected** or **Update all**
 - Packages are written **one at a time**, with per-package progress; the Activity Bar badge updates as rows clear
 - `dotnet restore` runs **once after all selected versions are written**, so dependent packages resolve against the complete set
-- If a write or the final restore fails, the host restores the affected file snapshots and reports a rollback
+- If a write or the final restore fails, the host restores the affected file snapshots and reports a rollback. Single-package installs, updates and uninstalls take the same snapshot and roll back when their restore fails.
+- The extension **never runs `dotnet build`**. After writing versions it runs `dotnet restore` only; building or rebuilding is left to your own build task or `dotnet build`.
+- Restore failures report the actual `dotnet` diagnostics. For `NU1107` the message names the contested package and the dependency chains, for example `Npgsql.EntityFrameworkCore.PostgreSQL 11.0.0-rc.2 requires = 11.0.0-rc.2.26504.105`.
+- **Dependency-aware suggestions** — when an installed package pins a version of another package (for example an EF Core provider pinning `Microsoft.EntityFrameworkCore.Relational`), the suggested update is capped to a version those ranges accept. Unsafe versions are listed under **Dependency conflicts** with the installed version, the blocked version, and the packages/ranges that block it; the row's lock icon carries the same detail, and the separate latest-overall action still lets you override the pin deliberately.
+- **Warm start** — the last scan is persisted per workspace. The tab paints those rows immediately (marked as cached, with update actions disabled) and refreshes in the background, so switching to Updates does not wait for the network.
+- **Local metadata cache** — NuGet registration/search responses are cached on disk for 30 minutes under the extension's global storage. **Reload** bypasses the in-memory caches and clears the HTTP cache.
 - Per-row **update button** for single-package updates
 - **Framework selector** — choose **All frameworks**, **Shared**, or a base `.NET` line such as `net10.0` / `net11.0`. Platform variants are grouped under the base line; selecting a `.NET` line excludes shared packages.
 - Tab data refreshes automatically every time you switch to it
@@ -204,9 +209,9 @@ Use **Remove unused** after reviewing the list. This replaces the PowerShell `Re
 
 - The NuGet entry is hidden in workspaces without a supported .NET project
 - Clicking it opens the full-page workspace in an editor tab; the sidebar launcher remains available
-- The icon badge shows the number of available updates
-- Update checks run from the extension host **every 15 minutes while the icon is visible**, even when the page is closed
-- Background scans and timers stop when the icon is hidden or the extension deactivates
+- The icon badge shows the number of available updates; its tooltip also reports updates blocked by dependency conflicts
+- Update checks run from the extension host **every 15 minutes** while the extension is active and the workspace contains a supported project, even when the page is closed
+- Background scans and timers stop when the workspace has no supported project or the extension deactivates
 
 ---
 
@@ -227,12 +232,12 @@ Access these from the Command Palette (`Ctrl+Shift+P`):
 
 | Command | ID | Description |
 |---|---|---|
-| **NuGet Package Manager: Open Packages** | `nugetpackage.open` | Open or reveal the full-page NuGet editor tab |
-| **NuGet Package Manager: Add Package** | `nugetpackage.install` | Prompt for a package ID and open Browse with it pre-searched |
-| **NuGet Package Manager: Update Package** | `nugetpackage.update` | Open the editor tab and switch to Updates |
-| **NuGet Package Manager: Remove Package** | `nugetpackage.remove` | Open the editor tab and switch to Installed |
-| **Settings** | `nugetpackage.openSettings` | Open the NuGet Package Manager settings view |
-| **Report Problem** | `nugetpackage.reportProblem` | Open a new GitHub issue |
+| **NuGet Package Manager: Open Packages** | `theNugetPackageManager.open` | Open or reveal the full-page NuGet editor tab |
+| **NuGet Package Manager: Add Package** | `theNugetPackageManager.install` | Prompt for a package ID and open Browse with it pre-searched |
+| **NuGet Package Manager: Update Package** | `theNugetPackageManager.update` | Open the editor tab and switch to Updates |
+| **NuGet Package Manager: Remove Package** | `theNugetPackageManager.remove` | Open the editor tab and switch to Installed |
+| **Settings** | `theNugetPackageManager.openSettings` | Open the NuGet Package Manager settings view |
+| **Report Problem** | `theNugetPackageManager.reportProblem` | Open a new GitHub issue |
 
 ---
 
@@ -242,17 +247,20 @@ Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or ed
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `i-synergy-nugetpackagemanager.sources` | `string[]` | `[nuget.org]` | List of NuGet feed URLs to search and update from. Each entry is a JSON string `{"name":"...","url":"..."}`. |
-| `i-synergy-nugetpackagemanager.prerelease` | `boolean` | `false` | Include pre-release versions when checking for updates. |
-| `i-synergy-nugetpackagemanager.skipRestore` | `boolean` | `false` | Skip the restore preview and compatibility check when installing/updating packages. |
-| `i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo` | `boolean` | `false` | Show inline gutter decorations in `.csproj` files with available update versions. |
-| `i-synergy-nugetpackagemanager.statusBarLoadingIndicator` | `boolean` | `false` | Show a loading progress indicator in the VS Code status bar. |
-| `i-synergy-nugetpackagemanager.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Package Manager output channel. |
-| `i-synergy-nugetpackagemanager.frameworkAlignedPackages` | `string[]` | `["Microsoft.Extensions.*", "Microsoft.AspNetCore.*", "Microsoft.EntityFrameworkCore.*", "Microsoft.Maui.*", "System.*"]` | Package patterns whose major version follows the target framework (net10.0 → 10.x). Keeps framework-scoped update suggestions on the matching major line. |
-| `i-synergy-nugetpackagemanager.extraTargetFrameworks` | `string[]` | `[]` | Target frameworks added when MSBuild evaluation is unavailable or incomplete (for example `net11.0`). |
-| `i-synergy-nugetpackagemanager.excludeGlobs` | `string[]` | `["**/bin/**", "**/obj/**", "**/TestResults/**", "**/packages/**", "**/.git/**"]` | Glob patterns excluded from project discovery. |
-| `i-synergy-nugetpackagemanager.passwordScriptAllowlist` | `string[]` (machine scope) | `[]` | Directories from which password scripts may run. Workspace-provided script paths outside this list are refused; scripts also require a trusted workspace. |
-| `i-synergy-nugetpackagemanager.enableTelemetry` | `boolean` | `false` | Opt in to anonymous OTLP telemetry (requires VS Code telemetry and `TELEMETRY_ADDRESS`). |
+| `theNugetPackageManager.sources` | `string[]` | `[nuget.org]` | List of NuGet feed URLs to search and update from. Each entry is a JSON string `{"name":"...","url":"..."}`. |
+| `theNugetPackageManager.prerelease` | `boolean` | `false` | Include pre-release versions when checking for updates. |
+| `theNugetPackageManager.skipRestore` | `boolean` | `false` | Skip the restore preview and compatibility check when installing/updating packages. |
+| `theNugetPackageManager.enablePackageVersionInlineInfo` | `boolean` | `false` | Show inline gutter decorations in `.csproj` files with available update versions. |
+| `theNugetPackageManager.statusBarLoadingIndicator` | `boolean` | `false` | Show a loading progress indicator in the VS Code status bar. |
+| `theNugetPackageManager.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Package Manager output channel. |
+| `theNugetPackageManager.frameworkAlignedPackages` | `string[]` | `["Microsoft.Extensions.*", "Microsoft.AspNetCore.*", "Microsoft.EntityFrameworkCore.*", "Microsoft.Maui.*", "System.*"]` | Package patterns whose major version follows the target framework (net10.0 → 10.x). Keeps framework-scoped update suggestions on the matching major line. |
+| `theNugetPackageManager.extraTargetFrameworks` | `string[]` | `[]` | Target frameworks added when MSBuild evaluation is unavailable or incomplete (for example `net11.0`). |
+| `theNugetPackageManager.excludeGlobs` | `string[]` | `["**/bin/**", "**/obj/**", "**/TestResults/**", "**/packages/**", "**/.git/**"]` | Glob patterns excluded from project discovery. |
+| `theNugetPackageManager.passwordScriptAllowlist` | `string[]` (machine scope) | `[]` | Directories from which password scripts may run. Workspace-provided script paths outside this list are refused; scripts also require a trusted workspace. |
+| `theNugetPackageManager.enableTelemetry` | `boolean` | `false` | Opt in to anonymous OTLP telemetry (requires VS Code telemetry and `TELEMETRY_ADDRESS`). |
+| `theNugetPackageManager.updateCheckConcurrency` | `number` | `8` | Number of packages whose latest version is checked concurrently in the Updates tab (1–32). |
+
+> **Breaking rename:** this release uses only the `theNugetPackageManager.*` settings and commands. Settings from the previous `i-synergy-nugetpackagemanager.*` namespace are not migrated (old keys may appear as unknown settings in `settings.json`), and the old `nugetpackage.*` command IDs are no longer registered.
 
 > **Security:** the extension declares `capabilities.untrustedWorkspaces.supported: false` and refuses password scripts unless the workspace is trusted. `%VAR%` expansion in a workspace `nuget.config` is deliberately not performed, so a repository cannot read your environment variables.
 
@@ -260,14 +268,14 @@ Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or ed
 
 ```jsonc
 {
-  "i-synergy-nugetpackagemanager.sources": [
+  "theNugetPackageManager.sources": [
     "{\"name\": \"nuget.org\", \"url\": \"https://api.nuget.org/v3/index.json\"}",
     "{\"name\": \"My Feed\",   \"url\": \"https://pkgs.dev.azure.com/my-org/_packaging/my-feed/nuget/v3/index.json\"}"
   ],
-  "i-synergy-nugetpackagemanager.prerelease": false,
-  "i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo": true,
-  "i-synergy-nugetpackagemanager.skipRestore": false,
-  "i-synergy-nugetpackagemanager.logLevel": "INFO"
+  "theNugetPackageManager.prerelease": false,
+  "theNugetPackageManager.enablePackageVersionInlineInfo": true,
+  "theNugetPackageManager.skipRestore": false,
+  "theNugetPackageManager.logLevel": "INFO"
 }
 ```
 
@@ -308,7 +316,7 @@ For non-standard authentication flows, configure a script path per source. The s
 ```jsonc
 // settings.json
 {
-  "i-synergy-nugetpackagemanager.sources": [
+  "theNugetPackageManager.sources": [
     "{\"name\": \"Internal\", \"url\": \"https://my.internal.feed/v3/index.json\", \"passwordScriptPath\": \"/path/to/get-token.sh\"}"
   ]
 }
@@ -363,7 +371,7 @@ Use the framework dropdown to focus on one base `.NET` line, **Shared** for unco
 
 ## Inline Version Decorations
 
-Enable `i-synergy-nugetpackagemanager.enablePackageVersionInlineInfo` to see available updates directly in your project files:
+Enable `theNugetPackageManager.enablePackageVersionInlineInfo` to see available updates directly in your project files:
 
 ```xml
 <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />  ← 13.0.3 available
@@ -379,7 +387,7 @@ Contributions are welcome — bug reports, feature requests, documentation impro
 
 ### Reporting Issues
 
-Please use the [GitHub Issues](https://github.com/I-Synergy/I-Synergy.NugetPackageManager/issues) tracker. Include:
+Please use the [GitHub Issues](https://github.com/I-Synergy/TheNugetPackageManager/issues) tracker. Include:
 - VS Code version
 - Extension version
 - Steps to reproduce
@@ -391,8 +399,8 @@ Please use the [GitHub Issues](https://github.com/I-Synergy/I-Synergy.NugetPacka
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/I-Synergy/I-Synergy.NugetPackageManager.git
-cd I-Synergy.NugetPackageManager
+git clone https://github.com/I-Synergy/TheNugetPackageManager.git
+cd TheNugetPackageManager
 
 # 2. Install dependencies
 npm install
@@ -452,7 +460,7 @@ The script (`tools/generate-docs.mjs`) starts a local HTTP server, loads the UI 
 
 ```bash
 npm run package
-# → releases/I-Synergy.NugetPackageManager-x.x.x.vsix
+# → releases/thenugetpackagemanager-x.x.x.vsix
 ```
 
 ### Pull Request Guidelines
@@ -477,7 +485,7 @@ The extension runs in two isolated processes that communicate via a typed RPC la
 ┌─────────────────────────────────────────────┐   ┌──────────────────────────────────────────────┐
 │  VS Code Extension Host  (Node.js)           │   │  Webview  (Browser / Lit)                    │
 │                                             │   │                                              │
-│  extension.ts                               │   │  main.ts  →  I-Synergy.NugetPackageManager (root element) │
+│  extension.ts                               │   │  main.ts  →  the-nuget-package-manager (root element) │
 │  host-api.ts  ──  RpcHost                  │◄──►│  RpcClient  →  packages-view                │
 │  nuget/api.ts  (axios → NuGet API)         │   │  components/*  (@state, @property)           │
 │  utilities/  (csproj parser, decorator)    │   │  registrations.ts  (singletons)              │

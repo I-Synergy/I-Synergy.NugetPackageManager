@@ -1,5 +1,5 @@
 /**
- * Development server for NuGet Package Manager UI.
+ * Development server for the NuGet Package Manager UI.
  *
  * Serves the webview bundle with mock data so the UI can be iterated on
  * in a regular browser without a VS Code workspace or dotnet CLI.

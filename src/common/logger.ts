@@ -11,6 +11,7 @@ import {
     SEMRESATTRS_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
 import type { Attributes, TimeInput, Tracer } from "@opentelemetry/api";
+import { getSetting, isConfigAffected } from "./configuration";
 
 export class Logger {
     private static _outputChannel: vscode.OutputChannel;
@@ -32,15 +33,13 @@ export class Logger {
 
         this.updateLogLevel();
         context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('i-synergy-nugetpackagemanager.logLevel')) {
+            if (isConfigAffected(e, 'logLevel')) {
                 this.updateLogLevel();
             }
         }));
 
         const telemetryAddress = process.env.TELEMETRY_ADDRESS;
-        const telemetryEnabled = vscode.workspace
-            .getConfiguration("i-synergy-nugetpackagemanager")
-            .get<boolean>("enableTelemetry", false);
+        const telemetryEnabled = getSetting<boolean>("enableTelemetry", false);
         if (telemetryEnabled && telemetryAddress && vscode.env.isTelemetryEnabled) {
             this._isEnabled = true;
             const traceExporter = new OTLPTraceExporter({
@@ -49,7 +48,7 @@ export class Logger {
 
             this._provider = new BasicTracerProvider({
                 resource: resourceFromAttributes({
-                    [SEMRESATTRS_SERVICE_NAME]: "i-synergy-nugetpackagemanager",
+                    [SEMRESATTRS_SERVICE_NAME]: "thenugetpackagemanager",
                     [SEMRESATTRS_SERVICE_VERSION]: context.extension.packageJSON.version,
                     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT ?? "",
                     [SEMRESATTRS_OS_TYPE]: os.platform(),
@@ -86,7 +85,7 @@ export class Logger {
     }
 
     private static updateLogLevel(): void {
-        const logLevel = vscode.workspace.getConfiguration('i-synergy-nugetpackagemanager').get<string>('logLevel', 'INFO');
+        const logLevel = getSetting<string>('logLevel', 'INFO');
         this._logLevel = this._logLevels[logLevel] ?? 1;
     }
 

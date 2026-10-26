@@ -1,11 +1,11 @@
 import * as vscode from "vscode";
+import { getSetting } from "../../common/configuration";
 
 export default class StatusBarUtils {
   private static _item: vscode.StatusBarItem;
 
   public static show(percentage: number, message?: string) {
-    const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
-    if (!config.get("statusBarLoadingIndicator")) {
+    if (!getSetting<boolean>("statusBarLoadingIndicator", false)) {
       return;
     }
 
@@ -18,8 +18,7 @@ export default class StatusBarUtils {
   }
 
   public static ShowText(message: string) {
-    const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
-    if (!config.get("statusBarLoadingIndicator")) {
+    if (!getSetting<boolean>("statusBarLoadingIndicator", false)) {
       return;
     }
 

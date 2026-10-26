@@ -7,6 +7,7 @@ import * as vscode from "vscode";
 import PasswordScriptExecutor from "./password-script-executor";
 import { isPathInside } from "./workspace-path";
 import { Logger } from "../../common/logger";
+import { getSetting } from "../../common/configuration";
 import LocalNuGetFeed from "../nuget/local-feed";
 
 export type SourceWithCredentials = {
@@ -24,7 +25,6 @@ export default class NuGetConfigResolver {
   static async GetSourcesAndDecodePasswordsAsync(workspaceRoots?: string | string[]): Promise<SourceWithCredentials[]> {
     const roots = Array.isArray(workspaceRoots) ? workspaceRoots : (workspaceRoots ? [workspaceRoots] : []);
     Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Starting resolution (workspaceRoots: ${roots.join(", ")})`);
-    const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
     const sourcesMap = new Map<string, SourceWithCredentials>();
 
     const { sources: sourcesWithCreds, clearFound } = await this.ResolveConfigsAsync(roots);
@@ -37,7 +37,7 @@ export default class NuGetConfigResolver {
       sourcesMap.set(s.Name, entry);
     });
 
-    const vscodeSourcesRaw = config.get<Array<string>>("sources") ?? [];
+    const vscodeSourcesRaw = getSetting<string[]>("sources", []);
     const passwordScriptPaths = new Map<string, string>();
 
     vscodeSourcesRaw.forEach((x) => {
@@ -71,7 +71,7 @@ export default class NuGetConfigResolver {
     });
 
     const sources = Array.from(sourcesMap.values());
-    const allowlist = config.get<string[]>("passwordScriptAllowlist") ?? [];
+    const allowlist = getSetting<string[]>("passwordScriptAllowlist", []);
     const trusted = vscode.workspace.isTrusted !== false;
 
     for (const source of sources) {
