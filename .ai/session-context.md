@@ -10,7 +10,7 @@
 
 ## Project Overview
 
-**Extension ID:** `I-Synergy.thenugetpackagemanager`
+**Extension ID:** `I-Synergy.nugetpackagemanager`
 **Purpose:** VS Code extension for browsing, installing, updating, and auditing NuGet packages across .NET projects without leaving the editor.
 **Stack:** TypeScript, Node.js (host), Lit (webview), dotnet CLI, typed RPC over postMessage
 **Phase:** Active development — post-fork hardening
@@ -21,20 +21,20 @@
 
 ### Completed: Rename to TheNugetPackageManager + faster Updates (2026-10-26)
 - Plan: `.ai/plans/rename-and-faster-updates.md`; progress: `.ai/completed/rename-and-faster-updates.md`
-- Extension identity renamed to `thenugetpackagemanager` / `TheNugetPackageManager`; repository URLs now point at `I-Synergy/TheNugetPackageManager`
-- All internal IDs migrated: commands, webview panel, views, settings (`theNugetPackageManager.*`), global state, telemetry
+- Extension identity renamed to `nugetpackagemanager` / `TheNugetPackageManager`; repository URLs now point at `I-Synergy/TheNugetPackageManager`
+- All internal IDs migrated: commands, webview panel, views, settings (`nugetpackagemanager.*`), global state, telemetry
 - Legacy namespace removed completely: no `i-synergy-nugetpackagemanager.*` settings, no `nugetpackage.*` command aliases, no legacy panel ID/activation event; existing settings/keybindings must be recreated
 - Updates warm start: last scan persisted in `workspaceState`, painted immediately, live refresh in the background, selections preserved
 - NuGet metadata: registration dependency groups reused; on-disk HTTP cache (30 min, `globalStorage/nuget-http`); concurrency configurable (`updateCheckConcurrency`, default 8)
-- Verification: `npm test` — **388 passing**, lint/esbuild clean, VSIX `thenugetpackagemanager-1.2.14.vsix` inspected
+- Verification: `npm test` — **388 passing**, lint/esbuild clean, VSIX `nugetpackagemanager-1.2.14.vsix` inspected
 - Deferred: persisting TFM resolution (only helps unrestored trees; current workspaces resolve from XML/assets)
 
 ### Prepared: 2.0.0 local release (2026-10-26)
 - Version bumped 1.2.14 → **2.0.0** (breaking rename + dependency-aware updates) in `package.json`/`package-lock.json`
-- User-facing name is **NuGet Package Manager** (displayName, command titles, settings title, panel/HTML title, output channel, README); machine identity stays `thenugetpackagemanager` / `theNuGetPackageManager.*`
+- User-facing name is **NuGet Package Manager** (displayName, command titles, settings title, panel/HTML title, output channel, README); machine identity stays `nugetpackagemanager` / `theNuGetPackageManager.*`
 - `CHANGELOG.md` now has an empty `## Unreleased` followed by `## 2.0.0 (2026-10-26)`; `RELEASE_NOTES.md` rewritten for the GitHub Release
 - `.vscodeignore` excludes `docs/images/social-preview.png` (GitHub-only asset, keeps the VSIX lean)
-- Built `releases/thenugetpackagemanager-2.0.0.vsix` (24 files, 8.25 MB); manifest: Id `thenugetpackagemanager`, Version `2.0.0`, Publisher `I-Synergy`
+- Built `releases/nugetpackagemanager-2.0.0.vsix` (24 files, 8.25 MB); manifest: Id `nugetpackagemanager`, Version `2.0.0`, Publisher `I-Synergy`
 - Verification: `npm run package` clean, `npm test` — **385 passing**
 - Nothing committed, tagged, pushed or published; the user commits and releases
 

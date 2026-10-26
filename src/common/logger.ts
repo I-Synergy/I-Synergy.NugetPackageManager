@@ -48,7 +48,7 @@ export class Logger {
 
             this._provider = new BasicTracerProvider({
                 resource: resourceFromAttributes({
-                    [SEMRESATTRS_SERVICE_NAME]: "thenugetpackagemanager",
+                    [SEMRESATTRS_SERVICE_NAME]: "nugetpackagemanager",
                     [SEMRESATTRS_SERVICE_VERSION]: context.extension.packageJSON.version,
                     [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT ?? "",
                     [SEMRESATTRS_OS_TYPE]: os.platform(),

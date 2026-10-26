@@ -1,7 +1,7 @@
 import type * as vscode from "vscode";
 import type { GetOutdatedPackagesResponse } from "@/common/rpc/types";
 
-const STORAGE_KEY = "theNugetPackageManager.lastScan";
+const STORAGE_KEY = "nugetpackagemanager.lastScan";
 const SCHEMA_VERSION = 1;
 
 export type ScanCachePayload = {

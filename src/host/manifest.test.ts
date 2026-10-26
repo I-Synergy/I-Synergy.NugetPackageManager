@@ -29,7 +29,7 @@ suite('manifest identity', () => {
     const manifest = readManifest();
 
     test('uses the renamed extension identity', () => {
-        assert.strictEqual(manifest.name, 'thenugetpackagemanager');
+        assert.strictEqual(manifest.name, 'nugetpackagemanager');
         assert.strictEqual(manifest.displayName, 'NuGet Package Manager for VS Code');
         assert.strictEqual(manifest.publisher, 'I-Synergy');
     });
@@ -38,32 +38,32 @@ suite('manifest identity', () => {
         const ids = manifest.contributes.commands.map((command) => command.command);
         assert.ok(ids.length > 0);
         for (const id of ids) {
-            assert.ok(id.startsWith('theNugetPackageManager.'), `unexpected command id: ${id}`);
+            assert.ok(id.startsWith('nugetpackagemanager.'), `unexpected command id: ${id}`);
         }
-        assert.ok(ids.includes('theNugetPackageManager.open'));
+        assert.ok(ids.includes('nugetpackagemanager.open'));
     });
 
     test('uses the renamed view and panel IDs', () => {
         const container = manifest.contributes.viewsContainers.activitybar[0]!;
-        assert.strictEqual(container.id, 'theNugetPackageManager');
+        assert.strictEqual(container.id, 'nugetpackagemanager');
         assert.deepStrictEqual(
-            manifest.contributes.views['theNugetPackageManager']?.map((view) => view.id),
-            ['theNugetPackageManager.launcherView']
+            manifest.contributes.views['nugetpackagemanager']?.map((view) => view.id),
+            ['nugetpackagemanager.launcherView']
         );
         assert.ok(
-            manifest.activationEvents.includes('onWebviewPanel:theNugetPackageManager.panel'),
+            manifest.activationEvents.includes('onWebviewPanel:nugetpackagemanager.panel'),
             'the webview panel activation event must use the new ID'
         );
     });
 
     test('contributes the new settings namespace without legacy keys', () => {
         const keys = Object.keys(manifest.contributes.configuration.properties);
-        const newKeys = keys.filter((key) => key.startsWith('theNugetPackageManager.'));
+        const newKeys = keys.filter((key) => key.startsWith('nugetpackagemanager.'));
         const legacyKeys = keys.filter((key) => key.startsWith('i-synergy-nugetpackagemanager.'));
 
         assert.strictEqual(newKeys.length, 12);
         assert.strictEqual(legacyKeys.length, 0);
-        assert.ok(newKeys.includes('theNugetPackageManager.updateCheckConcurrency'));
+        assert.ok(newKeys.includes('nugetpackagemanager.updateCheckConcurrency'));
     });
 
     test('does not register legacy activation events', () => {

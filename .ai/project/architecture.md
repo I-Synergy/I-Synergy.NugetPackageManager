@@ -67,7 +67,7 @@ UI uses LitElement with VS Code CSS variable theming:
 
 ### View Routing
 
-Single-page navigation managed by `RouterType` in `src/web/router.ts`. The root `the-nuget-package-manager` element renders different views based on `router.CurrentRoute`.
+Single-page navigation managed by `RouterType` in `src/web/router.ts`. The root `nuget-package-manager` element renders different views based on `router.CurrentRoute`.
 
 ### Tab Auto-Refresh
 

@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 
 /** The extension's configuration namespace. */
-export const CONFIG_NS = "theNugetPackageManager";
+export const CONFIG_NS = "nugetpackagemanager";
 
 export const CONFIG_KEYS = [
   "skipRestore",

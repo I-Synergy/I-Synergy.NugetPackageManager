@@ -1,9 +1,9 @@
 {
-  "name": "thenugetpackagemanager",
+  "name": "nugetpackagemanager",
   "publisher": "I-Synergy",
   "displayName": "NuGet Package Manager for VS Code",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "license": "MIT",
   "icon": "docs/images/icon.png",
   "galleryBanner": {
@@ -43,35 +43,35 @@
     "workspaceContains:**/*.fsproj",
     "workspaceContains:**/*.sln",
     "workspaceContains:**/*.slnx",
-    "onWebviewPanel:theNugetPackageManager.panel",
+    "onWebviewPanel:nugetpackagemanager.panel",
     "workspaceContains:**/*.vbproj"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "theNugetPackageManager.open",
+        "command": "nugetpackagemanager.open",
         "title": "NuGet Package Manager for VS Code: Open Packages"
       },
       {
-        "command": "theNugetPackageManager.install",
+        "command": "nugetpackagemanager.install",
         "title": "NuGet Package Manager for VS Code: Add Package"
       },
       {
-        "command": "theNugetPackageManager.update",
+        "command": "nugetpackagemanager.update",
         "title": "NuGet Package Manager for VS Code: Update Package"
       },
       {
-        "command": "theNugetPackageManager.remove",
+        "command": "nugetpackagemanager.remove",
         "title": "NuGet Package Manager for VS Code: Remove Package"
       },
       {
-        "command": "theNugetPackageManager.openSettings",
+        "command": "nugetpackagemanager.openSettings",
         "title": "Settings",
         "icon": "$(extensions-manage)"
       },
       {
-        "command": "theNugetPackageManager.reportProblem",
+        "command": "nugetpackagemanager.reportProblem",
         "title": "Report Problem",
         "icon": "$(report)"
       }
@@ -79,25 +79,25 @@
     "menus": {
       "view/title": [
         {
-          "command": "theNugetPackageManager.reportProblem",
-          "when": "view == theNugetPackageManager.launcherView",
+          "command": "nugetpackagemanager.reportProblem",
+          "when": "view == nugetpackagemanager.launcherView",
           "group": "navigation@1"
         },
         {
-          "command": "theNugetPackageManager.openSettings",
-          "when": "view == theNugetPackageManager.launcherView",
+          "command": "nugetpackagemanager.openSettings",
+          "when": "view == nugetpackagemanager.launcherView",
           "group": "navigation@2"
         }
       ],
       "editor/title": [
         {
-          "command": "theNugetPackageManager.openSettings",
-          "when": "activeWebviewPanelId == theNugetPackageManager.panel",
+          "command": "nugetpackagemanager.openSettings",
+          "when": "activeWebviewPanelId == nugetpackagemanager.panel",
           "group": "navigation@1"
         },
         {
-          "command": "theNugetPackageManager.reportProblem",
-          "when": "activeWebviewPanelId == theNugetPackageManager.panel",
+          "command": "nugetpackagemanager.reportProblem",
+          "when": "activeWebviewPanelId == nugetpackagemanager.panel",
           "group": "navigation@2"
         }
       ]
@@ -105,16 +105,16 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "theNugetPackageManager",
+          "id": "nugetpackagemanager",
           "title": "NuGet",
           "icon": "resources/nuget.svg"
         }
       ]
     },
     "views": {
-      "theNugetPackageManager": [
+      "nugetpackagemanager": [
         {
-          "id": "theNugetPackageManager.launcherView",
+          "id": "nugetpackagemanager.launcherView",
           "name": "NuGet",
           "when": "nuget.hasSupportedProjects"
         }
@@ -123,12 +123,12 @@
     "configuration": {
       "title": "NuGet Package Manager for VS Code",
       "properties": {
-        "theNugetPackageManager.skipRestore": {
+        "nugetpackagemanager.skipRestore": {
           "type": "boolean",
           "default": false,
           "description": "Skip performing a restore preview and compatibility check"
         },
-        "theNugetPackageManager.sources": {
+        "nugetpackagemanager.sources": {
           "type": "array",
           "items": {
             "type": "string"
@@ -140,7 +140,7 @@
           ],
           "description": "NuGet sources"
         },
-        "theNugetPackageManager.passwordScriptAllowlist": {
+        "nugetpackagemanager.passwordScriptAllowlist": {
           "type": "array",
           "items": {
             "type": "string"
@@ -149,7 +149,7 @@
           "scope": "machine",
           "description": "Machine-scoped directories from which password scripts may be executed. Workspace-provided script paths outside this allowlist are refused."
         },
-        "theNugetPackageManager.logLevel": {
+        "nugetpackagemanager.logLevel": {
           "type": "string",
           "default": "INFO",
           "enum": [
@@ -160,27 +160,27 @@
           ],
           "description": "Minimum logging level"
         },
-        "theNugetPackageManager.enablePackageVersionInlineInfo": {
+        "nugetpackagemanager.enablePackageVersionInlineInfo": {
           "type": "boolean",
           "default": false,
           "description": "Show inline information about newer package versions in project files"
         },
-        "theNugetPackageManager.prerelease": {
+        "nugetpackagemanager.prerelease": {
           "type": "boolean",
           "default": false,
           "description": "Include prerelease versions when checking for package updates"
         },
-        "theNugetPackageManager.statusBarLoadingIndicator": {
+        "nugetpackagemanager.statusBarLoadingIndicator": {
           "type": "boolean",
           "default": false,
           "description": "Show a loading indicator in the status bar when loading packages"
         },
-        "theNugetPackageManager.enableTelemetry": {
+        "nugetpackagemanager.enableTelemetry": {
           "type": "boolean",
           "default": false,
           "description": "Send anonymous usage telemetry to the configured OTLP endpoint. Requires VS Code telemetry to be enabled and a TELEMETRY_ADDRESS environment variable."
         },
-        "theNugetPackageManager.frameworkAlignedPackages": {
+        "nugetpackagemanager.frameworkAlignedPackages": {
           "type": "array",
           "items": {
             "type": "string"
@@ -194,7 +194,7 @@
           ],
           "description": "Package patterns whose major version follows the target framework (net10.0 to 10.x). Used to keep framework-scoped update suggestions on the matching major line."
         },
-        "theNugetPackageManager.extraTargetFrameworks": {
+        "nugetpackagemanager.extraTargetFrameworks": {
           "type": "array",
           "items": {
             "type": "string"
@@ -202,7 +202,7 @@
           "default": [],
           "description": "Target frameworks to add when MSBuild evaluation is unavailable or incomplete (for example net11.0)."
         },
-        "theNugetPackageManager.excludeGlobs": {
+        "nugetpackagemanager.excludeGlobs": {
           "type": "array",
           "items": {
             "type": "string"
@@ -216,7 +216,7 @@
           ],
           "description": "Glob patterns excluded from project discovery."
         },
-        "theNugetPackageManager.updateCheckConcurrency": {
+        "nugetpackagemanager.updateCheckConcurrency": {
           "type": "number",
           "default": 8,
           "minimum": 1,

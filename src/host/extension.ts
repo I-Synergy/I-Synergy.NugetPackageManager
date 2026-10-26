@@ -10,16 +10,16 @@ import { RegisterBadgeView, SetUpdateBadge } from "./view-badge";
 import { getSetting } from "../common/configuration";
 
 const NUGET_VIEW_CONTEXT = "nuget.hasSupportedProjects";
-const PANEL_ID = "theNugetPackageManager.panel";
-const VIEW_ID = "theNugetPackageManager.launcherView";
+const PANEL_ID = "nugetpackagemanager.panel";
+const VIEW_ID = "nugetpackagemanager.launcherView";
 
 const COMMAND_IDS = {
-  open: "theNugetPackageManager.open",
-  install: "theNugetPackageManager.install",
-  update: "theNugetPackageManager.update",
-  remove: "theNugetPackageManager.remove",
-  reportProblem: "theNugetPackageManager.reportProblem",
-  openSettings: "theNugetPackageManager.openSettings",
+  open: "nugetpackagemanager.open",
+  install: "nugetpackagemanager.install",
+  update: "nugetpackagemanager.update",
+  remove: "nugetpackagemanager.remove",
+  reportProblem: "nugetpackagemanager.reportProblem",
+  openSettings: "nugetpackagemanager.openSettings",
 } as const;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -106,8 +106,8 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(new PackageVersionDecorator());
 
-  const previousVersion: string | undefined = context.globalState.get("theNugetPackageManager.version");
-  context.globalState.update("theNugetPackageManager.version", context.extension.packageJSON.version);
+  const previousVersion: string | undefined = context.globalState.get("nugetpackagemanager.version");
+  context.globalState.update("nugetpackagemanager.version", context.extension.packageJSON.version);
   if (previousVersion == undefined) {
     Logger.info("Extension.activate: Extension installed");
   } else if (previousVersion != context.extension.packageJSON.version)
@@ -285,7 +285,7 @@ class NugetWebviewManager implements vscode.Disposable {
           <title>NuGet Package Manager for VS Code</title>
         </head>
         <body>
-          <the-nuget-package-manager></the-nuget-package-manager>
+          <nuget-package-manager></nuget-package-manager>
           <script type="module" nonce="${nonceValue}" src="${webJsSrc}"></script>
         </body>
       </html>

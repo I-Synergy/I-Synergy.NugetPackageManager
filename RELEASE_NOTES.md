@@ -1,9 +1,9 @@
-# NuGet Package Manager 2.0.0
+# NuGet Package Manager 2.0.1
 
 ## Breaking: new identity
 
-- The extension is now **NuGet Package Manager for VS Code** (`thenugetpackagemanager`, ID `I-Synergy.thenugetpackagemanager`).
-- Commands, the webview panel, views and settings moved to the `theNugetPackageManager.*` namespace.
+- This is the first published build of **NuGet Package Manager for VS Code** (`nugetpackagemanager`, ID `I-Synergy.nugetpackagemanager`); the earlier 2.0.0 build under `thenugetpackagemanager` was unpublished.
+- Commands, the webview panel, views and settings moved to the `nugetpackagemanager.*` namespace.
 - The legacy `i-synergy-nugetpackagemanager.*` settings and `nugetpackage.*` command IDs were removed without compatibility shims, so existing keybindings and settings must be recreated.
 - The view container ID changed, so its Activity Bar placement resets once.
 - The Marketplace treats this as a new listing, so existing installations will not auto-update.
@@ -22,7 +22,7 @@
 - NuGet HTTP responses are cached on disk for 30 minutes under the extension's global storage, and Reload clears the cache.
 - `dependencyGroups` embedded in registration data are reused, so package details and constraint checks no longer issue a second request.
 - Constraint checks fetch metadata only for packages that directly declare the dependency, instead of the whole transitive closure.
-- Latest-version check concurrency is configurable through `theNugetPackageManager.updateCheckConcurrency` (default 8).
+- Latest-version check concurrency is configurable through `nugetpackagemanager.updateCheckConcurrency` (default 8).
 
 ## Diagnostics
 

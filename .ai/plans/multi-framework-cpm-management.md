@@ -127,7 +127,7 @@ New `src/host/utilities/project-framework-resolver.ts`:
 2. **Authoritative path:** `dotnet msbuild <project> -getProperty:TargetFramework -getProperty:TargetFrameworks -nologo` (JSON output; supported by the pinned SDK 11 and .NET 8+). This correctly evaluates the framework's `$([MSBuild]::VersionGreaterThanOrEquals('$(BundledNETCoreAppPackageVersion)','11.0'))` condition.
 3. **Fallback:** parse literal `<TargetFramework(s)>` from XML when `dotnet` is missing, the SDK is wrong, or the command times out (60 s). Mark `TfmsSource: "fallback"` and surface a warning badge.
 4. **Cache:** key = project path + mtime of the project and the nearest `Directory.Build.props` / `Directory.Build.targets` / `Directory.Packages.props` / `global.json`. Invalidate on any update. Run with concurrency 4 and show status-bar progress.
-5. **Manual override:** setting `theNugetPackageManager.extraTargetFrameworks` (array) for projects whose TFMs cannot be evaluated.
+5. **Manual override:** setting `nugetpackagemanager.extraTargetFrameworks` (array) for projects whose TFMs cannot be evaluated.
 
 ### 2.4 Resolution rules (single source of truth)
 
@@ -154,8 +154,8 @@ The framework's conditional lines are runtime-aligned (10.x for net10, 11.x for 
   - `latestCompatible`: highest version whose **major equals the TFM major** when the package matches an alignment pattern and the TFM is `net5.0+`.
   - `latestOverall`: current behaviour (highest across feeds, respecting the prerelease toggle).
 - Defaults:
-  - `theNugetPackageManager.frameworkAlignedPackages`: `["Microsoft.Extensions.*", "Microsoft.AspNetCore.*", "Microsoft.EntityFrameworkCore.*", "Microsoft.Maui.*", "System.*"]`.
-  - `theNugetPackageManager.allowMajorBump`: `false`.
+  - `nugetpackagemanager.frameworkAlignedPackages`: `["Microsoft.Extensions.*", "Microsoft.AspNetCore.*", "Microsoft.EntityFrameworkCore.*", "Microsoft.Maui.*", "System.*"]`.
+  - `nugetpackagemanager.allowMajorBump`: `false`.
 - UI shows `latestCompatible` as the primary action and `latestOverall` as a secondary action with a confirmation when it crosses a major line.
 - Prerelease remains a global toggle (existing setting). For this repo it must be enabled so the net11 line can see 11.0.0-rc.*.
 
@@ -194,7 +194,7 @@ UpdateCpmVersionsAsync(
 |---|---|
 | Source mapping | Parse `<packageSourceMapping>` in `nuget-config-resolver.ts` (merge across config chain, honour `<clear/>`); `getLatestVersion` queries only mapped sources for the package, falling back to all sources when no mapping exists |
 | Redundant lookups | Cache latest version by `(packageId, prerelease)`; one network lookup per package even if it appears in two TFM groups |
-| Discovery | Exclude `**/{bin,obj,TestResults,packages,.git}/**` from `findFiles`; add `theNugetPackageManager.excludeGlobs` |
+| Discovery | Exclude `**/{bin,obj,TestResults,packages,.git}/**` from `findFiles`; add `nugetpackagemanager.excludeGlobs` |
 | Solution scope | Already supports `.slnx`; add `workspaceContains:**/*.slnx` to `activationEvents` |
 | Caching | Cache parsed projects and CPM maps keyed by mtime; invalidate after writes |
 | Prerelease | Keep global toggle, but show for each TFM whether the installed version is prerelease and whether a stable update exists |
@@ -308,10 +308,10 @@ Workspace `.vscode/settings.json` recommendation:
 
 ```jsonc
 {
-  "theNugetPackageManager.prerelease": true,          // net11 line is RC
-  "theNugetPackageManager.skipRestore": false,        // restore validates both TFMs
-  "theNugetPackageManager.statusBarLoadingIndicator": true,
-  "theNugetPackageManager.frameworkAlignedPackages": [
+  "nugetpackagemanager.prerelease": true,          // net11 line is RC
+  "nugetpackagemanager.skipRestore": false,        // restore validates both TFMs
+  "nugetpackagemanager.statusBarLoadingIndicator": true,
+  "nugetpackagemanager.frameworkAlignedPackages": [
     "Microsoft.Extensions.*", "Microsoft.AspNetCore.*",
     "Microsoft.EntityFrameworkCore.*", "Microsoft.Maui.*", "System.*"
   ]
