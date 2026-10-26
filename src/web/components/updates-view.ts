@@ -59,6 +59,11 @@ export class UpdatesView extends LitElement {
           .package-list {
             flex: 0 0 auto;
           }
+
+          .group-select {
+            margin: 0;
+            accent-color: var(--vscode-focusBorder);
+          }
         }
 
       }
@@ -196,6 +201,11 @@ export class UpdatesView extends LitElement {
   private toggleSelectAll(): void {
     const selectAll = !this.allVisibleSelected;
     this.visiblePackages.forEach((p) => { p.Selected = selectAll; });
+    this.requestUpdate();
+  }
+
+  private toggleGroupSelection(packages: OutdatedPackageViewModel[], selected: boolean): void {
+    packages.forEach((pkg) => { pkg.Selected = selected; });
     this.requestUpdate();
   }
 
@@ -483,10 +493,22 @@ export class UpdatesView extends LitElement {
               <div class="package-list" role="list" aria-label="Outdated packages">
                 ${this.groupedVisiblePackages.map(
                   (group) => html`
-                    <div class="group-header">
-                      ${group.label}
+                    <label class="group-header">
+                      <input
+                        type="checkbox"
+                        class="group-select"
+                        aria-label="Select all ${group.label} updates"
+                        .checked=${group.packages.length > 0 && group.packages.every((pkg) => pkg.Selected)}
+                        .indeterminate=${group.packages.some((pkg) => pkg.Selected) && !group.packages.every((pkg) => pkg.Selected)}
+                        @change=${(e: Event) =>
+                          this.toggleGroupSelection(
+                            group.packages,
+                            (e.target as HTMLInputElement).checked
+                          )}
+                      />
+                      <span>${group.label}</span>
                       <span class="group-count">${group.packages.length}</span>
-                    </div>
+                    </label>
                     ${group.packages.map((pkg) => this.renderPackageRow(pkg))}
                   `
                 )}

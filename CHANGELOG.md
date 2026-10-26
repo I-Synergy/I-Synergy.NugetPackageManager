@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.2.14 (2026-10-26)
+
+- feat: add select/deselect-all controls to each Updates framework group (Shared, net10.0, net11.0, etc.), with indeterminate state.
+
 ## 1.2.13 (2026-10-25)
 
 - fix: refresh project and package data after a successful update so installed versions and update rows reflect the write immediately.

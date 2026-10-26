@@ -144,6 +144,31 @@ suite('UpdatesView', () => {
         assert.strictEqual(visible.length, 2);
     });
 
+    test('selects and deselects all visible packages in a group', () => {
+        const sharedA = makePackage('', '');
+        const sharedB = makePackage('', '');
+        const net10 = makePackage("$(TargetFramework.StartsWith('net10.0'))", 'net10.0');
+        view.packages = [sharedA, sharedB, net10];
+        view.selectedFramework = '';
+
+        const groups = (view as unknown as {
+            groupedVisiblePackages: Array<{ label: string; packages: OutdatedPackageViewModel[] }>;
+        }).groupedVisiblePackages;
+        const sharedGroup = groups.find((group) => group.label === 'Shared')!;
+        const toggle = (view as unknown as {
+            toggleGroupSelection(packages: OutdatedPackageViewModel[], selected: boolean): void;
+        }).toggleGroupSelection.bind(view);
+
+        toggle(sharedGroup.packages, true);
+        assert.ok(sharedA.Selected && sharedB.Selected);
+        assert.strictEqual(net10.Selected, false);
+
+        toggle(sharedGroup.packages, false);
+        assert.strictEqual(sharedA.Selected, false);
+        assert.strictEqual(sharedB.Selected, false);
+        assert.strictEqual(net10.Selected, false);
+    });
+
     test('emits packages-updated after a successful update', async () => {
         const pkg = makePackage("$(TargetFramework.StartsWith('net10.0'))", 'net10.0');
         view.packages = [pkg];

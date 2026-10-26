@@ -1,6 +1,8 @@
-# NuGet Package Manager 1.2.13
+# NuGet Package Manager 1.2.14
 
 ## Updates
+
+- Each Updates group has its own select/deselect-all checkbox.
 
 - Project and package data now refresh immediately after a successful update.
 
