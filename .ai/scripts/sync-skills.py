@@ -85,8 +85,10 @@ def sync_junction(source_rel: str, target_rel: str, dry_run: bool) -> str:
     target = root / target_rel
     source = (root / source_rel).resolve()
 
-    if target.exists():
-        if _is_junction(target):
+    # lexists() is true for a dangling junction/symlink, which exists() misses
+    # after the repository folder is renamed.
+    if os.path.lexists(target):
+        if _is_junction(target) or target.is_symlink():
             # Junction/symlink exists — verify it points correctly by checking
             # that the first file/subdir of the source is reachable through it
             first_entry = None
@@ -103,7 +105,7 @@ def sync_junction(source_rel: str, target_rel: str, dry_run: bool) -> str:
         action = "CREATE"
 
     if not dry_run:
-        if target.exists():
+        if os.path.lexists(target):
             _rmdir(target)
         ok = _create_link(target, source)
         if not ok:

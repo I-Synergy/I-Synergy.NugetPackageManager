@@ -1,7 +1,7 @@
-# NuGet Package Manager — Session Context
+# TheNugetPackageManager — Session Context
 
-**Last Updated:** 2026-10-24
-**Project Version:** 1.1.3
+**Last Updated:** 2026-10-26
+**Project Version:** 1.2.14
 **Branch:** bugfixes/main
 **Written By:** Reasonix Code
 **Next Session May Use:** Any
@@ -10,7 +10,7 @@
 
 ## Project Overview
 
-**Extension ID:** `I-Synergy.NugetPackageManager.I-Synergy.NugetPackageManager`
+**Extension ID:** `I-Synergy.thenugetpackagemanager`
 **Purpose:** VS Code extension for browsing, installing, updating, and auditing NuGet packages across .NET projects without leaving the editor.
 **Stack:** TypeScript, Node.js (host), Lit (webview), dotnet CLI, typed RPC over postMessage
 **Phase:** Active development — post-fork hardening
@@ -18,6 +18,40 @@
 ---
 
 ## Recent Work (this session and last)
+
+### Completed: Rename to TheNugetPackageManager + faster Updates (2026-10-26)
+- Plan: `.ai/plans/rename-and-faster-updates.md`; progress: `.ai/completed/rename-and-faster-updates.md`
+- Extension identity renamed to `thenugetpackagemanager` / `TheNugetPackageManager`; repository URLs now point at `I-Synergy/TheNugetPackageManager`
+- All internal IDs migrated: commands, webview panel, views, settings (`theNugetPackageManager.*`), global state, telemetry
+- Legacy namespace removed completely: no `i-synergy-nugetpackagemanager.*` settings, no `nugetpackage.*` command aliases, no legacy panel ID/activation event; existing settings/keybindings must be recreated
+- Updates warm start: last scan persisted in `workspaceState`, painted immediately, live refresh in the background, selections preserved
+- NuGet metadata: registration dependency groups reused; on-disk HTTP cache (30 min, `globalStorage/nuget-http`); concurrency configurable (`updateCheckConcurrency`, default 8)
+- Verification: `npm test` — **388 passing**, lint/esbuild clean, VSIX `thenugetpackagemanager-1.2.14.vsix` inspected
+- Deferred: persisting TFM resolution (only helps unrestored trees; current workspaces resolve from XML/assets)
+
+### Prepared: 2.0.0 local release (2026-10-26)
+- Version bumped 1.2.14 → **2.0.0** (breaking rename + dependency-aware updates) in `package.json`/`package-lock.json`
+- User-facing name is **NuGet Package Manager** (displayName, command titles, settings title, panel/HTML title, output channel, README); machine identity stays `thenugetpackagemanager` / `theNuGetPackageManager.*`
+- `CHANGELOG.md` now has an empty `## Unreleased` followed by `## 2.0.0 (2026-10-26)`; `RELEASE_NOTES.md` rewritten for the GitHub Release
+- `.vscodeignore` excludes `docs/images/social-preview.png` (GitHub-only asset, keeps the VSIX lean)
+- Built `releases/thenugetpackagemanager-2.0.0.vsix` (24 files, 8.25 MB); manifest: Id `thenugetpackagemanager`, Version `2.0.0`, Publisher `I-Synergy`
+- Verification: `npm run package` clean, `npm test` — **385 passing**
+- Nothing committed, tagged, pushed or published; the user commits and releases
+
+### Completed: Folder-rename follow-up (2026-10-26)
+- Local folder renamed to `TheNugetPackageManager` and the VS Code workspace reimported
+- Regenerated `.claude|.github|.reasonix/{skills,agents}` junctions; they still pointed at `I-Synergy.NugetPackageManager`
+- `sync-skills.py` now detects dangling junctions with `os.path.lexists` and repairs them (verified in a temp sandbox); previously it reported FAIL and left them broken
+- `.claude/settings.json` docs hook no longer hardcodes the old absolute path (uses `${CLAUDE_PROJECT_DIR:-.}`)
+- `origin` already points at `https://github.com/I-Synergy/TheNugetPackageManager.git`; GitHub 301s the old name, `git ls-remote` and `git push --dry-run` succeed
+- Verification: `npm run esbuild`, `npm run lint` clean; `npm test` — **385 passing**
+
+### Completed: NU1107 conflict handling and dependency-aware updates (2026-10-26)
+- Plan: `.ai/plans/nuget-version-conflict-handling.md`; progress: `.ai/completed/nuget-version-conflict-handling.md`
+- Restore diagnostics parse `NU1107`/`NU1605`/`NU1608`/`NU1102`/`NU1109` and report the constraint chain
+- Single-package updates snapshot and roll back on restore failure; restore-only, never `dotnet build` (regression test)
+- Updates caps suggestions to versions accepted by directly installed dependencies; blocked versions are visible in a **Dependency conflicts** section
+- Not committed yet; the working tree also contains the rename changes.
 
 ### Completed: Consolidation respects framework lines (2026-10-24)
 - Plan: `.ai/plans/consolidate-multi-framework.md`; progress: `.ai/completed/consolidate-multi-framework.md`
