@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 2.1.0 (2026-10-26)
+
+- fix: toggling **Prerelease** now clears the stale update count and rechecks it for the new filter. The Updates tab badge and the Activity Bar badge no longer keep the prerelease count.
+- feat: the Updates tab shows live progress while checking (`Parsing projects (2/8)`, `Checking latest versions (23/60)`, …) with a determinate progress bar instead of an indefinite spinner.
 
 ## 2.0.0 (2026-10-26)
 

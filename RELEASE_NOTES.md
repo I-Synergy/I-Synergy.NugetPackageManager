@@ -1,29 +1,24 @@
-# NuGet Package Manager 2.0.0
+# NuGet Package Manager 2.1.0
 
-## Breaking: new identity
+## Prerelease becomes response
 
-- The extension is now **NuGet Package Manager for Visual Studio Code** (`nugetpackagemanager`, ID `I-Synergy.nugetpackagemanager`). This is a new Marketplace listing; the earlier build under the previous ID was unpublished.
-- Commands, the webview panel, views and settings moved to the `nugetpackagemanager.*` namespace.
-- The legacy `i-synergy-nugetpackagemanager.*` settings and `nugetpackage.*` command IDs were removed without compatibility shims, so existing keybindings and settings must be recreated.
-- The view container ID changed, so its Activity Bar placement resets once.
-- The Marketplace treats this as a new listing, so existing installations will not auto-update.
+- Toggling **Prerelease** clears the stale count immediately instead of keeping the previous filter's number, and the Updates tab badge shows that it is recalculating.
+- Both the Updates tab badge and the Activity Bar badge now follow the new filter, including when the Updates tab is not open.
+- A Prerelease change rechecks updates for the newly selected filter; switching back rechecks again.
 
-## Dependency-aware updates
+## Live update-check progress
 
-- Restore failures now surface the real `dotnet` diagnostics, including the full `NU1107` constraint chain and the dependencies that declare the conflicting ranges.
-- Update suggestions are capped to versions accepted by installed dependencies, using `project.assets.json` and NuGet dependency metadata.
-- Unsafe versions appear in a **Dependency conflicts** section with the blocked version and the packages or ranges that pin it; the latest-overall action remains an explicit override.
-- A failed restore after a single install, update or uninstall rolls the project file and `Directory.Packages.props` back instead of leaving the workspace modified.
-- The extension restores after a write and never invokes `dotnet build`.
+- The Updates tab no longer sits on an indefinite `Checking for updates…` spinner. It shows the current stage and item counts while the scan runs:
+  - `Resolving package sources…`
+  - `Parsing projects (2/8)`
+  - `Checking latest versions (23/60)`
+  - `Checking dependency constraints (3/5)`
+  - `Preparing results…`
+- A determinate progress bar tracks overall completion, so a slow NuGet source no longer looks like a hang.
+- Progress polling stops as soon as the scan finishes, fails or the view is closed.
 
-## Faster updates
+## Everything in 2.0.0
 
-- The Updates tab paints the last persisted scan immediately and refreshes in the background; selections survive the refresh.
-- NuGet HTTP responses are cached on disk for 30 minutes under the extension's global storage, and Reload clears the cache.
-- `dependencyGroups` embedded in registration data are reused, so package details and constraint checks no longer issue a second request.
-- Constraint checks fetch metadata only for packages that directly declare the dependency, instead of the whole transitive closure.
-- Latest-version check concurrency is configurable through `nugetpackagemanager.updateCheckConcurrency` (default 8).
-
-## Diagnostics
-
-- Per-phase timings for the Updates scan are logged: project parse, framework sources, latest-version checks and constraint checks.
+- Dependency-aware update suggestions with a **Dependency conflicts** section and restore rollback.
+- Per-target-framework Central Package Management resolution, including framework-scoped versions.
+- Faster Updates scanning: persisted last scan, disk-cached NuGet HTTP responses, reused registration dependency groups and configurable concurrency.

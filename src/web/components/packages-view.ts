@@ -397,6 +397,7 @@ export class PackagesView extends LitElement {
   @state() packages: Array<PackageViewModel> = [];
   @state() projectsPackages: Array<PackageViewModel> = [];
   @state() updatesCount: number | null = null;
+  @state() private updatesCountLoading: boolean = false;
   @state() consolidateCount: number | null = null;
   @state() cleanupCount: number | null = null;
   @state() vulnerabilitiesCount: number | null = null;
@@ -646,10 +647,14 @@ export class PackagesView extends LitElement {
   }, 300);
 
   private async RefreshUpdateCountAsync(): Promise<void> {
-    if (!this._connected) return;
+    if (!this._connected) {
+      this.updatesCountLoading = false;
+      return;
+    }
     const paths = this.effectiveProjectPaths;
     if (paths.length === 0) {
       this.updatesCount = 0;
+      this.updatesCountLoading = false;
       await hostApi.updateBadgeAsync({ Count: 0, BlockedCount: 0 });
       return;
     }
@@ -658,13 +663,19 @@ export class PackagesView extends LitElement {
       { ProjectPaths: paths, Prerelease: this.filters.Prerelease },
       signal
     );
-    if (!this._connected || signal?.aborted) return;
+    if (!this._connected || signal?.aborted) {
+      this.updatesCountLoading = false;
+      return;
+    }
     if (result.ok) {
       this.updatesCount = result.value.Packages.length;
+      this.updatesCountLoading = false;
       await hostApi.updateBadgeAsync({
         Count: this.updatesCount,
         BlockedCount: result.value.BlockedPackages?.length ?? 0,
       });
+    } else {
+      this.updatesCountLoading = false;
     }
   }
 
@@ -862,6 +873,13 @@ export class PackagesView extends LitElement {
 
   async UpdatePackagesFiltersAsync(filters: FilterEvent): Promise<void> {
     const sourceChanged = this.filters.SourceUrl !== filters.SourceUrl;
+    const prereleaseChanged = this.filters.Prerelease !== filters.Prerelease;
+    if (prereleaseChanged) {
+      // The current count belongs to the other prerelease filter. Drop it right
+      // away so the tab badge never shows a stale number for this filter.
+      this.updatesCountLoading = true;
+      this.updatesCount = null;
+    }
     this.filters = filters;
     // Only clear the NuGet API factory cache when the source changes.
     // Prerelease changes don't need it: the package cache key is "${id}::${prerelease}",
@@ -878,6 +896,25 @@ export class PackagesView extends LitElement {
     if (sourceChanged) {
       await this.reloadChildViewsAsync(true);
     }
+    if (prereleaseChanged) {
+      const updates = this.shadowRoot?.querySelector("updates-view") as UpdatesView | null;
+      // A mounted Updates tab reruns its Task from the changed `prerelease` property
+      // (or from the source reload above) and reports the new count through
+      // `badge-changed`. With no Updates tab mounted nothing scans, so do it here.
+      if (!updates) await this.RefreshUpdateCountAsync();
+    }
+  }
+
+  private async OnUpdatesBadgeChangedAsync(
+    event: CustomEvent<{ Count: number; BlockedCount: number }>
+  ): Promise<void> {
+    this.updatesCount = event.detail.Count;
+    this.updatesCountLoading = false;
+    if (!this._connected) return;
+    await hostApi.updateBadgeAsync({
+      Count: event.detail.Count,
+      BlockedCount: event.detail.BlockedCount,
+    });
   }
 
   async SelectPackageAsync(
@@ -1428,8 +1465,8 @@ export class PackagesView extends LitElement {
               tabindex=${this.activeTab === "updates" ? 0 : -1}
               @click=${async () => await this.setTabAsync("updates")}
             >
-              Updates${this.updatesCount !== null
-                ? html`<span class="tab-badge">${this.updatesCount}</span>`
+              Updates${this.updatesCount !== null || this.updatesCountLoading
+                ? html`<span class="tab-badge">${this.updatesCountLoading ? "…" : this.updatesCount}</span>`
                 : nothing}
             </button>
             <button
@@ -1498,6 +1535,9 @@ export class PackagesView extends LitElement {
                   .availableFrameworks=${this.installedFrameworkOptions}
                   .selectedFramework=${this._updatesFramework}
                   @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
+                  @badge-changed=${async (e: CustomEvent<{ Count: number; BlockedCount: number }>) =>
+                    await this.OnUpdatesBadgeChangedAsync(e)}
+                  @scan-finished=${() => { this.updatesCountLoading = false; }}
                   @packages-updated=${async () => await this.onPackagesUpdatedAsync()}
                   @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
                   @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {

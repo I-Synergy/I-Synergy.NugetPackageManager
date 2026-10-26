@@ -36,6 +36,7 @@ suite('UpdatesView', () => {
                 },
                 restoreProjectsAsync: async () => ok(undefined),
                 updateBadgeAsync: async () => ok(undefined),
+                getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
             },
             writable: true,
             configurable: true,
@@ -284,6 +285,7 @@ suite('UpdatesView', () => {
                 batchUpdatePackagesAsync: async () => ok({ Results: [] }),
                 restoreProjectsAsync: async () => ok(undefined),
                 updateBadgeAsync: async () => ok(undefined),
+                getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
             },
             writable: true,
             configurable: true,
@@ -292,5 +294,84 @@ suite('UpdatesView', () => {
         await view.LoadOutdatedPackagesAsync();
 
         assert.deepStrictEqual(requests, [true, false]);
+    });
+
+    test('emits the tree badge payload with the blocked count', () => {
+        const emitted: Array<{ Count: number; BlockedCount: number }> = [];
+        view.addEventListener('badge-changed', (e) => {
+            emitted.push((e as CustomEvent<{ Count: number; BlockedCount: number }>).detail);
+        });
+
+        const raw = {
+            Id: 'Pkg.Shared',
+            InstalledVersion: '1.0.0',
+            LatestVersion: '2.0.0',
+            Projects: [{ Name: 'A', Path: '/ws/A.csproj', Version: '1.0.0' }],
+            SourceUrl: 'https://api.nuget.org/v3/index.json',
+            SourceName: 'nuget.org',
+        };
+
+        (view as unknown as {
+            applyScan(response: unknown, fromCache: boolean): void;
+        }).applyScan({
+            Packages: [raw],
+            BlockedPackages: [{
+                Id: 'Blocked.Package',
+                InstalledVersion: '1.0.0',
+                BlockedVersion: '2.0.0',
+                Reason: 'pinned',
+                BlockedBy: [{ PackageId: 'Pinned.Package', InstalledVersion: '1.0.0', Range: '[1.0.0]' }],
+            }],
+        }, false);
+
+        assert.deepStrictEqual(emitted, [{ Count: 1, BlockedCount: 1 }]);
+    });
+
+    test('updates the visible stage and counts from the scan progress RPC', async () => {
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                getOutdatedScanProgressAsync: async () => ok({
+                    Stage: 'Checking latest versions (3/10)…',
+                    Percent: 48,
+                    Completed: 3,
+                    Total: 10,
+                    Active: true,
+                }),
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        (view as unknown as { _activeScanId: string })._activeScanId = 'scan-1';
+        await (view as unknown as { refreshScanProgressAsync(id: string): Promise<void> })
+            .refreshScanProgressAsync('scan-1');
+
+        assert.deepStrictEqual(view.scanProgress, {
+            Stage: 'Checking latest versions (3/10)…',
+            Percent: 48,
+            Completed: 3,
+            Total: 10,
+        });
+    });
+
+    test('ignores progress reported for a superseded scan', async () => {
+        let polled = false;
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                getOutdatedScanProgressAsync: async () => {
+                    polled = true;
+                    return ok({ Stage: 'stale', Percent: 60, Completed: 6, Total: 10, Active: true });
+                },
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        (view as unknown as { _activeScanId: string })._activeScanId = 'scan-2';
+        await (view as unknown as { refreshScanProgressAsync(id: string): Promise<void> })
+            .refreshScanProgressAsync('scan-1');
+
+        assert.strictEqual(polled, false);
+        assert.strictEqual(view.scanProgress, null);
     });
 });

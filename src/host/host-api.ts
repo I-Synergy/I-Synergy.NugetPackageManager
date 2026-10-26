@@ -35,6 +35,8 @@ import type {
   ShowConfirmationResponse,
   GetOperationProgressRequest,
   GetOperationProgressResponse,
+  GetOutdatedScanProgressRequest,
+  GetOutdatedScanProgressResponse,
 } from "@/common/rpc/types";
 import type { Result } from "@/common/rpc/result";
 import { ok, fail } from "@/common/rpc/result";
@@ -59,6 +61,7 @@ import StatusBarUtils from "./utilities/status-bar-utils";
 import { Logger } from "../common/logger";
 import { getConfiguration, getSetting } from "../common/configuration";
 import { BuildScanCacheKey, ScanCacheStore } from "./scan-cache";
+import { ScanProgress } from "./utilities/scan-progress";
 import { AxiosError } from "axios";
 
 /**
@@ -770,6 +773,10 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
       Logger.info("getOutdatedPackages: Checking for outdated packages");
       StatusBarUtils.show(0, "Checking for updates...");
       const scanStarted = Date.now();
+      const scanId = request.ScanId;
+      const report = (stage: string, percent: number, completed = 0, total = 0): void => {
+        if (scanId) ScanProgress.Report(scanId, stage, percent, completed, total);
+      };
 
       if (request.ProjectPaths?.length) {
         const outsideWorkspace = await findOutsideWorkspaceAsync(request.ProjectPaths);
@@ -784,6 +791,7 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
       }
 
       try {
+        if (scanId) ScanProgress.Begin(scanId, "Resolving package sources…");
         const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
         let sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoots);
 
@@ -819,6 +827,7 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
           return ok(cachedResponse);
         }
 
+        report("Reading project files…", 4);
         let projectFiles = await vscode.workspace.findFiles(
           "**/*.{csproj,fsproj,vbproj}",
           "**/node_modules/**"
@@ -833,8 +842,23 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
         const cpmContext = createCpmParseContext();
 
         const parseStarted = Date.now();
+        const totalProjects = projectFiles.length;
+        let parsedProjects = 0;
+        report(`Parsing projects (0/${totalProjects})…`, 4, 0, totalProjects);
         const parseResults = await Promise.allSettled(
-          projectFiles.map(async (file) => parseProjectWithCpmAsync(file.fsPath, cpmContext))
+          projectFiles.map(async (file) => {
+            try {
+              return await parseProjectWithCpmAsync(file.fsPath, cpmContext);
+            } finally {
+              parsedProjects += 1;
+              report(
+                `Parsing projects (${parsedProjects}/${totalProjects})…`,
+                4 + (26 * parsedProjects) / Math.max(1, totalProjects),
+                parsedProjects,
+                totalProjects
+              );
+            }
+          })
         );
         const projects: Project[] = [];
         const projectCpmMaps = new Map<string, CpmPackageMap | null>();
@@ -933,12 +957,20 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
         const latestCache = new Map<string, Promise<Awaited<ReturnType<typeof getLatestVersion>>>>();
         const candidates: OutdatedCandidate[] = [];
         const latestStarted = Date.now();
+        report(`Checking latest versions (0/${installedKeys.length})…`, 30, 0, installedKeys.length);
 
         for (let i = 0; i < installedKeys.length; i += batchSize) {
           if (signal?.aborted) break;
           const batch = installedKeys.slice(i, i + batchSize);
-          const progress = Math.round(((i + batch.length) / installedKeys.length) * 100);
-          StatusBarUtils.show(progress, `Checking updates (${i + batch.length}/${installedKeys.length})...`);
+          const checked = i + batch.length;
+          const progress = Math.round((checked / installedKeys.length) * 100);
+          StatusBarUtils.show(progress, `Checking updates (${checked}/${installedKeys.length})...`);
+          report(
+            `Checking latest versions (${checked}/${installedKeys.length})…`,
+            30 + (60 * checked) / Math.max(1, installedKeys.length),
+            checked,
+            installedKeys.length
+          );
 
           const promises = batch.map(async (key) => {
             if (signal?.aborted) return;
@@ -999,6 +1031,9 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
         }
 
         const constraintStarted = Date.now();
+        const totalConditions = candidatesByCondition.size;
+        let completedConditions = 0;
+        report(`Checking dependency constraints (0/${totalConditions})…`, 90, 0, totalConditions);
         for (const [condition, conditionCandidates] of candidatesByCondition) {
           if (signal?.aborted) break;
           const constraintsByPackage = await collectGroupConstraintsAsync(
@@ -1007,6 +1042,13 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
             sources,
             dependencyDetailsCache,
             signal
+          );
+          completedConditions += 1;
+          report(
+            `Checking dependency constraints (${completedConditions}/${totalConditions})…`,
+            90 + (8 * completedConditions) / Math.max(1, totalConditions),
+            completedConditions,
+            totalConditions
           );
 
           for (const candidate of conditionCandidates) {
@@ -1070,6 +1112,7 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
 
         outdated.sort((a, b) => a.Id.localeCompare(b.Id));
         blocked.sort((a, b) => a.Id.localeCompare(b.Id));
+        report("Preparing results…", 99);
         Logger.info(
           `getOutdatedPackages: Dependency-constraint checks took ${Date.now() - constraintStarted}ms`
         );
@@ -1090,6 +1133,7 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
         Logger.error("getOutdatedPackages: Failed", err);
         return fail(`Failed to check for outdated packages: ${message}`);
       } finally {
+        if (scanId) ScanProgress.Complete(scanId);
         StatusBarUtils.hide();
       }
     },
@@ -1701,6 +1745,14 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
         return ok({ Stage: "", Percent: 0, Active: false });
       }
       return ok({ Stage: progress.stage, Percent: progress.percent, Active: true });
+    },
+
+    async getOutdatedScanProgressAsync(request: GetOutdatedScanProgressRequest): Promise<Result<GetOutdatedScanProgressResponse>> {
+      const progress = ScanProgress.Get(request.ScanId);
+      if (progress === null) {
+        return ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false });
+      }
+      return ok({ ...progress, Active: true });
     },
 
     async consolidatePackagesAsync(request: ConsolidateRequest, signal?: AbortSignal): Promise<Result<void>> {

@@ -19,6 +19,16 @@
 
 ## Recent Work (this session and last)
 
+### Completed: Prerelease-aware update badge + live scan progress (2026-10-26)
+- Plan: `.ai/plans/prerelease-badge-and-scan-progress.md`; progress: `.ai/completed/prerelease-badge-and-scan-progress.md`
+- Root cause of the stale badge: `UpdatePackagesFiltersAsync` never refreshed the update count on a Prerelease change. Only a mounted `updates-view` reported `count-changed`, and no scan ever called `updateBadgeAsync` for the Activity Bar badge.
+- `packages-view` now clears the count immediately (`…` in the tab badge), re-scans when no Updates tab is mounted, and keeps the tree badge in sync through a new `badge-changed` event (count + blocked count).
+- New `ScanId` on `GetOutdatedPackagesRequest` + `getOutdatedScanProgressAsync` RPC backed by `src/host/utilities/scan-progress.ts`. The host reports resolving sources → parsing projects (n/N) → latest versions (n/N) → dependency constraints (n/N) → preparing results.
+- `updates-view` polls progress every 400 ms while loading and renders the stage, item counts and a determinate progress bar; polling stops on completion, error, cancellation and disconnect.
+- Tests: **395 passing**; `npm run esbuild` and `npm run lint` clean.
+- Version bumped 2.0.0 → **2.1.0**; `CHANGELOG.md` and `RELEASE_NOTES.md` updated; local test build at
+  `releases/nugetpackagemanager-2.1.0.vsix` (24 files, 8.26 MB, manifest 2.1.0). Not committed.
+
 ### Completed: Rename to TheNugetPackageManager + faster Updates (2026-10-26)
 - Plan: `.ai/plans/rename-and-faster-updates.md`; progress: `.ai/completed/rename-and-faster-updates.md`
 - Extension identity renamed to `nugetpackagemanager` / `TheNugetPackageManager`; repository URLs now point at `I-Synergy/TheNugetPackageManager`

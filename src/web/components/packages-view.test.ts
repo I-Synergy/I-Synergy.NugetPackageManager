@@ -358,6 +358,43 @@ suite('PackagesView Component', () => {
             const callArgs = (mockHostApi.getPackagesAsync as sinon.SinonStub).firstCall.args[0];
             assert.strictEqual(callArgs.ForceReload, false);
         });
+
+        test('clears the stale update count immediately and rechecks it on a Prerelease change', async () => {
+            const internals = packagesView as unknown as {
+                _connected: boolean;
+                _allProjectPaths: string[];
+                updatesCountLoading: boolean;
+            };
+            internals._connected = true;
+            internals._allProjectPaths = ['/path/to/Project.csproj'];
+            packagesView.updatesCount = 60;
+
+            let releaseScan: ((value: unknown) => void) | undefined;
+            (mockHostApi.getOutdatedPackagesAsync as sinon.SinonStub)
+                .returns(new Promise((resolve) => { releaseScan = resolve; }));
+
+            const pending = packagesView.UpdatePackagesFiltersAsync({
+                Prerelease: false,
+                Query: '',
+                SourceUrl: '',
+                Sort: 'relevance',
+            });
+
+            // The prerelease count must not survive the toggle.
+            assert.strictEqual(packagesView.updatesCount, null);
+            assert.strictEqual(internals.updatesCountLoading, true);
+
+            releaseScan!(ok({ Packages: [{ Id: 'A' }, { Id: 'B' }] }));
+            await pending;
+
+            assert.strictEqual(packagesView.updatesCount, 2);
+            assert.strictEqual(internals.updatesCountLoading, false);
+
+            const scanRequest = (mockHostApi.getOutdatedPackagesAsync as sinon.SinonStub).firstCall.args[0];
+            assert.strictEqual(scanRequest.Prerelease, false);
+            const badgeRequest = (mockHostApi.updateBadgeAsync as sinon.SinonStub).lastCall.args[0];
+            assert.strictEqual(badgeRequest.Count, 2);
+        });
     });
 
     suite('ReloadInvoked', () => {

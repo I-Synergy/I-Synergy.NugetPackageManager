@@ -290,6 +290,41 @@ suite('HostAPI Tests', () => {
             assert.strictEqual(result.value.Packages[0]!.Projects.length, 2);
         });
 
+        test('reports live scan progress for a ScanId and clears it when the scan finishes', async () => {
+            const uri = makeProjectUri('/ws/A.csproj');
+            let releaseFind: (() => void) | undefined;
+            const gate = new Promise<void>((resolve) => { releaseFind = resolve; });
+            sandbox.stub(vscode.workspace, 'findFiles').callsFake(async () => {
+                await gate;
+                return [uri];
+            });
+            sandbox.stub(ProjectParser, 'ParseAsync').resolves(makeProject('A', '/ws/A.csproj', '1.0.0'));
+            setupNugetApi('2.0.0');
+
+            const api = createHostAPI();
+            const scanId = 'scan-progress-test';
+            const scan = api.getOutdatedPackagesAsync({ ForceReload: false, Prerelease: false, ScanId: scanId });
+
+            let inFlight = await api.getOutdatedScanProgressAsync({ ScanId: scanId });
+            for (let i = 0; i < 200; i += 1) {
+                if (inFlight.ok && inFlight.value.Active) break;
+                await new Promise((resolve) => setTimeout(resolve, 5));
+                inFlight = await api.getOutdatedScanProgressAsync({ ScanId: scanId });
+            }
+
+            assert.ok(inFlight.ok);
+            assert.strictEqual(inFlight.value.Active, true);
+            assert.match(inFlight.value.Stage, /Resolving package sources|Reading project files|Parsing projects/);
+
+            releaseFind!();
+            const result = await scan;
+            assert.ok(result.ok);
+
+            const finished = await api.getOutdatedScanProgressAsync({ ScanId: scanId });
+            assert.ok(finished.ok);
+            assert.strictEqual(finished.value.Active, false);
+        });
+
         test('keeps framework-scoped CPM resolutions when package has no single version', async () => {
             const uri = makeProjectUri('/ws/A.csproj');
             sandbox.stub(vscode.workspace, 'findFiles').resolves([uri]);

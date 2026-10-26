@@ -57,6 +57,11 @@ export type GetOutdatedPackagesRequest = CacheControl & {
   SourceUrl?: string;
   /** Return the persisted last scan without contacting the feeds. */
   PreferCache?: boolean;
+  /**
+   * Optional correlation id. When supplied, the host records live progress for this
+   * scan which the webview can poll with `getOutdatedScanProgressAsync`.
+   */
+  ScanId?: string;
 };
 
 export type GetInconsistentPackagesRequest = CacheControl & {
@@ -85,6 +90,23 @@ export type GetOperationProgressRequest = {
 export type GetOperationProgressResponse = {
   Stage: string;
   Percent: number;
+  Active: boolean;
+};
+
+export type GetOutdatedScanProgressRequest = {
+  ScanId: string;
+};
+
+export type GetOutdatedScanProgressResponse = {
+  /** Human-readable stage, e.g. "Checking latest versions (12/60)…". */
+  Stage: string;
+  /** Overall completion, 0-100. */
+  Percent: number;
+  /** Units finished in the current stage (packages, projects, conditions). */
+  Completed: number;
+  /** Units in the current stage, or 0 when the stage has no countable units. */
+  Total: number;
+  /** False once the scan has finished or the id is unknown. */
   Active: boolean;
 };
 
@@ -278,6 +300,7 @@ export interface HostAPI {
   getVulnerablePackagesAsync(req: GetVulnerablePackagesRequest, signal?: AbortSignal): Promise<Result<GetVulnerablePackagesResponse>>;
   showConfirmationAsync(req: ShowConfirmationRequest): Promise<Result<ShowConfirmationResponse>>;
   getOperationProgressAsync(req: GetOperationProgressRequest): Promise<Result<GetOperationProgressResponse>>;
+  getOutdatedScanProgressAsync(req: GetOutdatedScanProgressRequest): Promise<Result<GetOutdatedScanProgressResponse>>;
 }
 
 // ============================================================

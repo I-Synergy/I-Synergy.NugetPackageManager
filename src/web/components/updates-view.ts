@@ -126,6 +126,42 @@ export class UpdatesView extends LitElement {
         }
 
       }
+
+      .loading-body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        min-width: 220px;
+        max-width: 360px;
+      }
+
+      .loading-stage {
+        text-align: center;
+        color: var(--vscode-descriptionForeground);
+      }
+
+      .loading-count {
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--vscode-descriptionForeground);
+        opacity: 0.85;
+      }
+
+      .progress-track {
+        width: 220px;
+        height: 4px;
+        border-radius: 2px;
+        overflow: hidden;
+        background: color-mix(in srgb, var(--vscode-progressBar-background) 30%, transparent);
+      }
+
+      .progress-fill {
+        height: 100%;
+        border-radius: 2px;
+        background: var(--vscode-progressBar-background, var(--vscode-focusBorder));
+        transition: width 0.2s ease;
+      }
     `,
   ];
 
@@ -140,6 +176,12 @@ export class UpdatesView extends LitElement {
   @state() isRefreshing: boolean = false;
   @state() isUpdating: boolean = false;
   @state() statusText: string = "";
+  @state() scanProgress: {
+    Stage: string;
+    Percent: number;
+    Completed: number;
+    Total: number;
+  } | null = null;
   @property() selectedFramework: string = "";
   @property({ type: Boolean }) prerelease: boolean = false;
   @property({ attribute: false }) projectPaths: string[] = [];
@@ -147,18 +189,30 @@ export class UpdatesView extends LitElement {
   @property() filterQuery: string = "";
   @property({ attribute: false }) availableFrameworks: Array<{ value: string; label: string }> = [];
 
+  private _activeScanId: string = "";
+  private _progressTimer: ReturnType<typeof setInterval> | undefined;
+  private _progressPollInFlight = false;
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._activeScanId = "";
+    this.stopProgressPolling();
+  }
+
   private buildRequest(
     projectPaths: string[],
     sourceUrl: string,
     prerelease: boolean,
     forceReload: boolean,
-    preferCache = false
+    preferCache = false,
+    scanId = ""
   ): GetOutdatedPackagesRequest {
     const req: GetOutdatedPackagesRequest = { Prerelease: prerelease };
     if (projectPaths.length > 0) req.ProjectPaths = projectPaths;
     if (sourceUrl) req.SourceUrl = sourceUrl;
     if (forceReload) req.ForceReload = true;
     if (preferCache) req.PreferCache = true;
+    if (scanId) req.ScanId = scanId;
     return req;
   }
 
@@ -194,6 +248,11 @@ export class UpdatesView extends LitElement {
       bubbles: true,
       composed: true,
     }));
+    this.dispatchEvent(new CustomEvent<{ Count: number; BlockedCount: number }>("badge-changed", {
+      detail: { Count: packages.length, BlockedCount: this.blockedPackages.length },
+      bubbles: true,
+      composed: true,
+    }));
     this.dispatchEvent(new CustomEvent("framework-options-changed", {
       detail: this.frameworkOptions,
       bubbles: true,
@@ -201,14 +260,64 @@ export class UpdatesView extends LitElement {
     }));
   }
 
+  private startProgressPolling(scanId: string): void {
+    this.stopProgressPolling();
+    this._progressTimer = setInterval(() => {
+      void this.refreshScanProgressAsync(scanId);
+    }, 400);
+  }
+
+  private stopProgressPolling(): void {
+    if (this._progressTimer !== undefined) {
+      clearInterval(this._progressTimer);
+      this._progressTimer = undefined;
+    }
+  }
+
+  private async refreshScanProgressAsync(scanId: string): Promise<void> {
+    if (this._activeScanId !== scanId || this._progressPollInFlight) return;
+    this._progressPollInFlight = true;
+    try {
+      const result = await hostApi.getOutdatedScanProgressAsync({ ScanId: scanId });
+      if (this._activeScanId !== scanId) return;
+      if (!result.ok || !result.value.Active) return;
+      this.scanProgress = {
+        Stage: result.value.Stage,
+        Percent: result.value.Percent,
+        Completed: result.value.Completed,
+        Total: result.value.Total,
+      };
+    } finally {
+      this._progressPollInFlight = false;
+    }
+  }
+
   private _loadTask = new Task(this, {
     task: async ([projectPaths, sourceUrl, prerelease, forceReload], { signal }) => {
-      const result = await hostApi.getOutdatedPackagesAsync(
-        this.buildRequest(projectPaths, sourceUrl, prerelease, forceReload),
-        signal
-      );
-      if (!result.ok) throw new Error("Failed to check for updates");
-      return result.value;
+      const scanId = globalThis.crypto.randomUUID();
+      this._activeScanId = scanId;
+      this.scanProgress = {
+        Stage: "Preparing update check…",
+        Percent: 0,
+        Completed: 0,
+        Total: 0,
+      };
+      this.startProgressPolling(scanId);
+      try {
+        const result = await hostApi.getOutdatedPackagesAsync(
+          this.buildRequest(projectPaths, sourceUrl, prerelease, forceReload, false, scanId),
+          signal
+        );
+        if (!result.ok) throw new Error("Failed to check for updates");
+        return result.value;
+      } finally {
+        if (this._activeScanId === scanId) {
+          this._activeScanId = "";
+          this.stopProgressPolling();
+          this.scanProgress = null;
+          this.dispatchEvent(new CustomEvent("scan-finished", { bubbles: true, composed: true }));
+        }
+      }
     },
     args: () => [this.projectPaths, this.sourceUrl, this.prerelease, false] as [string[], string, boolean, boolean],
     onComplete: (response) => {
@@ -556,6 +665,8 @@ export class UpdatesView extends LitElement {
   override render(): unknown {
     const isLoading = this._loadTask.status === TaskStatus.PENDING;
     const hasError = this._loadTask.status === TaskStatus.ERROR;
+    const progress = this.scanProgress;
+    const progressPercent = Math.max(0, Math.min(100, Math.round(progress?.Percent ?? 0)));
     const visible = this.visiblePackages;
     const totalSelectedCount = visible.filter((p) => p.Selected).length;
     const allVisibleSelected = this.allVisibleSelected;
@@ -632,9 +743,23 @@ export class UpdatesView extends LitElement {
 
         ${isLoading
           ? html`
-              <div class="loading" role="status" aria-label="Loading">
+              <div class="loading" role="status" aria-live="polite" aria-label="Loading">
                 <span class="spinner large"></span>
-                <span>Checking for updates...</span>
+                <div class="loading-body">
+                  <span class="loading-stage">${progress?.Stage || "Checking for updates..."}</span>
+                  ${progress && progress.Total > 0
+                    ? html`<span class="loading-count">${progress.Completed} of ${progress.Total}</span>`
+                    : nothing}
+                  <div
+                    class="progress-track"
+                    role="progressbar"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow=${progressPercent}
+                  >
+                    <div class="progress-fill" style="width: ${progressPercent}%"></div>
+                  </div>
+                </div>
               </div>
             `
           : nothing}
