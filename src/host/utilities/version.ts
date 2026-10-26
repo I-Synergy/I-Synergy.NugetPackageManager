@@ -100,3 +100,33 @@ export function isVersionInRange(version: string, range: string): boolean {
 export function normalizeVersion(version: string): string {
   return version.split("+")[0]!.toLowerCase();
 }
+
+/**
+ * Evaluates a NuGet dependency range against a concrete version.
+ *
+ * - interval / exact notation is delegated to `isVersionInRange`
+ *   (`[1.0.0]`, `[1.0.0, 2.0.0)`, ...)
+ * - a bare version means "at least" (NuGet's shorthand in nuspec files)
+ * - floating ranges such as `1.*` / `1.2.*` match the prefix
+ * - `*` matches everything
+ *
+ * An empty or unparseable range is treated as unconstrained so a suggestion is
+ * never hidden because the metadata could not be understood.
+ */
+export function satisfiesVersionRange(version: string, range: string): boolean {
+  const trimmed = range.trim();
+  if (!trimmed || trimmed === "*") return true;
+
+  if (/[[\]()]/.test(trimmed)) {
+    // Interval notation is only meaningful when it is actually a range. A bare
+    // value in parentheses would already be caught above.
+    return isVersionInRange(version, trimmed);
+  }
+
+  if (trimmed.endsWith(".*")) {
+    const prefix = trimmed.slice(0, -1);
+    return version.toLowerCase().startsWith(prefix.toLowerCase());
+  }
+
+  return compareVersions(version, trimmed) >= 0;
+}

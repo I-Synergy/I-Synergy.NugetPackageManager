@@ -87,6 +87,11 @@ type OutdatedPackage = {
   CpmFramework?: string;   // resolved TFM, e.g. "net10.0"; absent = unconditional
   CpmConditionLabel?: string; // disambiguated condition label, e.g. "not net11.0"
   CpmMatched?: boolean;    // false when the condition matched none of the project's TFMs
+  BlockedBy?: Array<{      // dependencies whose declared range rejects LatestOverallVersion
+    PackageId: string;
+    InstalledVersion: string;
+    Range: string;
+  }>;
 };
 
 type InconsistentPackage = {

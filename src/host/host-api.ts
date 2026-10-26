@@ -43,14 +43,22 @@ import CpmResolver, { type CpmPackageMap, type CpmVersionChange } from "./utilit
 import { getTfmMajorVersion } from "./utilities/cpm-condition";
 import ProjectFrameworkResolver from "./utilities/project-framework-resolver";
 import { findPathOutsideWorkspaceAsync } from "./utilities/workspace-path";
-import { compareVersions, isVersionInRange } from "./utilities/version";
+import { compareVersions, isVersionInRange, satisfiesVersionRange } from "./utilities/version";
 import { isValidNuGetVersion, isValidPackageId } from "./utilities/nuget-identifier";
+import {
+  FormatRestoreConflicts,
+  ParseRestoreConflicts,
+  SummarizeRestoreFailure,
+  type RestoreConflict,
+} from "./utilities/restore-diagnostics";
 import nugetApiFactory from "./nuget/api-factory";
 import { SetUpdateBadge } from "./view-badge";
 import NuGetConfigResolver from "./utilities/nuget-config-resolver";
 import TaskExecutor, { DotnetError } from "./utilities/task-executor";
 import StatusBarUtils from "./utilities/status-bar-utils";
 import { Logger } from "../common/logger";
+import { getConfiguration, getSetting } from "../common/configuration";
+import { BuildScanCacheKey, ScanCacheStore } from "./scan-cache";
 import { AxiosError } from "axios";
 
 /**
@@ -112,11 +120,10 @@ function getCpmSettings(): {
   extraTargetFrameworks: string[];
   excludeGlobs: string[];
 } {
-  const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
   return {
-    alignedPatterns: config.get<string[]>("frameworkAlignedPackages") ?? DEFAULT_FRAMEWORK_ALIGNED_PATTERNS,
-    extraTargetFrameworks: config.get<string[]>("extraTargetFrameworks") ?? [],
-    excludeGlobs: config.get<string[]>("excludeGlobs") ?? [],
+    alignedPatterns: getSetting<string[]>("frameworkAlignedPackages", DEFAULT_FRAMEWORK_ALIGNED_PATTERNS),
+    extraTargetFrameworks: getSetting<string[]>("extraTargetFrameworks", []),
+    excludeGlobs: getSetting<string[]>("excludeGlobs", []),
   };
 }
 
@@ -304,7 +311,8 @@ function formatApiError(err: unknown): string {
   return String(err);
 }
 
-export function createHostAPI(): HostAPI {
+export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
+  const scanCache = new ScanCacheStore(context?.workspaceState);
   return {
     async getProjectsAsync(request: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>> {
       Logger.info("getProjects: Handling request");
@@ -539,13 +547,31 @@ export function createHostAPI(): HostAPI {
         return fail("cancelled");
       }
 
-      const skipRestoreConfig = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore") ?? "";
+      const skipRestoreConfig = getSetting<boolean>("skipRestore", false);
       const cpmMapBefore = await CpmResolver.GetFrameworkPackageMapAsync(request.ProjectPath);
       const isCpmEnabled = cpmMapBefore !== null;
       const isCpmPackage = cpmMapBefore !== null && CpmResolver.HasPackage(cpmMapBefore, request.PackageId);
       const skipRestore = !!skipRestoreConfig && !isCpmEnabled;
 
+      // A single-package operation mutates at least the project file and, for
+      // CPM, Directory.Packages.props. Uninstall can also prune other props
+      // files, so snapshot all of them up front. A failed restore then leaves
+      // the workspace exactly as it was, matching the batch path.
+      const snapshotPaths = new Set<string>([request.ProjectPath]);
+      const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(request.ProjectPath);
+      if (cpmFilePath) snapshotPaths.add(cpmFilePath);
+      if (request.Type === "UNINSTALL" && isCpmEnabled) {
+        const propsFiles = await vscode.workspace.findFiles(
+          "**/Directory.Packages.props",
+          "**/{bin,obj,node_modules,.git}/**"
+        );
+        for (const file of propsFiles) snapshotPaths.add(file.fsPath);
+      }
+      const snapshots = await snapshotFilesAsync([...snapshotPaths]);
+      let writeAttempted = false;
+
       try {
+        writeAttempted = true;
         if (request.Type === "UNINSTALL") {
           await executeRemovePackage(request.PackageId, request.ProjectPath, request.OperationId, signal);
           if (isCpmPackage) {
@@ -606,7 +632,34 @@ export function createHostAPI(): HostAPI {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        return fail(`Failed to ${request.Type.toLowerCase()} package: ${message}`);
+        const detail = err instanceof DotnetError ? SummarizeRestoreFailure(err.output) : null;
+
+        let rollbackError: string | undefined;
+        if (writeAttempted) {
+          rollbackError = await rollbackFilesAsync(snapshots);
+          if (!skipRestore && !signal?.aborted) {
+            // Best effort: bring the restored graph back in line with the
+            // rolled-back files. A failure here is reported together with the
+            // original error rather than masking it.
+            const restoreFailure = await restoreProjectsInternalAsync([request.ProjectPath], signal, false);
+            if (restoreFailure) {
+              rollbackError = [rollbackError, restoreFailure.message].filter(Boolean).join("; ");
+            }
+          }
+          Logger.error(`updateProject: Rolled back ${request.Type.toLowerCase()} of ${request.PackageId}`, err);
+        }
+
+        const action = request.Type === "UNINSTALL"
+          ? "uninstall"
+          : request.Type === "INSTALL"
+            ? "install"
+            : "update";
+        const rollbackNote = writeAttempted
+          ? rollbackError
+            ? ` (rollback incomplete: ${rollbackError})`
+            : " (rolled back)"
+          : "";
+        return fail(`Failed to ${action} package: ${detail ?? message}${rollbackNote}`);
       } finally {
         StatusBarUtils.hide();
       }
@@ -621,7 +674,6 @@ export function createHostAPI(): HostAPI {
 
     async getConfigurationAsync(): Promise<Result<GetConfigurationResponse>> {
       Logger.info("getConfiguration: Retrieving configuration");
-      const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
 
       const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
       const sourcesWithCreds = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoots);
@@ -631,7 +683,7 @@ export function createHostAPI(): HostAPI {
         Url: s.Url,
       }));
 
-      const vscodeSourcesRaw = config.get<string[]>("sources") ?? [];
+      const vscodeSourcesRaw = getSetting<string[]>("sources", []);
       for (const rawSourceConfig of vscodeSourcesRaw) {
         try {
           const parsed = JSON.parse(rawSourceConfig) as {
@@ -651,18 +703,18 @@ export function createHostAPI(): HostAPI {
 
       return ok({
         Configuration: {
-          SkipRestore: config.get("skipRestore") ?? false,
-          EnablePackageVersionInlineInfo: config.get("enablePackageVersionInlineInfo") ?? false,
-          Prerelease: config.get("prerelease") ?? false,
+          SkipRestore: getSetting<boolean>("skipRestore", false),
+          EnablePackageVersionInlineInfo: getSetting<boolean>("enablePackageVersionInlineInfo", false),
+          Prerelease: getSetting<boolean>("prerelease", false),
           Sources: sources,
-          StatusBarLoadingIndicator: config.get("statusBarLoadingIndicator") ?? false,
+          StatusBarLoadingIndicator: getSetting<boolean>("statusBarLoadingIndicator", false),
         },
       });
     },
 
     async updateConfigurationAsync(request: UpdateConfigurationRequest): Promise<Result<void>> {
       Logger.info("updateConfiguration: Updating configuration");
-      const config = vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager");
+      const config = getConfiguration();
 
       const sources = request.Configuration.Sources.map((x) =>
         JSON.stringify({
@@ -672,16 +724,16 @@ export function createHostAPI(): HostAPI {
         })
       );
 
-      if (config.get("skipRestore") !== request.Configuration.SkipRestore) {
+      if (getSetting<boolean>("skipRestore", false) !== request.Configuration.SkipRestore) {
         await config.update("skipRestore", request.Configuration.SkipRestore, vscode.ConfigurationTarget.Global);
       }
-      if (config.get("enablePackageVersionInlineInfo") !== request.Configuration.EnablePackageVersionInlineInfo) {
+      if (getSetting<boolean>("enablePackageVersionInlineInfo", false) !== request.Configuration.EnablePackageVersionInlineInfo) {
         await config.update("enablePackageVersionInlineInfo", request.Configuration.EnablePackageVersionInlineInfo, vscode.ConfigurationTarget.Global);
       }
-      if (config.get("prerelease") !== request.Configuration.Prerelease) {
+      if (getSetting<boolean>("prerelease", false) !== request.Configuration.Prerelease) {
         await config.update("prerelease", request.Configuration.Prerelease, vscode.ConfigurationTarget.Global);
       }
-      const currentSources = config.get<string[]>("sources") ?? [];
+      const currentSources = getSetting<string[]>("sources", []);
       if (JSON.stringify(currentSources) !== JSON.stringify(sources)) {
         await config.update("sources", sources, vscode.ConfigurationTarget.Global);
       }
@@ -717,6 +769,7 @@ export function createHostAPI(): HostAPI {
     async getOutdatedPackagesAsync(request: GetOutdatedPackagesRequest, signal?: AbortSignal): Promise<Result<GetOutdatedPackagesResponse>> {
       Logger.info("getOutdatedPackages: Checking for outdated packages");
       StatusBarUtils.show(0, "Checking for updates...");
+      const scanStarted = Date.now();
 
       if (request.ProjectPaths?.length) {
         const outsideWorkspace = await findOutsideWorkspaceAsync(request.ProjectPaths);
@@ -727,7 +780,7 @@ export function createHostAPI(): HostAPI {
       }
 
       if (request.ForceReload) {
-        nugetApiFactory.ClearCache();
+        nugetApiFactory.ClearCache(true);
       }
 
       try {
@@ -743,6 +796,29 @@ export function createHostAPI(): HostAPI {
         }
 
         const settings = getCpmSettings();
+
+        const cacheKey = BuildScanCacheKey({
+          workspaceRoots,
+          projectPaths: request.ProjectPaths ?? [],
+          sourceUrls: sources.map((source) => source.Url),
+          prerelease: request.Prerelease,
+          excludeGlobs: settings.excludeGlobs,
+        });
+
+        if (request.PreferCache && !request.ForceReload) {
+          const cached = await scanCache.LoadAsync(cacheKey);
+          StatusBarUtils.hide();
+          if (!cached) return ok({ Packages: [], FromCache: true });
+          const cachedResponse: GetOutdatedPackagesResponse = {
+            Packages: cached.Packages,
+            FromCache: true,
+            ScannedAt: cached.ScannedAt,
+          };
+          if (cached.BlockedPackages.length > 0) cachedResponse.BlockedPackages = cached.BlockedPackages;
+          Logger.info(`getOutdatedPackages: Served ${cached.Packages.length} package(s) from the last scan`);
+          return ok(cachedResponse);
+        }
+
         let projectFiles = await vscode.workspace.findFiles(
           "**/*.{csproj,fsproj,vbproj}",
           "**/node_modules/**"
@@ -756,6 +832,7 @@ export function createHostAPI(): HostAPI {
         // Shares CPM parses and TFM evaluation across all projects in this request.
         const cpmContext = createCpmParseContext();
 
+        const parseStarted = Date.now();
         const parseResults = await Promise.allSettled(
           projectFiles.map(async (file) => parseProjectWithCpmAsync(file.fsPath, cpmContext))
         );
@@ -770,17 +847,21 @@ export function createHostAPI(): HostAPI {
           }
         });
 
-        const installedMap = new Map<
-          string,  // composite key: packageId + "\0" + condition + "\0" + tfm
-          {
-            version: string;
-            condition: string;
-            framework: string;
-            conditionLabel: string;
-            matched: boolean;
-            projects: Array<{ Name: string; Path: string; Version: string }>;
-          }
-        >();
+        const tfmSources = new Map<string, number>();
+        for (const project of projects) {
+          const source = project.TfmSource ?? "unknown";
+          tfmSources.set(source, (tfmSources.get(source) ?? 0) + 1);
+        }
+        Logger.info(
+          `getOutdatedPackages: Parsed ${projects.length} project(s) in ${Date.now() - parseStarted}ms` +
+          ` (TFM sources: ${[...tfmSources].map(([source, count]) => `${source}=${count}`).join(", ") || "none"})`
+        );
+
+        const installedMap = new Map<string, InstalledPackageEntry>();
+
+        // Direct packages per condition group. Used to work out which of them
+        // declare a version range on a package we are about to suggest.
+        const groups = new Map<string, InstalledPackageGroup>();
 
         for (const project of projects) {
           for (const pkg of project.Packages) {
@@ -822,16 +903,36 @@ export function createHostAPI(): HostAPI {
                   projects: [projectInfo],
                 });
               }
+
+              let group = groups.get(resolution.Condition);
+              if (!group) {
+                group = { tfms: new Set(), projectPaths: new Set(), direct: new Map() };
+                groups.set(resolution.Condition, group);
+              }
+              const idKey = pkg.Id.toLowerCase();
+              let direct = group.direct.get(idKey);
+              if (!direct) {
+                direct = { id: pkg.Id, versions: new Set() };
+                group.direct.set(idKey, direct);
+              }
+              direct.versions.add(resolution.Version);
+              group.projectPaths.add(project.Path);
+              if (resolution.Tfm) group.tfms.add(resolution.Tfm);
+              for (const tfm of project.TargetFrameworks ?? []) group.tfms.add(tfm);
             }
           }
         }
 
         Logger.info(`getOutdatedPackages: ${installedMap.size} unique packages to check`);
 
-        const outdated: OutdatedPackage[] = [];
         const installedKeys = Array.from(installedMap.keys());
-        const batchSize = 5;
+        const configuredConcurrency = getSetting<number>("updateCheckConcurrency", 8);
+        const batchSize = Number.isFinite(configuredConcurrency)
+          ? Math.min(32, Math.max(1, Math.trunc(configuredConcurrency)))
+          : 8;
         const latestCache = new Map<string, Promise<Awaited<ReturnType<typeof getLatestVersion>>>>();
+        const candidates: OutdatedCandidate[] = [];
+        const latestStarted = Date.now();
 
         for (let i = 0; i < installedKeys.length; i += batchSize) {
           if (signal?.aborted) break;
@@ -855,38 +956,135 @@ export function createHostAPI(): HostAPI {
 
             const tfmMajor = installed.framework ? getTfmMajorVersion(installed.framework) : null;
             const aligned = tfmMajor !== null && isFrameworkAlignedPackage(packageId, settings.alignedPatterns);
-            const compatibleVersion = aligned && tfmMajor !== null
-              ? (getLatestInMajor(latest.versions, tfmMajor) ?? installed.version)
-              : latest.version;
+            // Search results occasionally omit the version list; the reported
+            // latest version must still be considered.
+            const allVersions = latest.versions.length > 0 ? latest.versions : [latest.version];
+            const alignedVersions = aligned && tfmMajor !== null
+              ? allVersions.filter((version) => getVersionMajor(version) === tfmMajor)
+              : allVersions;
+            // Keep the historical fallback: when the TFM's major line has no
+            // newer version, the overall latest is still offered (as
+            // LatestOverallVersion) instead of hiding the update.
+            const pool = alignedVersions.some((version) => compareVersions(version, installed.version) > 0)
+              ? alignedVersions
+              : allVersions;
+            const available = pool
+              .filter((version) => compareVersions(version, installed.version) > 0)
+              .sort(compareVersions);
+            if (available.length === 0) return;
 
-            const primary = compareVersions(compatibleVersion, installed.version) > 0
-              ? compatibleVersion
-              : latest.version;
-
-            const outdatedEntry: OutdatedPackage = {
-              Id: packageId,
-              InstalledVersion: installed.version,
-              LatestVersion: primary,
-              Projects: installed.projects,
-              SourceUrl: latest.sourceUrl,
-              SourceName: latest.sourceName,
-            };
-            if (installed.condition) outdatedEntry.CpmCondition = installed.condition;
-            if (installed.framework) outdatedEntry.CpmFramework = installed.framework;
-            if (installed.conditionLabel) outdatedEntry.CpmConditionLabel = installed.conditionLabel;
-            if (!installed.matched) outdatedEntry.CpmMatched = false;
-            if (compareVersions(latest.version, primary) > 0) {
-              outdatedEntry.LatestOverallVersion = latest.version;
-            }
-            outdated.push(outdatedEntry);
+            candidates.push({ packageId, installed, latest, available });
           });
 
           await Promise.allSettled(promises);
         }
+        Logger.info(
+          `getOutdatedPackages: Latest-version checks took ${Date.now() - latestStarted}ms for ${installedKeys.length} package(s)`
+        );
+
+        // Resolve the declared ranges once per condition group, then cap every
+        // suggestion to the highest version those ranges accept. A provider
+        // package such as Npgsql.EntityFrameworkCore.PostgreSQL declares an
+        // exact pin on Microsoft.EntityFrameworkCore.Relational; offering the
+        // next EF Core build would make the project unrestorable.
+        const outdated: OutdatedPackage[] = [];
+        const blocked: NonNullable<GetOutdatedPackagesResponse["BlockedPackages"]> = [];
+        const dependencyDetailsCache = new Map<string, Promise<Record<string, PackageDependency[]> | null>>();
+
+        const candidatesByCondition = new Map<string, OutdatedCandidate[]>();
+        for (const candidate of candidates) {
+          const list = candidatesByCondition.get(candidate.installed.condition) ?? [];
+          list.push(candidate);
+          candidatesByCondition.set(candidate.installed.condition, list);
+        }
+
+        const constraintStarted = Date.now();
+        for (const [condition, conditionCandidates] of candidatesByCondition) {
+          if (signal?.aborted) break;
+          const constraintsByPackage = await collectGroupConstraintsAsync(
+            conditionCandidates.map((candidate) => candidate.packageId),
+            groups.get(condition),
+            sources,
+            dependencyDetailsCache,
+            signal
+          );
+
+          for (const candidate of conditionCandidates) {
+            const constraints = constraintsByPackage.get(candidate.packageId.toLowerCase()) ?? [];
+            const latestAvailable = candidate.available[candidate.available.length - 1]!;
+            const satisfying = constraints.length === 0
+              ? latestAvailable
+              : candidate.available
+                  .filter((version) => constraints.every((constraint) => satisfiesVersionRange(version, constraint.Range)))
+                  .pop() ?? null;
+
+            if (!satisfying || compareVersions(satisfying, candidate.installed.version) <= 0) {
+              const reason = formatConstraintReason(constraints);
+              blocked.push({
+                Id: candidate.packageId,
+                InstalledVersion: candidate.installed.version,
+                BlockedVersion: latestAvailable,
+                Reason: reason,
+                BlockedBy: constraints.map((constraint) => ({
+                  PackageId: constraint.PackageId,
+                  InstalledVersion: constraint.InstalledVersion,
+                  Range: constraint.Range,
+                })),
+              });
+              Logger.info(
+                `getOutdatedPackages: Holding ${candidate.packageId} at ${candidate.installed.version} — ${reason}`
+              );
+              continue;
+            }
+
+            const outdatedEntry: OutdatedPackage = {
+              Id: candidate.packageId,
+              InstalledVersion: candidate.installed.version,
+              LatestVersion: satisfying,
+              Projects: candidate.installed.projects,
+              SourceUrl: candidate.latest.sourceUrl,
+              SourceName: candidate.latest.sourceName,
+            };
+            if (candidate.installed.condition) outdatedEntry.CpmCondition = candidate.installed.condition;
+            if (candidate.installed.framework) outdatedEntry.CpmFramework = candidate.installed.framework;
+            if (candidate.installed.conditionLabel) outdatedEntry.CpmConditionLabel = candidate.installed.conditionLabel;
+            if (!candidate.installed.matched) outdatedEntry.CpmMatched = false;
+            if (compareVersions(candidate.latest.version, satisfying) > 0) {
+              outdatedEntry.LatestOverallVersion = candidate.latest.version;
+            }
+
+            const violated = constraints.filter(
+              (constraint) => !satisfiesVersionRange(candidate.latest.version, constraint.Range)
+            );
+            if (violated.length > 0) {
+              outdatedEntry.BlockedBy = violated.map((constraint) => ({
+                PackageId: constraint.PackageId,
+                InstalledVersion: constraint.InstalledVersion,
+                Range: constraint.Range,
+              }));
+            }
+
+            outdated.push(outdatedEntry);
+          }
+        }
 
         outdated.sort((a, b) => a.Id.localeCompare(b.Id));
-        Logger.info(`getOutdatedPackages: Found ${outdated.length} outdated packages`);
-        return ok({ Packages: outdated });
+        blocked.sort((a, b) => a.Id.localeCompare(b.Id));
+        Logger.info(
+          `getOutdatedPackages: Dependency-constraint checks took ${Date.now() - constraintStarted}ms`
+        );
+        Logger.info(
+          `getOutdatedPackages: Found ${outdated.length} outdated packages, ${blocked.length} held back in ${Date.now() - scanStarted}ms total`
+        );
+        await scanCache.SaveAsync({
+          Key: cacheKey,
+          ScannedAt: new Date().toISOString(),
+          Packages: outdated,
+          BlockedPackages: blocked,
+        });
+        const response: GetOutdatedPackagesResponse = { Packages: outdated };
+        if (blocked.length > 0) response.BlockedPackages = blocked;
+        return ok(response);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         Logger.error("getOutdatedPackages: Failed", err);
@@ -907,7 +1105,7 @@ export function createHostAPI(): HostAPI {
       }
 
       const results: Array<{ PackageId: string; Success: boolean; Error?: string }> = [];
-      const configSkipRestore = !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore");
+      const configSkipRestore = getSetting<boolean>("skipRestore", false);
       const skipRestore = request.SkipRestore === true || configSkipRestore;
       const cpmMapCache = new Map<string, Promise<CpmPackageMap>>();
       const transactional = request.Transactional === true;
@@ -1044,14 +1242,14 @@ export function createHostAPI(): HostAPI {
         let restoreError: string | undefined;
         if (!transactionFailed && !skipRestore) {
           StatusBarUtils.ShowText("Restoring updated projects...");
-          restoreError = await restoreProjectsInternalAsync(allProjectPaths, signal, true) ?? undefined;
+          restoreError = (await restoreProjectsInternalAsync(allProjectPaths, signal, true))?.message;
         }
 
         if (transactionFailed || restoreError) {
           const rollbackError = await rollbackFilesAsync(snapshots);
           let rollbackRestoreError: string | undefined;
           if (!skipRestore && (transactionFailed || restoreError)) {
-            rollbackRestoreError = await restoreProjectsInternalAsync(allProjectPaths, signal, false) ?? undefined;
+            rollbackRestoreError = (await restoreProjectsInternalAsync(allProjectPaths, signal, false))?.message;
           }
           StatusBarUtils.hide();
           Logger.error("batchUpdatePackages: Transaction rolled back", restoreError ?? "write failure");
@@ -1068,7 +1266,7 @@ export function createHostAPI(): HostAPI {
     },
 
     async updateBadgeAsync(request: UpdateBadgeRequest): Promise<Result<void>> {
-      SetUpdateBadge(request.Count);
+      SetUpdateBadge(request.Count, request.BlockedCount ?? 0);
       return ok(undefined);
     },
 
@@ -1128,7 +1326,7 @@ export function createHostAPI(): HostAPI {
         return fail(`Project path is outside the workspace: ${outsideWorkspace}`);
       }
 
-      const configSkipRestore = !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore");
+      const configSkipRestore = getSetting<boolean>("skipRestore", false);
       if (configSkipRestore) {
         Logger.info("restoreProjects: skipped (skipRestore setting is enabled)");
         return ok(undefined);
@@ -1137,22 +1335,14 @@ export function createHostAPI(): HostAPI {
       const uniquePaths = [...new Set(request.ProjectPaths)];
       Logger.info(`restoreProjects: Restoring ${uniquePaths.length} project(s)`);
       StatusBarUtils.ShowText("Restoring packages...");
-      const failedPaths: string[] = [];
+      let failure: RestoreFailure | null;
       try {
-        for (const projectPath of uniquePaths) {
-          if (signal?.aborted) break;
-          try {
-            await restoreWithConflictResolutionAsync(projectPath, 0, signal);
-          } catch (err) {
-            Logger.error(`restoreProjects: Failed to restore ${projectPath}`, err);
-            failedPaths.push(projectPath);
-          }
-        }
+        failure = await restoreProjectsInternalAsync(uniquePaths, signal, true);
       } finally {
         StatusBarUtils.hide();
       }
-      if (failedPaths.length > 0) {
-        return fail(`Restore failed for ${failedPaths.length} project(s). There may be version conflicts — try updating all related packages together.`);
+      if (failure) {
+        return fail(failure.message);
       }
       return ok(undefined);
     },
@@ -1609,8 +1799,7 @@ export function createHostAPI(): HostAPI {
           await CpmResolver.UpdateCpmVersionsAsync(propsFilePath, changes);
         }
 
-        const skipRestoreConfig =
-          !!vscode.workspace.getConfiguration("i-synergy-nugetpackagemanager").get<string>("skipRestore");
+        const skipRestoreConfig = getSetting<boolean>("skipRestore", false);
 
         for (const projectPath of nonCpmProjects) {
           await executeAddPackage(request.PackageId, projectPath, request.TargetVersion, skipRestoreConfig, undefined, undefined, signal);
@@ -1643,27 +1832,12 @@ export function createHostAPI(): HostAPI {
 // Shared Helpers
 // ============================================================
 
-interface Nu1605Conflict {
-  packageId: string;
-  requiredVersion: string;
-}
+type RestoreFailure = {
+  projectPaths: string[];
+  conflicts: RestoreConflict[];
+  message: string;
+};
 
-function parseNu1605Conflicts(output: string): Nu1605Conflict[] {
-  const seen = new Set<string>();
-  const conflicts: Nu1605Conflict[] = [];
-  // Example line: "error NU1605: Detected package downgrade: Foo.Bar from 2.0.0 to 1.0.0-preview."
-  const regex = /error NU1605: Detected package downgrade: (.+?) from (.+?) to /g;
-  let match;
-  while ((match = regex.exec(output)) !== null) {
-    const packageId = match[1]!.trim();
-    const requiredVersion = match[2]!.trim();
-    if (!seen.has(packageId)) {
-      seen.add(packageId);
-      conflicts.push({ packageId, requiredVersion });
-    }
-  }
-  return conflicts;
-}
 
 type FileSnapshot = {
   path: string;
@@ -1706,8 +1880,11 @@ async function restoreProjectsInternalAsync(
   projectPaths: string[],
   signal: AbortSignal | undefined,
   allowConflictResolution: boolean
-): Promise<string | null> {
+): Promise<RestoreFailure | null> {
   const failedPaths: string[] = [];
+  const conflicts: RestoreConflict[] = [];
+  const summaries: string[] = [];
+
   for (const projectPath of [...new Set(projectPaths)]) {
     if (signal?.aborted) break;
     try {
@@ -1724,11 +1901,26 @@ async function restoreProjectsInternalAsync(
     } catch (err) {
       Logger.error(`restoreProjectsInternal: Failed to restore ${projectPath}`, err);
       failedPaths.push(projectPath);
+      if (err instanceof DotnetError) {
+        conflicts.push(...ParseRestoreConflicts(err.output));
+        const summary = SummarizeRestoreFailure(err.output);
+        if (summary) summaries.push(summary);
+      } else {
+        summaries.push(err instanceof Error ? err.message : String(err));
+      }
     }
   }
-  return failedPaths.length > 0
-    ? `Restore failed for ${failedPaths.length} project(s).`
-    : null;
+
+  if (failedPaths.length === 0) return null;
+
+  const details = conflicts.length > 0
+    ? FormatRestoreConflicts(conflicts)
+    : [...new Set(summaries)].slice(0, 3).join(" | ");
+  return {
+    projectPaths: failedPaths,
+    conflicts,
+    message: `Restore failed for ${failedPaths.length} project(s)${details ? `: ${details}` : "."}`,
+  };
 }
 
 /**
@@ -1850,14 +2042,21 @@ async function restoreWithConflictResolutionAsync(projectPath: string, attempt =
     await TaskExecutor.ExecuteCommandAsync(
       "dotnet",
       ["restore", projectPath.replace(/\\/g, "/")],
-      `restore-${projectPath}`
+      `restore-${projectPath}`,
+      signal
     );
   } catch (err) {
     if (!(err instanceof DotnetError) || attempt >= MAX_ATTEMPTS) {
       throw err;
     }
 
-    const conflicts = parseNu1605Conflicts(err.output);
+    // Only a package downgrade has an unambiguous automatic remedy (reference
+    // the higher version). NU1107 conflicts between an exact pin and a lower
+    // bound have no single correct answer, so they are reported instead of
+    // rewritten.
+    const conflicts = ParseRestoreConflicts(err.output)
+      .filter((conflict) => conflict.code === "NU1605" || conflict.code === "NU1109")
+      .filter((conflict) => conflict.packageId && conflict.suggestedVersion);
     if (conflicts.length === 0) {
       throw err;
     }
@@ -1867,7 +2066,8 @@ async function restoreWithConflictResolutionAsync(projectPath: string, attempt =
     const cpmVersions = await CpmResolver.GetPackageVersionsAsync(projectPath);
     let fixedAny = false;
 
-    for (const { packageId, requiredVersion } of conflicts) {
+    for (const { packageId, suggestedVersion } of conflicts) {
+      const requiredVersion = suggestedVersion!;
       if (cpmVersions && cpmVersions.has(packageId)) {
         Logger.info(`restoreWithConflictResolution: Updating CPM ${packageId} to ${requiredVersion}`);
         await CpmResolver.UpdatePackageVersionAsync(projectPath, packageId, requiredVersion);
@@ -1985,10 +2185,261 @@ function getVersionMajor(version: string): number | null {
   return match ? parseInt(match[1]!, 10) : null;
 }
 
-/** Highest version in the list that belongs to `major`, or null when none match. */
-function getLatestInMajor(versions: string[], major: number): string | null {
-  const matches = versions
-    .filter((version) => getVersionMajor(version) === major)
-    .sort(compareVersions);
-  return matches[matches.length - 1] ?? null;
+// ============================================================
+// Update-suggestion constraints
+// ============================================================
+
+type InstalledPackageEntry = {
+  version: string;
+  condition: string;
+  framework: string;
+  conditionLabel: string;
+  matched: boolean;
+  projects: Array<{ Name: string; Path: string; Version: string }>;
+};
+
+type InstalledPackageGroup = {
+  tfms: Set<string>;
+  projectPaths: Set<string>;
+  direct: Map<string, { id: string; versions: Set<string> }>;
+};
+
+type OutdatedCandidate = {
+  packageId: string;
+  installed: InstalledPackageEntry;
+  latest: { version: string; versions: string[]; sourceUrl: string; sourceName: string };
+  available: string[];
+};
+
+type PackageConstraint = {
+  PackageId: string;
+  InstalledVersion: string;
+  Range: string;
+};
+
+type ProjectDependencyGraph = {
+  /** Installed version per package id (lowercased), from project.assets.json. */
+  packageVersions: Map<string, string>;
+  /** Parent -> child edges, both lowercased. */
+  parentsByChild: Map<string, Set<string>>;
+  /** Target frameworks restored into this assets file, e.g. `net11.0`. */
+  tfms: Set<string>;
+};
+
+async function loadProjectDependencyGraphAsync(projectPath: string): Promise<ProjectDependencyGraph | null> {
+  const assetsPath = path.join(path.dirname(projectPath), "obj", "project.assets.json");
+  try {
+    const assets = JSON.parse(await fs.readFile(assetsPath, "utf8")) as {
+      libraries?: Record<string, { type?: string }>;
+      targets?: Record<string, Record<string, { dependencies?: Record<string, string> }>>;
+    };
+
+    const packageVersions = new Map<string, string>();
+    for (const [libraryKey, library] of Object.entries(assets.libraries ?? {})) {
+      if (library.type !== "package") continue;
+      const slash = libraryKey.lastIndexOf("/");
+      if (slash <= 0) continue;
+      packageVersions.set(libraryKey.slice(0, slash).toLowerCase(), libraryKey.slice(slash + 1));
+    }
+
+    const parentsByChild = new Map<string, Set<string>>();
+    const tfms = new Set<string>();
+    for (const [targetKey, target] of Object.entries(assets.targets ?? {})) {
+      tfms.add(targetKey);
+      for (const [parentKey, metadata] of Object.entries(target)) {
+        const slash = parentKey.lastIndexOf("/");
+        if (slash <= 0) continue;
+        const parentId = parentKey.slice(0, slash).toLowerCase();
+        for (const childId of Object.keys(metadata.dependencies ?? {})) {
+          const child = childId.toLowerCase();
+          const parents = parentsByChild.get(child) ?? new Set<string>();
+          parents.add(parentId);
+          parentsByChild.set(child, parents);
+        }
+      }
+    }
+
+    return { packageVersions, parentsByChild, tfms };
+  } catch (err) {
+    Logger.debug(`getOutdatedPackages: no dependency graph for ${projectPath}`, err);
+    return null;
+  }
+}
+
+/**
+ * Picks the dependency group that applies to one of the given target
+ * frameworks. Returns null when no group matches, which callers must treat as
+ * "no constraint" rather than guessing with another framework's ranges.
+ */
+function selectDependencyGroup(
+  frameworks: Record<string, PackageDependency[]>,
+  tfms: string[]
+): PackageDependency[] | null {
+  const keys = Object.keys(frameworks);
+  if (keys.length === 0) return null;
+
+  for (const tfm of tfms) {
+    const exact = keys.find((key) => key.toLowerCase() === tfm.toLowerCase());
+    if (exact) return frameworks[exact] ?? null;
+  }
+
+  for (const tfm of tfms) {
+    const major = getTfmMajorVersion(tfm);
+    if (major === null) continue;
+    const sameMajor = keys.find(
+      (key) => key.toLowerCase().startsWith("net") && getTfmMajorVersion(key) === major
+    );
+    if (sameMajor) return frameworks[sameMajor] ?? null;
+  }
+
+  return null;
+}
+
+/** Resolves the declared dependency ranges of one exact package version. */
+async function fetchDependencyFrameworksAsync(
+  packageId: string,
+  version: string,
+  sources: Array<{ Url: string }>,
+  cache: Map<string, Promise<Record<string, PackageDependency[]> | null>>,
+  signal?: AbortSignal
+): Promise<Record<string, PackageDependency[]> | null> {
+  const cacheKey = `${packageId.toLowerCase()}@${version}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  const pending = (async () => {
+    for (const source of sources) {
+      try {
+        const api = await nugetApiFactory.GetSourceApiAsync(source.Url);
+        const pkg = await api.GetPackageAsync(packageId, true, signal);
+        const versionEntry = pkg.data?.Versions.find(
+          (entry) => compareVersions(entry.Version, version) === 0
+        );
+        if (!versionEntry) continue;
+        const details = await api.GetPackageDetailsAsync(versionEntry.Id, signal);
+        return details.data.dependencies.frameworks;
+      } catch (err) {
+        Logger.debug(
+          `getOutdatedPackages: dependency metadata unavailable for ${packageId} ${version}`,
+          err
+        );
+      }
+    }
+    return null;
+  })();
+
+  cache.set(cacheKey, pending);
+  return pending;
+}
+
+/**
+ * Collects the ranges that installed packages declare on the candidate
+ * packages in one condition group.
+ *
+ * The graph comes from `project.assets.json`: it tells us which installed
+ * packages transitively pull in a candidate. Only those packages' metadata is
+ * fetched, which is what makes this cheap enough to run during a scan.
+ * Without restore output there is no graph, and the check is skipped (the
+ * restore/rollback path still protects the workspace).
+ */
+async function collectGroupConstraintsAsync(
+  packageIds: string[],
+  group: InstalledPackageGroup | undefined,
+  sources: Array<{ Url: string }>,
+  detailsCache: Map<string, Promise<Record<string, PackageDependency[]> | null>>,
+  signal?: AbortSignal
+): Promise<Map<string, PackageConstraint[]>> {
+  const result = new Map<string, PackageConstraint[]>();
+  if (!group || packageIds.length === 0) return result;
+
+  const graphs = (await Promise.all(
+    [...group.projectPaths].map((projectPath) => loadProjectDependencyGraphAsync(projectPath))
+  )).filter((graph): graph is ProjectDependencyGraph => graph !== null);
+
+  if (graphs.length === 0) {
+    Logger.debug("getOutdatedPackages: no project.assets.json found — skipping dependency constraint check");
+    return result;
+  }
+
+  const packageVersions = new Map<string, string>();
+  const parentsByChild = new Map<string, Set<string>>();
+  const tfms = new Set<string>(group.tfms);
+  for (const graph of graphs) {
+    for (const [id, version] of graph.packageVersions) {
+      if (!packageVersions.has(id)) packageVersions.set(id, version);
+    }
+    for (const [child, parents] of graph.parentsByChild) {
+      const merged = parentsByChild.get(child) ?? new Set<string>();
+      for (const parent of parents) merged.add(parent);
+      parentsByChild.set(child, merged);
+    }
+    // The assets targets are the authoritative TFM list after a restore; this
+    // also covers projects where the package parser could not read a TFM.
+    for (const tfm of graph.tfms) tfms.add(tfm);
+  }
+
+  // Only packages that declare a dependency edge to a candidate can constrain
+  // it. The assets graph already tells us exactly who those parents are, so
+  // there is no need to walk or fetch metadata for the whole closure.
+  const candidateIds = new Set(packageIds.map((packageId) => packageId.toLowerCase()));
+  const sourcesToFetch = new Set<string>();
+  for (const candidateId of candidateIds) {
+    for (const parent of parentsByChild.get(candidateId) ?? []) {
+      if (packageVersions.has(parent)) sourcesToFetch.add(parent);
+    }
+  }
+
+  const sourceIds = [...sourcesToFetch];
+  const batchSize = 5;
+  for (let i = 0; i < sourceIds.length; i += batchSize) {
+    if (signal?.aborted) break;
+    await Promise.all(
+      sourceIds.slice(i, i + batchSize).map(async (sourceId) => {
+        const installedVersion = packageVersions.get(sourceId);
+        if (!installedVersion) return;
+
+        const frameworks = await fetchDependencyFrameworksAsync(
+          sourceId,
+          installedVersion,
+          sources,
+          detailsCache,
+          signal
+        );
+        if (!frameworks) return;
+
+        const dependencies = selectDependencyGroup(frameworks, [...tfms]);
+        if (!dependencies) return;
+
+        for (const dependency of dependencies) {
+          const candidateId = dependency.package.toLowerCase();
+          if (!candidateIds.has(candidateId)) continue;
+
+          const constraints = result.get(candidateId) ?? [];
+          const duplicate = constraints.some(
+            (constraint) =>
+              constraint.PackageId.toLowerCase() === sourceId && constraint.Range === dependency.versionRange
+          );
+          if (!duplicate) {
+            constraints.push({
+              // Prefer the casing from the project file over the lowercased
+              // assets key so the warning names the package the user sees.
+              PackageId: group.direct.get(sourceId)?.id ?? sourceId,
+              InstalledVersion: installedVersion,
+              Range: dependency.versionRange,
+            });
+          }
+          result.set(candidateId, constraints);
+        }
+      })
+    );
+  }
+
+  return result;
+}
+
+function formatConstraintReason(constraints: PackageConstraint[]): string {
+  if (constraints.length === 0) return "no available version satisfies the installed dependency ranges";
+  return constraints
+    .map((constraint) => `${constraint.PackageId} ${constraint.InstalledVersion} requires ${constraint.Range}`)
+    .join("; ");
 }

@@ -1,10 +1,11 @@
 import '../web-setup';
 import * as assert from 'assert';
+import { render, type TemplateResult } from 'lit';
 import { UpdatesView } from '@/web/components/updates-view';
 import { OutdatedPackageViewModel } from '@/web/types';
 import { ok } from '@/common/rpc/result';
 import * as registrations from '@/web/registrations';
-import type { BatchUpdateRequest, HostAPI } from '@/common/rpc/types';
+import type { BatchUpdateRequest, GetOutdatedPackagesRequest, HostAPI } from '@/common/rpc/types';
 
 suite('UpdatesView', () => {
     let view: UpdatesView;
@@ -193,5 +194,103 @@ suite('UpdatesView', () => {
         assert.strictEqual(captured?.Updates[0]!.Scope, 'group');
         assert.strictEqual(captured?.Updates[0]!.CpmCondition, "$(TargetFramework.StartsWith('net10.0'))");
         assert.strictEqual(captured?.Updates[0]!.CpmTfm, 'net10.0');
+    });
+
+    test('renders the pinning dependency for a held-back update', () => {
+        const pkg = makePackage('', '');
+        pkg.LatestOverallVersion = '3.0.0';
+        const blockedBy = [{
+            PackageId: 'Npgsql.EntityFrameworkCore.PostgreSQL',
+            InstalledVersion: '11.0.0-rc.2',
+            Range: '[11.0.0-rc.2.26504.105]',
+        }];
+        pkg.BlockedBy = blockedBy;
+        view.packages = [pkg];
+        view.blockedPackages = [{
+            Id: 'Microsoft.EntityFrameworkCore.Relational',
+            InstalledVersion: '11.0.0-rc.2.26504.105',
+            BlockedVersion: '11.0.0-rc.3.26522.148',
+            Reason: pkg.blockedReason,
+            BlockedBy: blockedBy,
+        }];
+
+        const host = document.createElement('div');
+        render(view.render() as TemplateResult, host);
+
+        assert.strictEqual(host.querySelectorAll('.conflict-row').length, 1);
+        assert.match(host.textContent ?? '', /Dependency conflicts \(1\)/);
+        assert.match(host.textContent ?? '', /11\.0\.0-rc\.2\.26504\.105 → 11\.0\.0-rc\.3\.26522\.148 blocked/);
+        assert.match(host.textContent ?? '', /Npgsql\.EntityFrameworkCore\.PostgreSQL 11\.0\.0-rc\.2 requires \[11\.0\.0-rc\.2\.26504\.105\]/);
+    });
+
+    test('does not claim everything is up to date when every update is blocked', () => {
+        const blockedBy = [{
+            PackageId: 'Npgsql.EntityFrameworkCore.PostgreSQL',
+            InstalledVersion: '11.0.0-rc.2',
+            Range: '[11.0.0-rc.2.26504.105]',
+        }];
+        view.packages = [];
+        view.blockedPackages = [{
+            Id: 'Microsoft.EntityFrameworkCore.Relational',
+            InstalledVersion: '11.0.0-rc.2.26504.105',
+            BlockedVersion: '11.0.0-rc.3.26522.148',
+            Reason: 'Npgsql.EntityFrameworkCore.PostgreSQL 11.0.0-rc.2 requires [11.0.0-rc.2.26504.105]',
+            BlockedBy: blockedBy,
+        }];
+
+        const host = document.createElement('div');
+        render(view.render() as TemplateResult, host);
+
+        assert.doesNotMatch(host.textContent ?? '', /All packages are up to date/);
+        assert.match(host.textContent ?? '', /Dependency conflicts \(1\)/);
+    });
+
+    test('paints cached rows and preserves selections across the refresh', () => {
+        const raw = {
+            Id: 'Pkg.Shared',
+            InstalledVersion: '1.0.0',
+            LatestVersion: '2.0.0',
+            Projects: [{ Name: 'A', Path: '/ws/A.csproj', Version: '1.0.0' }],
+            SourceUrl: 'https://api.nuget.org/v3/index.json',
+            SourceName: 'nuget.org',
+        };
+
+        (view as unknown as {
+            applyScan(response: { Packages: typeof raw[]; FromCache?: boolean; ScannedAt?: string }, fromCache: boolean): void;
+        }).applyScan({ Packages: [raw], FromCache: true, ScannedAt: '2026-10-26T12:00:00.000Z' }, true);
+
+        assert.strictEqual(view.packages.length, 1);
+        assert.strictEqual(view.isRefreshing, true);
+        assert.match(view.statusText, /cached results/);
+
+        view.packages[0]!.Selected = false;
+        (view as unknown as {
+            applyScan(response: { Packages: typeof raw[]; FromCache?: boolean }, fromCache: boolean): void;
+        }).applyScan({ Packages: [raw], FromCache: false }, false);
+
+        assert.strictEqual(view.packages[0]!.Selected, false);
+        assert.strictEqual(view.isRefreshing, false);
+        assert.strictEqual(view.statusText, '');
+    });
+
+    test('requests the cached scan before the live scan', async () => {
+        const requests: boolean[] = [];
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                getOutdatedPackagesAsync: async (request: GetOutdatedPackagesRequest) => {
+                    requests.push(request.PreferCache === true);
+                    return ok({ Packages: [], FromCache: request.PreferCache === true });
+                },
+                batchUpdatePackagesAsync: async () => ok({ Results: [] }),
+                restoreProjectsAsync: async () => ok(undefined),
+                updateBadgeAsync: async () => ok(undefined),
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        await view.LoadOutdatedPackagesAsync();
+
+        assert.deepStrictEqual(requests, [true, false]);
     });
 });

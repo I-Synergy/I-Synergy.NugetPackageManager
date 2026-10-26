@@ -127,6 +127,7 @@ export class OutdatedPackageViewModel {
   CpmFramework: string;
   CpmConditionLabel: string;
   CpmMatched: boolean;
+  BlockedBy: Array<{ PackageId: string; InstalledVersion: string; Range: string }>;
   IsUpdating: boolean = false;
   Selected: boolean = false;
 
@@ -142,6 +143,13 @@ export class OutdatedPackageViewModel {
     this.CpmFramework = model.CpmFramework ?? "";
     this.CpmConditionLabel = model.CpmConditionLabel ?? "";
     this.CpmMatched = model.CpmMatched ?? true;
+    this.BlockedBy = model.BlockedBy ?? [];
+  }
+
+  get blockedReason(): string {
+    return this.BlockedBy
+      .map((constraint) => `${constraint.PackageId} ${constraint.InstalledVersion} requires ${constraint.Range}`)
+      .join("; ");
   }
 }
 

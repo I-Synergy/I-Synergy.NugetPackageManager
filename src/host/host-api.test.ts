@@ -10,7 +10,7 @@ import nugetApiFactory from './nuget/api-factory';
 import NuGetConfigResolver from './utilities/nuget-config-resolver';
 import CpmResolver from './utilities/cpm-resolver';
 import ProjectFrameworkResolver from './utilities/project-framework-resolver';
-import TaskExecutorDefault from './utilities/task-executor';
+import TaskExecutorDefault, { DotnetError } from './utilities/task-executor';
 import { Logger } from '../common/logger';
 
 suite('HostAPI Tests', () => {
@@ -356,6 +356,40 @@ suite('HostAPI Tests', () => {
             assert.strictEqual(result.value.Packages.length, 1);
             assert.strictEqual(result.value.Packages[0]!.InstalledVersion, '1.0.0-beta');
             assert.strictEqual(result.value.Packages[0]!.LatestVersion, '1.0.0');
+        });
+
+        test('serves the persisted scan when PreferCache is set', async () => {
+            const uri = makeProjectUri('/ws/A.csproj');
+            const findFiles = sandbox.stub(vscode.workspace, 'findFiles').resolves([uri]);
+            const parseStub = sandbox.stub(ProjectParser, 'ParseAsync');
+            parseStub.resolves(makeProject('A', '/ws/A.csproj', '1.0.0'));
+            setupNugetApi('2.0.0');
+
+            let stored: unknown;
+            const memento = {
+                get: <T>(_key: string, defaultValue?: T): T | undefined => (stored as T | undefined) ?? defaultValue,
+                update: async (_key: string, value: unknown) => { stored = value; },
+                keys: () => [],
+                setKeysForSync: () => undefined,
+            } as unknown as vscode.Memento;
+            const context = { workspaceState: memento } as unknown as vscode.ExtensionContext;
+
+            const live = await createHostAPI(context).getOutdatedPackagesAsync({ ForceReload: false, Prerelease: false });
+            assert.ok(live.ok);
+            assert.strictEqual(live.value.Packages.length, 1);
+
+            findFiles.rejects(new Error('the cache path must not scan the workspace'));
+            parseStub.rejects(new Error('the cache path must not parse projects'));
+
+            const cached = await createHostAPI(context).getOutdatedPackagesAsync({ Prerelease: false, PreferCache: true });
+            assert.ok(cached.ok);
+            assert.strictEqual(cached.value.FromCache, true);
+            assert.strictEqual(cached.value.Packages.length, 1);
+            assert.ok(cached.value.ScannedAt);
+
+            const otherFilter = await createHostAPI(context).getOutdatedPackagesAsync({ Prerelease: true, PreferCache: true });
+            assert.ok(otherFilter.ok);
+            assert.strictEqual(otherFilter.value.Packages.length, 0);
         });
     });
 
@@ -727,6 +761,44 @@ suite('HostAPI Tests', () => {
             assert.match(result.value.Results[0]!.Error ?? '', /multiple framework-scoped versions/);
         });
 
+        test('updates restore but never build', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+
+            const commands: string[][] = [];
+            sandbox.stub(TaskExecutorDefault, 'ExecuteCommandAsync').callsFake(
+                async (command: string, args: string[]) => {
+                    commands.push([command, ...args]);
+                }
+            );
+
+            const api = createHostAPI();
+            const result = await api.batchUpdatePackagesAsync({
+                Updates: [{
+                    PackageId: 'Pkg.Shared',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional',
+                }],
+                Transactional: true,
+                SkipRestore: false,
+            });
+
+            assert.ok(result.ok, result.ok ? '' : result.error);
+            assert.ok(commands.length > 0, 'the update must at least restore');
+            assert.ok(
+                commands.some(([, subcommand]) => subcommand === 'restore'),
+                'the update must restore the affected project'
+            );
+            for (const [command, ...args] of commands) {
+                assert.strictEqual(command, 'dotnet');
+                assert.notStrictEqual(args[0], 'build', 'building is left to the user');
+                assert.ok(
+                    ['restore', 'add', 'remove'].includes(args[0] ?? ''),
+                    `unexpected dotnet command: ${args.join(' ')}`
+                );
+            }
+        });
+
         test('rejects update and restore paths outside the workspace', async () => {
             setupWorkspace('single-group.props');
             const outside = path.join(workspaceDir, '..', 'Evil.csproj');
@@ -802,6 +874,311 @@ suite('HostAPI Tests', () => {
             assert.ok(row, 'the original package ID must be preserved');
             assert.strictEqual(row!.InstalledVersion, '10.0.13');
             assert.deepStrictEqual(row!.CpmFrameworks, ['net10.0']);
+        });
+    });
+
+    // ----------------------------------------------------------------
+    // Restore diagnostics and transactional single update
+    // ----------------------------------------------------------------
+    suite('restore diagnostics', () => {
+        const NU1107_OUTPUT = [
+            'C:\\ws\\Sample.Api.csproj : error NU1107: Version conflict detected for Microsoft.EntityFrameworkCore.Relational. Install/reference Microsoft.EntityFrameworkCore.Relational 11.0.0-rc.3.26522.148 directly to project Sample.Api to resolve this issue.',
+            'C:\\ws\\Sample.Api.csproj :  Sample.Api -> I-Synergy.Framework.EventSourcing.EntityFramework -> Microsoft.EntityFrameworkCore.Relational (>= 11.0.0-rc.3.26522.148)',
+            'C:\\ws\\Sample.Api.csproj :  Sample.Api -> Npgsql.EntityFrameworkCore.PostgreSQL 11.0.0-rc.2 -> Microsoft.EntityFrameworkCore.Relational (= 11.0.0-rc.2.26504.105).',
+        ].join('\n');
+
+        let workspaceDir: string;
+
+        setup(() => {
+            workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'host-restore-'));
+            sandbox.stub(vscode.workspace, 'workspaceFolders').value([{ uri: { fsPath: workspaceDir } }]);
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: () => undefined,
+            } as unknown as vscode.WorkspaceConfiguration);
+        });
+
+        teardown(() => {
+            fs.rmSync(workspaceDir, { recursive: true, force: true });
+        });
+
+        test('reports the NU1107 constraint chain instead of a generic message', async () => {
+            const projectPath = path.join(workspaceDir, 'App.csproj');
+            fs.writeFileSync(projectPath, '<Project Sdk="Microsoft.NET.Sdk"></Project>');
+            sandbox.stub(TaskExecutorDefault, 'ExecuteCommandAsync').rejects(
+                new DotnetError('dotnet exited with code 1', NU1107_OUTPUT)
+            );
+
+            const api = createHostAPI();
+            const result = await api.restoreProjectsAsync({ ProjectPaths: [projectPath] });
+
+            assert.strictEqual(result.ok, false);
+            if (!result.ok) {
+                assert.match(result.error, /NU1107/);
+                assert.match(result.error, /Microsoft\.EntityFrameworkCore\.Relational/);
+                assert.match(result.error, /Npgsql\.EntityFrameworkCore\.PostgreSQL 11\.0\.0-rc\.2/);
+                assert.match(result.error, /= 11\.0\.0-rc\.2\.26504\.105/);
+                assert.match(result.error, />= 11\.0\.0-rc\.3\.26522\.148/);
+            }
+        });
+
+        test('rolls back the project and props files when a single update cannot restore', async () => {
+            const projectPath = path.join(workspaceDir, 'App.csproj');
+            const propsPath = path.join(workspaceDir, 'Directory.Packages.props');
+            const projectContent = '<Project Sdk="Microsoft.NET.Sdk"></Project>';
+            const propsContent = [
+                '<Project>',
+                '  <ItemGroup>',
+                '    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="11.0.0-rc.2.26504.105" />',
+                '  </ItemGroup>',
+                '</Project>',
+            ].join('\n');
+            fs.writeFileSync(projectPath, projectContent);
+            fs.writeFileSync(propsPath, propsContent);
+
+            sandbox.stub(CpmResolver, 'FindCpmFilePathAsync').resolves(propsPath);
+            sandbox.stub(CpmResolver, 'GetFrameworkPackageMapAsync').resolves({
+                unconditional: new Map([['Microsoft.EntityFrameworkCore.Relational', '11.0.0-rc.2.26504.105']]),
+                conditional: [],
+                hasConditionalGroups: false,
+            } as unknown as Awaited<ReturnType<typeof CpmResolver.GetFrameworkPackageMapAsync>>);
+            sandbox.stub(CpmResolver, 'HasPackage').returns(true);
+            sandbox.stub(CpmResolver, 'UpdatePackageVersionAsync').callsFake(async () => {
+                fs.writeFileSync(
+                    propsPath,
+                    propsContent.replace('11.0.0-rc.2.26504.105', '11.0.0-rc.3.26522.148')
+                );
+            });
+            sandbox.stub(TaskExecutorDefault, 'ExecuteCommandAsync').callsFake(async (_command, _args, operationId) => {
+                if (String(operationId).startsWith('rollback-restore-')) return;
+                throw new DotnetError('dotnet exited with code 1', NU1107_OUTPUT);
+            });
+
+            const api = createHostAPI();
+            const result = await api.updateProjectAsync({
+                ProjectPath: projectPath,
+                PackageId: 'Microsoft.EntityFrameworkCore.Relational',
+                Version: '11.0.0-rc.3.26522.148',
+                Type: 'UPDATE',
+            });
+
+            assert.strictEqual(result.ok, false);
+            if (!result.ok) {
+                assert.match(result.error, /rolled back/);
+                assert.match(result.error, /NU1107/);
+            }
+            assert.strictEqual(fs.readFileSync(propsPath, 'utf8'), propsContent);
+            assert.strictEqual(fs.readFileSync(projectPath, 'utf8'), projectContent);
+        });
+    });
+
+    // ----------------------------------------------------------------
+    // Dependency-aware update suggestions
+    // ----------------------------------------------------------------
+    suite('dependency-aware updates', () => {
+        let workspaceDir: string;
+        let projectPath: string;
+
+        setup(() => {
+            workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'host-constraints-'));
+            projectPath = path.join(workspaceDir, 'App.csproj');
+            fs.writeFileSync(projectPath, '<Project Sdk="Microsoft.NET.Sdk"></Project>');
+            fs.mkdirSync(path.join(workspaceDir, 'obj'), { recursive: true });
+            fs.writeFileSync(
+                path.join(workspaceDir, 'obj', 'project.assets.json'),
+                JSON.stringify({
+                    libraries: {
+                        'Microsoft.EntityFrameworkCore.Relational/11.0.0-rc.1.26425.128': { type: 'package' },
+                        'Npgsql.EntityFrameworkCore.PostgreSQL/11.0.0-rc.2': { type: 'package' },
+                    },
+                    targets: {
+                        'net11.0': {
+                            'Npgsql.EntityFrameworkCore.PostgreSQL/11.0.0-rc.2': {
+                                dependencies: {
+                                    'Microsoft.EntityFrameworkCore.Relational': '11.0.0-rc.2.26504.105',
+                                },
+                            },
+                        },
+                    },
+                })
+            );
+
+            sandbox.stub(vscode.workspace, 'workspaceFolders').value([{ uri: { fsPath: workspaceDir } }]);
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns({
+                get: () => undefined,
+            } as unknown as vscode.WorkspaceConfiguration);
+            sandbox.stub(CpmResolver, 'FindCpmFilePathAsync').resolves(null);
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync').resolves([
+                { Name: 'nuget.org', Url: 'https://api.nuget.org/v3/index.json' },
+            ]);
+        });
+
+        teardown(() => {
+            fs.rmSync(workspaceDir, { recursive: true, force: true });
+        });
+
+        test('caps the suggested EF Core version to the pin declared by the installed provider', async () => {
+            const project = {
+                Name: 'App',
+                Path: projectPath,
+                CpmEnabled: false,
+                Packages: [{
+                    Id: 'Microsoft.EntityFrameworkCore.Relational',
+                    Version: '11.0.0-rc.1.26425.128',
+                    IsPinned: false,
+                    CpmResolutions: [{
+                        Tfm: 'net11.0',
+                        Version: '11.0.0-rc.1.26425.128',
+                        Condition: '',
+                        ConditionLabel: 'net11.0',
+                        Matched: true,
+                    }],
+                }, {
+                    Id: 'Npgsql.EntityFrameworkCore.PostgreSQL',
+                    Version: '11.0.0-rc.2',
+                    IsPinned: false,
+                    CpmResolutions: [{
+                        Tfm: 'net11.0',
+                        Version: '11.0.0-rc.2',
+                        Condition: '',
+                        ConditionLabel: 'net11.0',
+                        Matched: true,
+                    }],
+                }],
+            } as unknown as Project;
+            sandbox.stub(ProjectParser, 'ParseAsync').resolves(project);
+            sandbox.stub(vscode.workspace, 'findFiles').resolves([{ fsPath: projectPath } as vscode.Uri]);
+
+            const relationalVersions = [
+                '11.0.0-rc.1.26425.128',
+                '11.0.0-rc.2.26504.105',
+                '11.0.0-rc.3.26522.148',
+            ];
+            const providerDependencies = {
+                dependencies: {
+                    frameworks: {
+                        'net11.0': [{
+                            package: 'Microsoft.EntityFrameworkCore.Relational',
+                            versionRange: '[11.0.0-rc.2.26504.105]',
+                        }],
+                    },
+                },
+            };
+            sandbox.stub(nugetApiFactory, 'GetSourceApiAsync').resolves({
+                GetPackagesAsync: async (id: string) => ({
+                    data: [{
+                        Name: id,
+                        Version: relationalVersions[relationalVersions.length - 1],
+                        Versions: relationalVersions.map((version) => ({ Version: version, Id: `leaf-${version}` })),
+                    }],
+                }),
+                GetPackageAsync: async () => ({
+                    data: {
+                        Name: 'Npgsql.EntityFrameworkCore.PostgreSQL',
+                        Versions: [{ Version: '11.0.0-rc.2', Id: 'leaf-npgsql' }],
+                    },
+                }),
+                GetPackageDetailsAsync: async () => ({ data: providerDependencies }),
+            } as unknown as Awaited<ReturnType<typeof nugetApiFactory.GetSourceApiAsync>>);
+
+            const api = createHostAPI();
+            const result = await api.getOutdatedPackagesAsync({ ForceReload: false, Prerelease: true });
+
+            assert.ok(result.ok, result.ok ? '' : result.error);
+            const row = result.value.Packages.find((pkg) => pkg.Id === 'Microsoft.EntityFrameworkCore.Relational');
+            assert.ok(row, 'the safe update must still be offered');
+            assert.strictEqual(row!.LatestVersion, '11.0.0-rc.2.26504.105');
+            assert.strictEqual(row!.LatestOverallVersion, '11.0.0-rc.3.26522.148');
+            assert.deepStrictEqual(row!.BlockedBy, [{
+                PackageId: 'Npgsql.EntityFrameworkCore.PostgreSQL',
+                InstalledVersion: '11.0.0-rc.2',
+                Range: '[11.0.0-rc.2.26504.105]',
+            }]);
+        });
+
+        test('lists a fully blocked package with the version and the pinning dependency', async () => {
+            const project = {
+                Name: 'App',
+                Path: projectPath,
+                CpmEnabled: false,
+                Packages: [{
+                    Id: 'Microsoft.EntityFrameworkCore.Relational',
+                    Version: '11.0.0-rc.2.26504.105',
+                    IsPinned: false,
+                    CpmResolutions: [{
+                        Tfm: 'net11.0',
+                        Version: '11.0.0-rc.2.26504.105',
+                        Condition: '',
+                        ConditionLabel: 'net11.0',
+                        Matched: true,
+                    }],
+                }, {
+                    Id: 'Npgsql.EntityFrameworkCore.PostgreSQL',
+                    Version: '11.0.0-rc.2',
+                    IsPinned: false,
+                    CpmResolutions: [{
+                        Tfm: 'net11.0',
+                        Version: '11.0.0-rc.2',
+                        Condition: '',
+                        ConditionLabel: 'net11.0',
+                        Matched: true,
+                    }],
+                }],
+            } as unknown as Project;
+            sandbox.stub(ProjectParser, 'ParseAsync').resolves(project);
+            sandbox.stub(vscode.workspace, 'findFiles').resolves([{ fsPath: projectPath } as vscode.Uri]);
+
+            const relationalVersions = [
+                '11.0.0-rc.1.26425.128',
+                '11.0.0-rc.2.26504.105',
+                '11.0.0-rc.3.26522.148',
+            ];
+            sandbox.stub(nugetApiFactory, 'GetSourceApiAsync').resolves({
+                GetPackagesAsync: async (id: string) => ({
+                    data: [{
+                        Name: id,
+                        Version: relationalVersions[relationalVersions.length - 1],
+                        Versions: relationalVersions.map((version) => ({ Version: version, Id: `leaf-${version}` })),
+                    }],
+                }),
+                GetPackageAsync: async () => ({
+                    data: {
+                        Name: 'Npgsql.EntityFrameworkCore.PostgreSQL',
+                        Versions: [{ Version: '11.0.0-rc.2', Id: 'leaf-npgsql' }],
+                    },
+                }),
+                GetPackageDetailsAsync: async () => ({
+                    data: {
+                        dependencies: {
+                            frameworks: {
+                                'net11.0': [{
+                                    package: 'Microsoft.EntityFrameworkCore.Relational',
+                                    versionRange: '[11.0.0-rc.2.26504.105]',
+                                }],
+                            },
+                        },
+                    },
+                }),
+            } as unknown as Awaited<ReturnType<typeof nugetApiFactory.GetSourceApiAsync>>);
+
+            const api = createHostAPI();
+            const result = await api.getOutdatedPackagesAsync({ ForceReload: false, Prerelease: true });
+
+            assert.ok(result.ok, result.ok ? '' : result.error);
+            const row = result.value.Packages.find((pkg) => pkg.Id === 'Microsoft.EntityFrameworkCore.Relational');
+            assert.strictEqual(row, undefined, 'no unsafe version may be offered');
+
+            const blocked = result.value.BlockedPackages?.find(
+                (pkg) => pkg.Id === 'Microsoft.EntityFrameworkCore.Relational'
+            );
+            assert.ok(blocked, 'the conflict must stay visible');
+            assert.strictEqual(blocked!.InstalledVersion, '11.0.0-rc.2.26504.105');
+            assert.strictEqual(blocked!.BlockedVersion, '11.0.0-rc.3.26522.148');
+            assert.match(blocked!.Reason, /Npgsql\.EntityFrameworkCore\.PostgreSQL/);
+            assert.deepStrictEqual(blocked!.BlockedBy, [{
+                PackageId: 'Npgsql.EntityFrameworkCore.PostgreSQL',
+                InstalledVersion: '11.0.0-rc.2',
+                Range: '[11.0.0-rc.2.26504.105]',
+            }]);
         });
     });
 });

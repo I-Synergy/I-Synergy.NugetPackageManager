@@ -8,6 +8,7 @@ import { sharedStyles } from "@/web/styles/shared.css";
 import { hostApi } from "@/web/registrations";
 import { buildFrameworkOptions, getFrameworkGroupKey, getFrameworkLabel, matchesFrameworkSelection, SHARED_FRAMEWORK } from "@/common/framework";
 import { OutdatedPackageViewModel, PackageViewModel } from "../types";
+import type { GetOutdatedPackagesRequest, GetOutdatedPackagesResponse } from "@/common/rpc/types";
 import "./package-row";
 
 @customElement("updates-view")
@@ -64,6 +65,64 @@ export class UpdatesView extends LitElement {
             margin: 0;
             accent-color: var(--vscode-focusBorder);
           }
+
+          .conflicts {
+            margin: 6px 8px 10px;
+            border: 1px solid var(--vscode-inputValidation-warningBorder, var(--npm-border, var(--vscode-panelSection-border)));
+            border-radius: 8px;
+            background: var(--npm-surface-raised, var(--vscode-editorWidget-background));
+          }
+
+          .conflicts-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--vscode-descriptionForeground);
+            border-bottom: 1px solid var(--npm-border, var(--vscode-panelSection-border));
+          }
+
+          .conflicts-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+          }
+
+          .conflict-row {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            padding: 8px 10px;
+            font-size: 11px;
+          }
+
+          .conflict-row + .conflict-row {
+            border-top: 1px solid color-mix(in srgb, var(--npm-border, var(--vscode-panelSection-border)) 60%, transparent);
+          }
+
+          .conflict-title {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 6px;
+          }
+
+          .conflict-id {
+            font-weight: 600;
+            color: var(--vscode-foreground);
+          }
+
+          .conflict-version,
+          .conflict-reason {
+            color: var(--vscode-descriptionForeground);
+            line-height: 1.45;
+          }
+
+          .conflict-reason {
+            font-family: var(--vscode-editor-font-family, monospace);
+          }
         }
 
       }
@@ -71,6 +130,14 @@ export class UpdatesView extends LitElement {
   ];
 
   @state() packages: OutdatedPackageViewModel[] = [];
+  @state() blockedPackages: Array<{
+    Id: string;
+    InstalledVersion: string;
+    BlockedVersion: string;
+    Reason: string;
+    BlockedBy: Array<{ PackageId: string; InstalledVersion: string; Range: string }>;
+  }> = [];
+  @state() isRefreshing: boolean = false;
   @state() isUpdating: boolean = false;
   @state() statusText: string = "";
   @property() selectedFramework: string = "";
@@ -80,33 +147,75 @@ export class UpdatesView extends LitElement {
   @property() filterQuery: string = "";
   @property({ attribute: false }) availableFrameworks: Array<{ value: string; label: string }> = [];
 
+  private buildRequest(
+    projectPaths: string[],
+    sourceUrl: string,
+    prerelease: boolean,
+    forceReload: boolean,
+    preferCache = false
+  ): GetOutdatedPackagesRequest {
+    const req: GetOutdatedPackagesRequest = { Prerelease: prerelease };
+    if (projectPaths.length > 0) req.ProjectPaths = projectPaths;
+    if (sourceUrl) req.SourceUrl = sourceUrl;
+    if (forceReload) req.ForceReload = true;
+    if (preferCache) req.PreferCache = true;
+    return req;
+  }
+
+  private packageKey(pkg: OutdatedPackageViewModel): string {
+    return `${pkg.Id}\0${pkg.CpmCondition}\0${pkg.CpmFramework}`;
+  }
+
+  private applyScan(response: GetOutdatedPackagesResponse, fromCache: boolean): void {
+    const previousSelection = new Map<string, boolean>();
+    for (const pkg of this.packages) {
+      previousSelection.set(this.packageKey(pkg), pkg.Selected);
+    }
+
+    const packages = (response.Packages ?? []).map((pkg) => new OutdatedPackageViewModel(pkg));
+    for (const pkg of packages) {
+      pkg.Selected = previousSelection.get(this.packageKey(pkg)) ?? true;
+    }
+
+    this.packages = packages;
+    this.blockedPackages = response.BlockedPackages ?? [];
+    this.isRefreshing = fromCache;
+    if (fromCache) {
+      const scannedAt = response.ScannedAt ? new Date(response.ScannedAt).toLocaleTimeString() : "";
+      this.statusText = scannedAt
+        ? `Showing cached results from ${scannedAt} — refreshing…`
+        : "Refreshing…";
+    } else {
+      this.statusText = "";
+    }
+
+    this.dispatchEvent(new CustomEvent<number>("count-changed", {
+      detail: packages.length,
+      bubbles: true,
+      composed: true,
+    }));
+    this.dispatchEvent(new CustomEvent("framework-options-changed", {
+      detail: this.frameworkOptions,
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
   private _loadTask = new Task(this, {
     task: async ([projectPaths, sourceUrl, prerelease, forceReload], { signal }) => {
-      const req: Parameters<typeof hostApi.getOutdatedPackagesAsync>[0] = {
-        Prerelease: prerelease,
-      };
-      if (projectPaths.length > 0) req.ProjectPaths = projectPaths;
-      if (sourceUrl) req.SourceUrl = sourceUrl;
-      if (forceReload) req.ForceReload = true;
-      const result = await hostApi.getOutdatedPackagesAsync(req, signal);
+      const result = await hostApi.getOutdatedPackagesAsync(
+        this.buildRequest(projectPaths, sourceUrl, prerelease, forceReload),
+        signal
+      );
       if (!result.ok) throw new Error("Failed to check for updates");
-      return (result.value.Packages ?? []).map((p) => new OutdatedPackageViewModel(p));
+      return result.value;
     },
     args: () => [this.projectPaths, this.sourceUrl, this.prerelease, false] as [string[], string, boolean, boolean],
-    onComplete: (packages) => {
-      packages.forEach((p) => (p.Selected = true));
-      this.packages = packages;
-      this.statusText = "";
-      this.dispatchEvent(new CustomEvent<number>("count-changed", {
-        detail: packages.length,
-        bubbles: true,
-        composed: true,
-      }));
-      this.dispatchEvent(new CustomEvent("framework-options-changed", {
-        detail: this.frameworkOptions,
-        bubbles: true,
-        composed: true,
-      }));
+    onComplete: (response) => {
+      this.applyScan(response, false);
+    },
+    onError: () => {
+      this.isRefreshing = false;
     },
   });
 
@@ -211,10 +320,32 @@ export class UpdatesView extends LitElement {
 
   async LoadOutdatedPackagesAsync(forceReload: boolean = false): Promise<void> {
     this.packages = [];
+    this.blockedPackages = [];
+    this.isRefreshing = false;
     this.statusText = "";
+
+    // Paint the previous scan immediately, then refresh in the background. The
+    // cache is best-effort: a miss or failure must never block the live scan.
+    if (!forceReload) {
+      try {
+        const cached = await hostApi.getOutdatedPackagesAsync(
+          this.buildRequest(this.projectPaths, this.sourceUrl, this.prerelease, false, true)
+        );
+        if (cached.ok && ((cached.value.Packages?.length ?? 0) > 0 || (cached.value.BlockedPackages?.length ?? 0) > 0)) {
+          this.applyScan(cached.value, true);
+        }
+      } catch (err) {
+        console.debug("UpdatesView: cached scan unavailable", err);
+      }
+    }
+
     try {
       await this._loadTask.run([this.projectPaths, this.sourceUrl, this.prerelease, forceReload]);
     } catch (err) {
+      this.isRefreshing = false;
+      if (this.packages.length > 0) {
+        this.statusText = "Showing cached results — refresh failed";
+      }
       console.error(err);
     }
   }
@@ -224,6 +355,7 @@ export class UpdatesView extends LitElement {
     skipRestore = false,
     version = pkg.LatestVersion
   ): Promise<boolean> {
+    if (this.isRefreshing) return false;
     pkg.IsUpdating = true;
     this.requestUpdate();
     try {
@@ -259,7 +391,10 @@ export class UpdatesView extends LitElement {
           this.packages.length > 0
             ? `${this.packages.length} update${this.packages.length !== 1 ? "s" : ""} available`
             : "All packages are up to date";
-        await hostApi.updateBadgeAsync({ Count: this.packages.length });
+        await hostApi.updateBadgeAsync({
+          Count: this.packages.length,
+          BlockedCount: this.blockedPackages.length,
+        });
         this.dispatchEvent(new CustomEvent("packages-updated", { bubbles: true, composed: true }));
       } else {
         const error = result.ok
@@ -281,7 +416,7 @@ export class UpdatesView extends LitElement {
   private async updatePackagesSequentiallyAsync(
     packages: OutdatedPackageViewModel[]
   ): Promise<void> {
-    if (packages.length === 0) return;
+    if (packages.length === 0 || this.isRefreshing) return;
 
     const updates = packages.map((pkg) => ({
       PackageId: pkg.Id,
@@ -310,7 +445,10 @@ export class UpdatesView extends LitElement {
       if (result.value.RolledBack) {
         const reason = result.value.RestoreError ?? result.value.RollbackError;
         this.statusText = `Update rolled back${reason ? `: ${reason}` : ""}`;
-        await hostApi.updateBadgeAsync({ Count: this.packages.length });
+        await hostApi.updateBadgeAsync({
+          Count: this.packages.length,
+          BlockedCount: this.blockedPackages.length,
+        });
         return;
       }
 
@@ -322,7 +460,10 @@ export class UpdatesView extends LitElement {
         composed: true,
       }));
       this.statusText = `${packages.length} package${packages.length !== 1 ? "s" : ""} updated and restored`;
-      await hostApi.updateBadgeAsync({ Count: this.packages.length });
+      await hostApi.updateBadgeAsync({
+        Count: this.packages.length,
+        BlockedCount: this.blockedPackages.length,
+      });
       this.dispatchEvent(new CustomEvent("packages-updated", { bubbles: true, composed: true }));
     } finally {
       packages.forEach((pkg) => { pkg.IsUpdating = false; });
@@ -382,21 +523,29 @@ export class UpdatesView extends LitElement {
         ${!pkg.CpmMatched
           ? html`<span class="codicon codicon-warning" title="This condition matches none of the project's target frameworks"></span>`
           : nothing}
+        ${pkg.BlockedBy.length > 0
+          ? html`<span
+              class="codicon codicon-lock"
+              title="Latest ${pkg.LatestOverallVersion} is blocked by ${pkg.blockedReason}. Suggested version stays at ${pkg.LatestVersion}."
+            ></span>`
+          : nothing}
         <div class="row-actions">
           ${pkg.LatestOverallVersion
             ? html`
                 <button
                   class="icon-btn"
                   aria-label="Update ${pkg.Id} to latest overall ${pkg.LatestOverallVersion}"
-                  title="Update ${pkg.Id} to latest overall ${pkg.LatestOverallVersion} (crosses the framework's major version)"
-                  ?disabled=${this.isUpdating || pkg.IsUpdating}
+                  title=${pkg.BlockedBy.length > 0
+                    ? `Update ${pkg.Id} to ${pkg.LatestOverallVersion}, overriding ${pkg.blockedReason}. Restore may fail.`
+                    : `Update ${pkg.Id} to latest overall ${pkg.LatestOverallVersion}`}
+                  ?disabled=${this.isUpdating || this.isRefreshing || pkg.IsUpdating}
                   @click=${async () => await this.updateSingleAsync(pkg, false, pkg.LatestOverallVersion)}
                 >
                   <span class="codicon codicon-arrow-up"></span>
                 </button>
               `
             : nothing}
-          <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" ?disabled=${this.isUpdating || pkg.IsUpdating} @click=${async () => await this.updateSingleAsync(pkg)}>
+          <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" ?disabled=${this.isUpdating || this.isRefreshing || pkg.IsUpdating} @click=${async () => await this.updateSingleAsync(pkg)}>
             <span class="codicon codicon-arrow-circle-up"></span>
           </button>
         </div>
@@ -430,14 +579,14 @@ export class UpdatesView extends LitElement {
                   <button class="ghost-btn" title="${allVisibleSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
                     ${allVisibleSelected ? "Deselect all" : "Select all"}
                   </button>
-                  <button class="primary-btn" ?disabled=${this.isUpdating || totalSelectedCount === 0} @click=${async () => await this.updateAllSelectedAsync()}>
+                  <button class="primary-btn" ?disabled=${this.isUpdating || this.isRefreshing || totalSelectedCount === 0} @click=${async () => await this.updateAllSelectedAsync()}>
                     ${updateBtnLabel}
                   </button>
                   ${this.hasMultipleTfmsSelected
                     ? html`
                         <button
                           class="secondary-btn"
-                          ?disabled=${this.isUpdating}
+                          ?disabled=${this.isUpdating || this.isRefreshing}
                           title="Update every selected package for all of its target frameworks"
                           @click=${async () => await this.updateAllTfmsAsync()}
                         >
@@ -455,6 +604,31 @@ export class UpdatesView extends LitElement {
               <span>Framework-aligned packages stay on the target framework's major line. Use the separate latest-overall action only when you intend to cross it.</span>
             </div>`
           : nothing}
+        ${this.blockedPackages.length > 0
+          ? html`<section class="conflicts" aria-label="Dependency conflicts">
+              <div class="conflicts-header">
+                <span class="codicon codicon-lock"></span>
+                <span>Dependency conflicts (${this.blockedPackages.length})</span>
+              </div>
+              <ul class="conflicts-list">
+                ${this.blockedPackages.map((blocked) => html`
+                  <li class="conflict-row">
+                    <span class="conflict-title">
+                      <span class="conflict-id">${blocked.Id}</span>
+                      <span class="conflict-version">
+                        ${blocked.InstalledVersion} → ${blocked.BlockedVersion} blocked
+                      </span>
+                    </span>
+                    <span class="conflict-reason">
+                      blocked by ${blocked.BlockedBy.map((constraint) =>
+                        `${constraint.PackageId} ${constraint.InstalledVersion} requires ${constraint.Range}`
+                      ).join("; ")}
+                    </span>
+                  </li>
+                `)}
+              </ul>
+            </section>`
+          : nothing}
 
         ${isLoading
           ? html`
@@ -464,7 +638,7 @@ export class UpdatesView extends LitElement {
               </div>
             `
           : nothing}
-        ${!isLoading && this.packages.length === 0 && !hasError
+        ${!isLoading && this.packages.length === 0 && this.blockedPackages.length === 0 && !hasError
           ? html`
               <div class="empty">
                 <span class="codicon codicon-check"></span>

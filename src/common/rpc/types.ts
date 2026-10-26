@@ -55,6 +55,8 @@ export type GetOutdatedPackagesRequest = CacheControl & {
   Prerelease: boolean;
   ProjectPaths?: string[];
   SourceUrl?: string;
+  /** Return the persisted last scan without contacting the feeds. */
+  PreferCache?: boolean;
 };
 
 export type GetInconsistentPackagesRequest = CacheControl & {
@@ -106,6 +108,8 @@ export type RestoreProjectsRequest = {
 
 export type UpdateBadgeRequest = {
   Count: number;
+  /** Updates held back because installed dependencies pin an incompatible version. */
+  BlockedCount?: number;
 };
 
 export type ConsolidateRequest = {
@@ -179,6 +183,19 @@ export type GetPackageDetailsResponse = {
 
 export type GetOutdatedPackagesResponse = {
   Packages: OutdatedPackage[];
+  /** Updates withheld because a dependency pins an incompatible version. */
+  BlockedPackages?: Array<{
+    Id: string;
+    InstalledVersion: string;
+    /** The version that was available but rejected by the dependency ranges. */
+    BlockedVersion: string;
+    Reason: string;
+    BlockedBy: Array<{ PackageId: string; InstalledVersion: string; Range: string }>;
+  }>;
+  /** True when the payload came from the persisted scan cache. */
+  FromCache?: boolean;
+  /** ISO timestamp of the scan that produced the payload. */
+  ScannedAt?: string;
 };
 
 export type GetInconsistentPackagesResponse = {
