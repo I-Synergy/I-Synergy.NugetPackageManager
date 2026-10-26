@@ -30,7 +30,7 @@ suite('manifest identity', () => {
 
     test('uses the renamed extension identity', () => {
         assert.strictEqual(manifest.name, 'nugetpackagemanager');
-        assert.strictEqual(manifest.displayName, 'NuGet Package Manager for VS Code');
+        assert.strictEqual(manifest.displayName, 'NuGet Package Manager for Visual Studio Code');
         assert.strictEqual(manifest.publisher, 'I-Synergy');
     });
 

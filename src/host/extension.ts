@@ -221,7 +221,7 @@ class NugetWebviewManager implements vscode.Disposable {
 
     const panel = vscode.window.createWebviewPanel(
       PANEL_ID,
-      "NuGet Package Manager for VS Code",
+      "NuGet Package Manager for Visual Studio Code",
       vscode.ViewColumn.Active,
       {
         enableScripts: true,
@@ -282,7 +282,7 @@ class NugetWebviewManager implements vscode.Disposable {
           <meta name="viewport" content="width=device-width,initial-scale=1.0">
           <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-${nonceValue}'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} https: data:; font-src ${webview.cspSource} data:; connect-src 'none'; base-uri 'none'; form-action 'none';">
           <link rel="stylesheet" type="text/css" href="${webCssSrc}"/>
-          <title>NuGet Package Manager for VS Code</title>
+          <title>NuGet Package Manager for Visual Studio Code</title>
         </head>
         <body>
           <nuget-package-manager></nuget-package-manager>
@@ -340,10 +340,10 @@ class NugetLauncherTreeProvider implements vscode.TreeDataProvider<vscode.TreeIt
 
   getChildren(): vscode.TreeItem[] {
     const item = new vscode.TreeItem(
-      "Open NuGet Package Manager for VS Code",
+      "Open NuGet Package Manager for Visual Studio Code",
       vscode.TreeItemCollapsibleState.None
     );
-    item.command = { command: COMMAND_IDS.open, title: "Open NuGet Package Manager for VS Code" };
+    item.command = { command: COMMAND_IDS.open, title: "Open NuGet Package Manager for Visual Studio Code" };
     item.iconPath = new vscode.ThemeIcon("package");
     item.description = "Full-page package workspace";
     return [item];

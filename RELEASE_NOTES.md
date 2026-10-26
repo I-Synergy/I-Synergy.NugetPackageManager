@@ -1,8 +1,8 @@
-# NuGet Package Manager 2.0.1
+# NuGet Package Manager 2.0.0
 
 ## Breaking: new identity
 
-- This is the first published build of **NuGet Package Manager for VS Code** (`nugetpackagemanager`, ID `I-Synergy.nugetpackagemanager`); the earlier 2.0.0 build under `thenugetpackagemanager` was unpublished.
+- The extension is now **NuGet Package Manager for Visual Studio Code** (`nugetpackagemanager`, ID `I-Synergy.nugetpackagemanager`). This is a new Marketplace listing; the earlier build under the previous ID was unpublished.
 - Commands, the webview panel, views and settings moved to the `nugetpackagemanager.*` namespace.
 - The legacy `i-synergy-nugetpackagemanager.*` settings and `nugetpackage.*` command IDs were removed without compatibility shims, so existing keybindings and settings must be recreated.
 - The view container ID changed, so its Activity Bar placement resets once.

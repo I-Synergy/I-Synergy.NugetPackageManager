@@ -1,5 +1,5 @@
 /**
- * Playwright-based screenshot generator for NuGet Package Manager for VS Code.
+ * Playwright-based screenshot generator for NuGet Package Manager for Visual Studio Code.
  *
  * Starts a minimal HTTP server, loads the web UI with mock data,
  * captures screenshots for each tab, and creates an animated GIF.
@@ -168,7 +168,7 @@ function buildGif(screenshots) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('\nNuGet Package Manager for VS Code — Screenshot generator\n');
+  console.log('\nNuGet Package Manager for Visual Studio Code — Screenshot generator\n');
 
   mkdirSync(DOCS_IMAGES_DIR, { recursive: true });
 

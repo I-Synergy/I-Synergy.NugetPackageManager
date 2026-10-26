@@ -1,9 +1,9 @@
 {
   "name": "nugetpackagemanager",
   "publisher": "I-Synergy",
-  "displayName": "NuGet Package Manager for VS Code",
+  "displayName": "NuGet Package Manager for Visual Studio Code",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
-  "version": "2.0.1",
+  "version": "2.0.0",
   "license": "MIT",
   "icon": "docs/images/icon.png",
   "galleryBanner": {
@@ -51,19 +51,19 @@
     "commands": [
       {
         "command": "nugetpackagemanager.open",
-        "title": "NuGet Package Manager for VS Code: Open Packages"
+        "title": "NuGet Package Manager for Visual Studio Code: Open Packages"
       },
       {
         "command": "nugetpackagemanager.install",
-        "title": "NuGet Package Manager for VS Code: Add Package"
+        "title": "NuGet Package Manager for Visual Studio Code: Add Package"
       },
       {
         "command": "nugetpackagemanager.update",
-        "title": "NuGet Package Manager for VS Code: Update Package"
+        "title": "NuGet Package Manager for Visual Studio Code: Update Package"
       },
       {
         "command": "nugetpackagemanager.remove",
-        "title": "NuGet Package Manager for VS Code: Remove Package"
+        "title": "NuGet Package Manager for Visual Studio Code: Remove Package"
       },
       {
         "command": "nugetpackagemanager.openSettings",
@@ -121,7 +121,7 @@
       ]
     },
     "configuration": {
-      "title": "NuGet Package Manager for VS Code",
+      "title": "NuGet Package Manager for Visual Studio Code",
       "properties": {
         "nugetpackagemanager.skipRestore": {
           "type": "boolean",
