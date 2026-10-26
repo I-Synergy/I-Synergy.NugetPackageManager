@@ -6,6 +6,7 @@
 out/**
 src/**
 docs/raw/**
+docs/images/social-preview.png
 docs/*.md
 .gitignore
 .editorconfig

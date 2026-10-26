@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 2.0.0 (2026-10-26)
+
+- breaking: renamed the extension to **NuGet Package Manager** (`thenugetpackagemanager`, extension ID `I-Synergy.thenugetpackagemanager`). Commands, the webview panel, views and settings all moved to the `theNugetPackageManager.*` namespace. The legacy `i-synergy-nugetpackagemanager.*` settings and `nugetpackage.*` command IDs were removed without compatibility shims, so existing keybindings and settings must be recreated. The view container ID changed, so its Activity Bar placement resets once. The Marketplace treats this as a new listing, so existing installations will not auto-update.
+- feat: the update badge tooltip now also reports how many updates are blocked by dependency conflicts.
+- fix: restore failures now surface the real `dotnet` diagnostics, including the full `NU1107` constraint chain and the dependencies that declare the conflicting ranges.
+- fix: a failed restore after a single install, update or uninstall rolls back the project file and `Directory.Packages.props` instead of leaving the workspace modified.
+- feat: update suggestions are capped to versions accepted by installed dependencies (using `project.assets.json` and NuGet dependency metadata). Unsafe versions appear in a **Dependency conflicts** section with the blocked version and the packages/ranges that pin it, and the latest-overall action remains an explicit override.
+- test: cover NU1107 parsing, single-update rollback, dependency-range capping and the held-back UI.
+- docs: state explicitly that the extension restores after a write and never invokes `dotnet build`; a regression test asserts no build command is run.
+- perf: dependency-constraint checks now fetch metadata only for packages that directly declare a dependency on a candidate, instead of the whole transitive closure.
+- perf: reuse `dependencyGroups` embedded in NuGet registration data, so opening package details or checking a constraint no longer issues a second request for the same version.
+- perf: the latest-version check concurrency is configurable via `theNugetPackageManager.updateCheckConcurrency` (default 8, was hard-coded to 5).
+- feat: the Updates tab now paints the last persisted scan immediately (with update actions disabled) and refreshes in the background; selections are preserved across the refresh.
+- perf: NuGet HTTP responses are cached on disk for 30 minutes under the extension's global storage; Reload clears the HTTP cache.
+- chore: log per-phase timings for the Updates scan (project parse + TFM sources, latest-version checks, constraint checks).
+
 ## 1.2.14 (2026-10-26)
 
 - feat: add select/deselect-all controls to each Updates framework group (Shared, net10.0, net11.0, etc.), with indeterminate state.
