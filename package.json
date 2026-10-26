@@ -51,19 +51,19 @@
     "commands": [
       {
         "command": "theNugetPackageManager.open",
-        "title": "NuGet Package Manager: Open Packages"
+        "title": "NuGet Package Manager for VS Code: Open Packages"
       },
       {
         "command": "theNugetPackageManager.install",
-        "title": "NuGet Package Manager: Add Package"
+        "title": "NuGet Package Manager for VS Code: Add Package"
       },
       {
         "command": "theNugetPackageManager.update",
-        "title": "NuGet Package Manager: Update Package"
+        "title": "NuGet Package Manager for VS Code: Update Package"
       },
       {
         "command": "theNugetPackageManager.remove",
-        "title": "NuGet Package Manager: Remove Package"
+        "title": "NuGet Package Manager for VS Code: Remove Package"
       },
       {
         "command": "theNugetPackageManager.openSettings",
@@ -121,7 +121,7 @@
       ]
     },
     "configuration": {
-      "title": "NuGet Package Manager",
+      "title": "NuGet Package Manager for VS Code",
       "properties": {
         "theNugetPackageManager.skipRestore": {
           "type": "boolean",

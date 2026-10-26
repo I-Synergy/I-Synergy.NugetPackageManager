@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Release script for NuGet Package Manager.
+// Release script for NuGet Package Manager for VS Code.
 // Usage: node scripts/release.mjs [patch|minor|major|X.Y.Z] [--dry-run]
 //
 // - Bumps version in package.json + package-lock.json

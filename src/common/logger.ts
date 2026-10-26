@@ -28,7 +28,7 @@ export class Logger {
     };
 
     public static configure(context: vscode.ExtensionContext): void {
-        this._outputChannel = vscode.window.createOutputChannel("NuGet Package Manager");
+        this._outputChannel = vscode.window.createOutputChannel("NuGet Package Manager for VS Code");
         context.subscriptions.push(this._outputChannel);
 
         this.updateLogLevel();

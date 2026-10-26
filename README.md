@@ -105,7 +105,7 @@ Or via the Extensions panel: click **···** → **Install from VSIX…**
 5. Run **Updates** to check for outdated packages, **Vulnerabilities** for security issues, **Consolidate** for version drift, and **Cleanup** for unused CPM entries.
 6. The Activity Bar badge shows how many updates are available; it refreshes in the background every 15 minutes while the icon is visible.
 
-> **Tip:** Use the Command Palette (`Ctrl+Shift+P`) and type `NuGet Package Manager` to jump directly to any feature.
+> **Tip:** Use the Command Palette (`Ctrl+Shift+P`) and type `NuGet Package Manager for VS Code` to jump directly to any feature.
 
 ---
 
@@ -232,18 +232,18 @@ Access these from the Command Palette (`Ctrl+Shift+P`):
 
 | Command | ID | Description |
 |---|---|---|
-| **NuGet Package Manager: Open Packages** | `theNugetPackageManager.open` | Open or reveal the full-page NuGet editor tab |
-| **NuGet Package Manager: Add Package** | `theNugetPackageManager.install` | Prompt for a package ID and open Browse with it pre-searched |
-| **NuGet Package Manager: Update Package** | `theNugetPackageManager.update` | Open the editor tab and switch to Updates |
-| **NuGet Package Manager: Remove Package** | `theNugetPackageManager.remove` | Open the editor tab and switch to Installed |
-| **Settings** | `theNugetPackageManager.openSettings` | Open the NuGet Package Manager settings view |
+| **NuGet Package Manager for VS Code: Open Packages** | `theNugetPackageManager.open` | Open or reveal the full-page NuGet editor tab |
+| **NuGet Package Manager for VS Code: Add Package** | `theNugetPackageManager.install` | Prompt for a package ID and open Browse with it pre-searched |
+| **NuGet Package Manager for VS Code: Update Package** | `theNugetPackageManager.update` | Open the editor tab and switch to Updates |
+| **NuGet Package Manager for VS Code: Remove Package** | `theNugetPackageManager.remove` | Open the editor tab and switch to Installed |
+| **Settings** | `theNugetPackageManager.openSettings` | Open the NuGet Package Manager for VS Code settings view |
 | **Report Problem** | `theNugetPackageManager.reportProblem` | Open a new GitHub issue |
 
 ---
 
 ## Configuration
 
-Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or edit `settings.json` directly.
+Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager for VS Code**, or edit `settings.json` directly.
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
@@ -252,7 +252,7 @@ Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or ed
 | `theNugetPackageManager.skipRestore` | `boolean` | `false` | Skip the restore preview and compatibility check when installing/updating packages. |
 | `theNugetPackageManager.enablePackageVersionInlineInfo` | `boolean` | `false` | Show inline gutter decorations in `.csproj` files with available update versions. |
 | `theNugetPackageManager.statusBarLoadingIndicator` | `boolean` | `false` | Show a loading progress indicator in the VS Code status bar. |
-| `theNugetPackageManager.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Package Manager output channel. |
+| `theNugetPackageManager.logLevel` | `"DEBUG"` \| `"INFO"` \| `"WARN"` \| `"ERROR"` | `"INFO"` | Minimum log level written to the NuGet Package Manager for VS Code output channel. |
 | `theNugetPackageManager.frameworkAlignedPackages` | `string[]` | `["Microsoft.Extensions.*", "Microsoft.AspNetCore.*", "Microsoft.EntityFrameworkCore.*", "Microsoft.Maui.*", "System.*"]` | Package patterns whose major version follows the target framework (net10.0 → 10.x). Keeps framework-scoped update suggestions on the matching major line. |
 | `theNugetPackageManager.extraTargetFrameworks` | `string[]` | `[]` | Target frameworks added when MSBuild evaluation is unavailable or incomplete (for example `net11.0`). |
 | `theNugetPackageManager.excludeGlobs` | `string[]` | `["**/bin/**", "**/obj/**", "**/TestResults/**", "**/packages/**", "**/.git/**"]` | Glob patterns excluded from project discovery. |
@@ -283,7 +283,7 @@ Open VS Code Settings (`Ctrl+,`) and search for **NuGet Package Manager**, or ed
 
 ## Private Feed Authentication
 
-NuGet Package Manager supports private package feeds out of the box.
+NuGet Package Manager for VS Code supports private package feeds out of the box.
 
 ### NuGet.config (automatic)
 
@@ -328,7 +328,7 @@ For non-standard authentication flows, configure a script path per source. The s
 <a id="central-package-management-cpm"></a>
 ## Central Package Management
 
-NuGet Package Manager has first-class support for [Central Package Management](https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management).
+NuGet Package Manager for VS Code has first-class support for [Central Package Management](https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management).
 
 - **Auto-detection** — projects using `Directory.Packages.props` are detected and labelled in the project tree
 - **Version source tracking** — each installed package shows whether its version comes from `project`, `central`, or `override`
@@ -391,7 +391,7 @@ Please use the [GitHub Issues](https://github.com/I-Synergy/TheNugetPackageManag
 - VS Code version
 - Extension version
 - Steps to reproduce
-- Relevant output from the **NuGet Package Manager** output channel (set `logLevel` to `DEBUG`)
+- Relevant output from the **NuGet Package Manager for VS Code** output channel (set `logLevel` to `DEBUG`)
 
 ### Development Setup
 
@@ -522,7 +522,7 @@ src/
 
 ## Credits
 
-NuGet Package Manager builds on the work of:
+NuGet Package Manager for VS Code builds on the work of:
 
 - [nuget-workbench](https://github.com/nuget-workbench/nuget-workbench-vscode) - the original vscode extension from which we forked
 - [pcislo/vscode-nuget-gallery](https://github.com/pcislo/vscode-nuget-gallery) by [Patryk Cislo](https://github.com/pcislo) — the original extension this project descends from
