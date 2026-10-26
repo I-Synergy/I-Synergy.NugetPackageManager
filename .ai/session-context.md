@@ -43,7 +43,7 @@
 - Regenerated `.claude|.github|.reasonix/{skills,agents}` junctions; they still pointed at `I-Synergy.NugetPackageManager`
 - `sync-skills.py` now detects dangling junctions with `os.path.lexists` and repairs them (verified in a temp sandbox); previously it reported FAIL and left them broken
 - `.claude/settings.json` docs hook no longer hardcodes the old absolute path (uses `${CLAUDE_PROJECT_DIR:-.}`)
-- `origin` already points at `https://github.com/I-Synergy/TheNugetPackageManager.git`; GitHub 301s the old name, `git ls-remote` and `git push --dry-run` succeed
+- `origin` now points at `https://github.com/I-Synergy/NugetPackageManager.git` (the repository was renamed twice; GitHub 301s the older URLs)
 - Verification: `npm run esbuild`, `npm run lint` clean; `npm test` — **385 passing**
 
 ### Completed: NU1107 conflict handling and dependency-aware updates (2026-10-26)

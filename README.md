@@ -2,8 +2,8 @@
 
 **A full-featured NuGet package manager for Visual Studio Code** — browse, install, update, and audit packages across all your .NET projects without leaving the editor.
 
-[![Release](https://img.shields.io/github/v/release/I-Synergy/TheNugetPackageManager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.thenugetpackagemanager)
-[![CI](https://img.shields.io/github/actions/workflow/status/I-Synergy/TheNugetPackageManager/ci.yml?label=CI)](https://github.com/I-Synergy/TheNugetPackageManager/actions)
+[![Release](https://img.shields.io/github/v/release/I-Synergy/NugetPackageManager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.thenugetpackagemanager)
+[![CI](https://img.shields.io/github/actions/workflow/status/I-Synergy/NugetPackageManager/ci.yml?label=CI)](https://github.com/I-Synergy/NugetPackageManager/actions)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.110%2B-blue)](https://code.visualstudio.com/)
 
@@ -86,7 +86,7 @@ code --install-extension I-Synergy.thenugetpackagemanager
 
 ### From a .vsix file
 
-Download the latest `.vsix` from the [Releases page](https://github.com/I-Synergy/TheNugetPackageManager/releases), then:
+Download the latest `.vsix` from the [Releases page](https://github.com/I-Synergy/NugetPackageManager/releases), then:
 
 ```bash
 code --install-extension thenugetpackagemanager-x.x.x.vsix
@@ -387,7 +387,7 @@ Contributions are welcome — bug reports, feature requests, documentation impro
 
 ### Reporting Issues
 
-Please use the [GitHub Issues](https://github.com/I-Synergy/TheNugetPackageManager/issues) tracker. Include:
+Please use the [GitHub Issues](https://github.com/I-Synergy/NugetPackageManager/issues) tracker. Include:
 - VS Code version
 - Extension version
 - Steps to reproduce
@@ -399,8 +399,8 @@ Please use the [GitHub Issues](https://github.com/I-Synergy/TheNugetPackageManag
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/I-Synergy/TheNugetPackageManager.git
-cd TheNugetPackageManager
+git clone https://github.com/I-Synergy/NugetPackageManager.git
+cd NugetPackageManager
 
 # 2. Install dependencies
 npm install

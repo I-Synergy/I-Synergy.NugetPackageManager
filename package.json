@@ -29,14 +29,14 @@
     "Programming Languages",
     "Other"
   ],
-  "homepage": "https://github.com/I-Synergy/TheNugetPackageManager",
+  "homepage": "https://github.com/I-Synergy/NugetPackageManager",
   "bugs": {
-    "url": "https://github.com/I-Synergy/TheNugetPackageManager/issues",
+    "url": "https://github.com/I-Synergy/NugetPackageManager/issues",
     "email": "daniel-rck@proton.me"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/I-Synergy/TheNugetPackageManager.git"
+    "url": "https://github.com/I-Synergy/NugetPackageManager.git"
   },
   "activationEvents": [
     "workspaceContains:**/*.csproj",

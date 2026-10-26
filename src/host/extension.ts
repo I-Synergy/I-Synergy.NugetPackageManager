@@ -168,7 +168,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand(COMMAND_IDS.reportProblem, async () => {
       vscode.env.openExternal(
-        vscode.Uri.parse("https://github.com/I-Synergy/TheNugetPackageManager/issues/new")
+        vscode.Uri.parse("https://github.com/I-Synergy/NugetPackageManager/issues/new")
       );
     })
   );
