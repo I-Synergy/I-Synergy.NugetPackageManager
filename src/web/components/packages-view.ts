@@ -650,7 +650,7 @@ export class PackagesView extends LitElement {
     const paths = this.effectiveProjectPaths;
     if (paths.length === 0) {
       this.updatesCount = 0;
-      await hostApi.updateBadgeAsync({ Count: 0 });
+      await hostApi.updateBadgeAsync({ Count: 0, BlockedCount: 0 });
       return;
     }
     const signal = this._refreshAc?.signal;
@@ -661,7 +661,10 @@ export class PackagesView extends LitElement {
     if (!this._connected || signal?.aborted) return;
     if (result.ok) {
       this.updatesCount = result.value.Packages.length;
-      await hostApi.updateBadgeAsync({ Count: this.updatesCount });
+      await hostApi.updateBadgeAsync({
+        Count: this.updatesCount,
+        BlockedCount: result.value.BlockedPackages?.length ?? 0,
+      });
     }
   }
 
