@@ -1,4 +1,4 @@
-# NuGet Package Manager
+# NuGet Package Manager for VS Code
 
 **A full-featured NuGet package manager for Visual Studio Code** — browse, install, update, and audit packages across all your .NET projects without leaving the editor.
 
@@ -75,7 +75,7 @@
 
 1. Open VS Code
 2. Press `Ctrl+Shift+X` to open the Extensions panel
-3. Search for **NuGet Package Manager**
+3. Search for **NuGet Package Manager for VS Code**
 4. Click **Install**
 
 Or install directly from the command line:

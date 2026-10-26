@@ -1,7 +1,7 @@
 {
   "name": "thenugetpackagemanager",
   "publisher": "I-Synergy",
-  "displayName": "NuGet Package Manager",
+  "displayName": "NuGet Package Manager for VS Code",
   "description": "A comprehensive NuGet package management extension for Visual Studio Code with vulnerability scanning, multi-project support, and version consolidation.",
   "version": "2.0.0",
   "license": "MIT",

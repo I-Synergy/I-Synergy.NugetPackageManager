@@ -4,7 +4,7 @@
 
 ## 2.0.0 (2026-10-26)
 
-- breaking: renamed the extension to **NuGet Package Manager** (`thenugetpackagemanager`, extension ID `I-Synergy.thenugetpackagemanager`). Commands, the webview panel, views and settings all moved to the `theNugetPackageManager.*` namespace. The legacy `i-synergy-nugetpackagemanager.*` settings and `nugetpackage.*` command IDs were removed without compatibility shims, so existing keybindings and settings must be recreated. The view container ID changed, so its Activity Bar placement resets once. The Marketplace treats this as a new listing, so existing installations will not auto-update.
+- breaking: renamed the extension to **NuGet Package Manager for VS Code** (`thenugetpackagemanager`, extension ID `I-Synergy.thenugetpackagemanager`). Commands, the webview panel, views and settings all moved to the `theNugetPackageManager.*` namespace. The legacy `i-synergy-nugetpackagemanager.*` settings and `nugetpackage.*` command IDs were removed without compatibility shims, so existing keybindings and settings must be recreated. The view container ID changed, so its Activity Bar placement resets once. The Marketplace treats this as a new listing, so existing installations will not auto-update.
 - feat: the update badge tooltip now also reports how many updates are blocked by dependency conflicts.
 - fix: restore failures now surface the real `dotnet` diagnostics, including the full `NU1107` constraint chain and the dependencies that declare the conflicting ranges.
 - fix: a failed restore after a single install, update or uninstall rolls back the project file and `Directory.Packages.props` instead of leaving the workspace modified.

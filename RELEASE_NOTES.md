@@ -2,7 +2,7 @@
 
 ## Breaking: new identity
 
-- The extension is now **NuGet Package Manager** (`thenugetpackagemanager`, ID `I-Synergy.thenugetpackagemanager`).
+- The extension is now **NuGet Package Manager for VS Code** (`thenugetpackagemanager`, ID `I-Synergy.thenugetpackagemanager`).
 - Commands, the webview panel, views and settings moved to the `theNugetPackageManager.*` namespace.
 - The legacy `i-synergy-nugetpackagemanager.*` settings and `nugetpackage.*` command IDs were removed without compatibility shims, so existing keybindings and settings must be recreated.
 - The view container ID changed, so its Activity Bar placement resets once.
