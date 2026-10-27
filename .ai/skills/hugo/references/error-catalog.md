@@ -140,7 +140,7 @@ date = 2025-11-04
 **In GitHub Actions:**
 ```yaml
 - name: Setup Hugo
-  uses: peaceiris/actions-hugo@v2
+  uses: peaceiris/actions-hugo@v3
   with:
     hugo-version: '0.152.2'
     extended: true
@@ -450,7 +450,7 @@ module.exports = {
 **GitHub Actions:**
 ```yaml
 - name: Checkout
-  uses: actions/checkout@v4
+  uses: actions/checkout@v7
   with:
     submodules: recursive  # CRITICAL: Must be present
 ```

@@ -84,7 +84,7 @@ chmod +x .ai/tests/*.sh .ai/tests/*.py
 
 ### PyYAML Missing
 ```bash
-pip install pyyaml
+pip install -r requirements-dev.txt
 ```
 
 ### Test Fails

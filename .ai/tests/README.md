@@ -236,12 +236,12 @@ All test scripts follow standard Unix conventions:
 - Standard Unix tools: `grep`, `find`, `wc`
 
 ### Python Scripts
-- Python 3.8 or higher
-- `PyYAML` library
+- Python 3.10 or higher (CI runs 3.14)
+- `PyYAML` and `pytest` (pinned in `requirements-dev.txt`)
 
 Install Python dependencies:
 ```bash
-pip install pyyaml
+PIP_CONFIG_FILE=pip.ini pip install -r requirements-dev.txt
 ```
 
 ## CI/CD Integration
@@ -263,15 +263,15 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v7
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Install dependencies
-        run: pip install pyyaml
+        run: pip install -r requirements-dev.txt
 
       - name: Make scripts executable
         run: chmod +x .ai/tests/*.sh
@@ -286,9 +286,9 @@ Create `.gitlab-ci.yml`:
 
 ```yaml
 validate:
-  image: python:3.11
+  image: python:3.14
   script:
-    - pip install pyyaml
+    - pip install -r requirements-dev.txt
     - chmod +x .ai/tests/*.sh
     - .ai/tests/run-all-tests.sh
 ```
@@ -390,7 +390,7 @@ chmod +x .ai/tests/*.sh
 
 Install PyYAML:
 ```bash
-pip install pyyaml
+pip install -r requirements-dev.txt
 ```
 
 ### Path issues on Windows
