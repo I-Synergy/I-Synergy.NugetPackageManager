@@ -62,6 +62,12 @@ TEMPLATE_OWNED = [
     ".ai/checklists",
     ".ai/tests",
     ".ai/scripts",
+    "requirements-dev.txt",
+    "pytest.ini",
+    "pip.ini",
+    ".vscode/settings.json",
+    ".gitignore",
+    ".github/workflows/validate-template.yml",
 ]
 
 # Project owns these — never read, never write.

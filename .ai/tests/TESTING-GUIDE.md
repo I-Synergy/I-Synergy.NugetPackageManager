@@ -82,13 +82,13 @@ python3 .ai/tests/validate-upgrade-script.py
 ### Required Software
 
 - **Bash** 4.0+ (Git Bash on Windows)
-- **Python** 3.8+ with PyYAML
+- **Python** 3.10+ with PyYAML
 
 ### Installation
 
 ```bash
 # Install Python dependencies
-pip install pyyaml
+pip install -r requirements-dev.txt
 
 # Make scripts executable (Linux/Mac)
 chmod +x .ai/tests/*.sh .ai/tests/*.py
@@ -225,8 +225,8 @@ The template includes a GitHub Actions workflow at `.github/workflows/validate-t
 
 The workflow:
 1. Checks out code
-2. Sets up Python 3.11
-3. Installs PyYAML and pytest
+2. Sets up Python 3.14
+3. Installs the pinned dev dependencies from `requirements-dev.txt`
 4. Makes scripts executable
 5. Runs every suite listed in `run-all-tests.sh`
 6. Runs the pytest wrapper (`python3 -m pytest .ai/tests/test_suite.py -q`), which also covers
@@ -274,7 +274,7 @@ chmod +x .ai/tests/*.sh .ai/tests/*.py
 
 **"PyYAML not found"**
 ```bash
-pip install pyyaml
+pip install -r requirements-dev.txt
 ```
 
 **"Path not found" on Windows**

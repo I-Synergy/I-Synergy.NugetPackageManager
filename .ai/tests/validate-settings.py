@@ -243,9 +243,12 @@ def test_session_context_hook() -> bool:
     print("-" * 40)
 
     settings_path = TEMPLATE_ROOT / ".claude" / "settings.json"
+    if not settings_path.exists():
+        print("  FAIL: settings.json not found — cannot verify the session-context hook")
+        return False
     try:
         settings = json.loads(settings_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+    except (OSError, json.JSONDecodeError):
         print("  FAIL: Could not parse settings.json")
         return False
 
