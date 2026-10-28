@@ -5,6 +5,14 @@ import { ok } from '@/common/rpc/result';
 import * as registrations from '@/web/registrations';
 import type { HostAPI } from '@/common/rpc/types';
 
+/** Waits for an async UI effect instead of assuming a fixed delay. */
+async function waitForAsync(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (!predicate() && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+}
+
 suite('CleanupView Component', () => {
     let view: CleanupView;
     let originalHostApi: HostAPI;
@@ -27,15 +35,22 @@ suite('CleanupView Component', () => {
         Object.defineProperty(registrations, 'hostApi', {
             value: {
                 getCleanupReportAsync: async () => ok(report),
-                cleanupUnusedPackagesAsync: async () => {
+                startCleanupAsync: async () => {
                     cleanupCalls++;
-                    return ok({
+                    return ok({ JobId: 'job-cleanup' });
+                },
+                getJobAsync: async () => ok({
+                    Kind: 'cleanup',
+                    State: 'completed',
+                    Stage: 'Completed',
+                    Percent: 100,
+                    Response: {
                         Report: { ...report, PropsFiles: [{ ...report.PropsFiles[0]!, Unused: [] }], Unused: [] },
                         Removed: ['Unused.One', 'Unused.Two'],
                         Backups: ['/ws/Directory.Packages.props.backup.test'],
                         Errors: [],
-                    });
-                },
+                    },
+                }),
                 showConfirmationAsync: async () => ok({ Confirmed: true }),
             },
             writable: true,
@@ -81,4 +96,47 @@ suite('CleanupView Component', () => {
         assert.strictEqual(completed, true);
         assert.ok(view.shadowRoot?.textContent?.includes('backup'));
     });
+    test('cancels a running cleanup', async () => {
+        await view.LoadCleanupReportAsync();
+        await view.updateComplete;
+
+        let running = true;
+        const cancelled: string[] = [];
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                getCleanupReportAsync: async () => ok(report),
+                showConfirmationAsync: async () => ok({ Confirmed: true }),
+                startCleanupAsync: async () => ok({ JobId: 'job-cleanup-cancel' }),
+                getJobAsync: async () => running
+                    ? ok({ Kind: 'cleanup', State: 'running', Stage: 'Cleaning Directory.Packages.props…', Percent: 40 })
+                    : ok({ Kind: 'cleanup', State: 'cancelled', Stage: 'Cancelled', Percent: 40 }),
+                cancelJobAsync: async ({ JobId }: { JobId: string }) => {
+                    cancelled.push(JobId);
+                    running = false;
+                    return ok(undefined);
+                },
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        const removeButton = [...(view.shadowRoot?.querySelectorAll('button') ?? [])]
+            .find((candidate) => candidate.textContent?.includes('Remove unused'));
+        assert.ok(removeButton, 'Remove unused button should be present');
+        removeButton.click();
+
+        await waitForAsync(
+            () => [...(view.shadowRoot?.querySelectorAll('button') ?? [])].some((b) => b.textContent?.trim() === 'Cancel')
+        );
+        const cancelButton = [...(view.shadowRoot?.querySelectorAll('button') ?? [])]
+            .find((b) => b.textContent?.trim() === 'Cancel');
+        assert.ok(cancelButton, 'a running cleanup offers a cancel button');
+        cancelButton.click();
+
+        await waitForAsync(() => cancelled.length > 0, 2000);
+        assert.deepStrictEqual(cancelled, ['job-cleanup-cancel']);
+        const state = view as unknown as { statusText: string };
+        await waitForAsync(() => /cancelled/i.test(state.statusText), 2000);
+    });
+
 });

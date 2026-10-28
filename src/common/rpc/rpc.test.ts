@@ -38,7 +38,7 @@ suite('RPC transport', () => {
         assert.strictEqual(result.ok, true);
     });
 
-    test('posts rpc-cancel on timeout and fails the call', async () => {
+    test('timeout fails the call without cancelling the host operation', async () => {
         const sent: Array<RpcRequest | RpcCancel> = [];
         const client = createRpcClient((msg) => sent.push(msg as RpcRequest | RpcCancel), 20);
 
@@ -47,7 +47,30 @@ suite('RPC transport', () => {
         const result = await promise;
 
         assert.strictEqual(result.ok, false);
-        assert.ok(sent.some((msg) => (msg as RpcCancel).type === 'rpc-cancel'));
+        if (!result.ok) {
+            assert.match(result.error, /still running in the extension host/);
+        }
+        assert.deepStrictEqual(
+            sent.filter((msg) => (msg as RpcCancel).type === 'rpc-cancel'),
+            [],
+            'a deadline must never abort slow host work'
+        );
+    });
+
+    test('ignores a late response after the call timed out', async () => {
+        const sent: RpcRequest[] = [];
+        const client = createRpcClient((msg) => sent.push(msg as RpcRequest), 20);
+
+        const promise = client.getProjectsAsync({});
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        const result = await promise;
+
+        assert.strictEqual(result.ok, false);
+        // The host keeps going and eventually answers; that must not throw or
+        // resolve anything a second time.
+        respond(sent[0]!.id, { Projects: [] });
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        assert.strictEqual(result.ok, false);
     });
 
     test('aborting the signal posts rpc-cancel', async () => {

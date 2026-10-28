@@ -703,10 +703,19 @@ suite('PackagesView Component', () => {
             }));
 
             const updateRequests: Array<{ Type: string; ProjectPath: string; PackageId: string }> = [];
-            mockHostApi.updateProjectAsync = async (request) => {
+            let jobSeq = 0;
+            mockHostApi.startProjectUpdateAsync = async (request) => {
                 updateRequests.push(request);
-                return ok({ Project: createMockProject('Updated'), IsCpmEnabled: false });
+                jobSeq += 1;
+                return ok({ JobId: `job-remove-${jobSeq}` });
             };
+            mockHostApi.getJobAsync = async () => ok({
+                Kind: 'projectUpdate',
+                State: 'completed',
+                Stage: 'Completed',
+                Percent: 100,
+                Response: { Project: createMockProject('Updated'), IsCpmEnabled: false },
+            });
             const restoreStub = sandbox.stub().resolves(ok(undefined));
             mockHostApi.restoreProjectsAsync = restoreStub;
             mockHostApi.showConfirmationAsync = sandbox.stub().resolves(ok({ Confirmed: true }));

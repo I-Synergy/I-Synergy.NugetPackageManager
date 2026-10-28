@@ -4,6 +4,7 @@ import { customElement, state } from "lit/decorators.js";
 import Split from "split.js";
 import lodash from "lodash";
 import { hostApi, configuration } from "@/web/registrations";
+import { runProjectUpdateJobAsync } from "@/web/jobs";
 import { buildFrameworkOptions, getFrameworkGroupKey, matchesFrameworkSelection } from "@/common/framework";
 import codicon from "@/web/styles/codicon.css";
 import { scrollableBase } from "@/web/styles/base.css";
@@ -418,6 +419,8 @@ export class PackagesView extends LitElement {
   @state() private _consolidateFrameworkOptions: Array<{ value: string; label: string }> = [];
   @state() private _consolidateFramework = "";
   @state() private removingPackage = false;
+  private _removeJobId = "";
+  private _removeCancelled = false;
   @state() private removeError = "";
   @state() private projectsLoading = false;
   @state() private projectsLoadingMessage = "Discovering projects and resolving target frameworks…";
@@ -1219,6 +1222,16 @@ export class PackagesView extends LitElement {
   }
 
 
+  private async cancelRemoveAsync(): Promise<void> {
+    if (!this._removeJobId) return;
+    this._removeCancelled = true;
+    const result = await hostApi.cancelJobAsync({ JobId: this._removeJobId });
+    if (!result.ok) {
+      this.removeError = `Failed to cancel: ${result.error}`;
+    }
+    this.requestUpdate();
+  }
+
   private async removePackageFromAllProjectsAsync(): Promise<void> {
     const pkg = this.selectedPackage;
     if (!pkg || this.removingPackage) return;
@@ -1236,18 +1249,34 @@ export class PackagesView extends LitElement {
 
     this.removingPackage = true;
     this.removeError = "";
+    this._removeCancelled = false;
     this.requestUpdate();
     const errors: string[] = [];
     try {
       for (const project of targets) {
-        const result = await hostApi.updateProjectAsync({
+        if (this._removeCancelled) break;
+        const result = await runProjectUpdateJobAsync({
           Type: "UNINSTALL",
           ProjectPath: project.Path,
           PackageId: pkg.Id,
+        }, {
+          onStarted: (jobId) => {
+            this._removeJobId = jobId;
+          },
         });
         if (!result.ok) {
           errors.push(`${project.Name}: ${result.error}`);
+          if (this._removeCancelled) break;
         }
+      }
+
+      if (this._removeCancelled) {
+        await this.LoadProjectsAsync();
+        this.selectedPackage = null;
+        this.removeError = errors.length > 0
+          ? `Cancelled. ${errors.join("\n")}`
+          : "Cancelled before every project was updated";
+        return;
       }
 
       const restore = await hostApi.restoreProjectsAsync({
@@ -1261,6 +1290,8 @@ export class PackagesView extends LitElement {
         this.removeError = `Removed from some projects, but not all:\n${errors.join("\n")}`;
       }
     } finally {
+      this._removeJobId = "";
+      this._removeCancelled = false;
       this.removingPackage = false;
       this.requestUpdate();
     }
@@ -1345,6 +1376,15 @@ export class PackagesView extends LitElement {
         >
           Remove from all projects
         </button>
+        ${this.removingPackage
+          ? html`
+              <button
+                class="secondary-btn"
+                ?disabled=${!this._removeJobId}
+                @click=${async () => await this.cancelRemoveAsync()}
+              >Cancel</button>
+            `
+          : nothing}
       </div>
       ${this.removeError
         ? html`<div class="package-action-error" role="alert">${this.removeError}</div>`

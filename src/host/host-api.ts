@@ -21,6 +21,11 @@ import type {
   GetOutdatedPackagesResponse,
   BatchUpdateRequest,
   BatchUpdateResponse,
+  BatchUpdateConflict,
+  CheckBatchUpdateResponse,
+  JobRequest,
+  GetJobResponse,
+  StartJobResponse,
   RestoreProjectsRequest,
   UpdateBadgeRequest,
   GetInconsistentPackagesRequest,
@@ -62,6 +67,7 @@ import { Logger } from "../common/logger";
 import { getConfiguration, getSetting } from "../common/configuration";
 import { BuildScanCacheKey, ScanCacheStore } from "./scan-cache";
 import { ScanProgress } from "./utilities/scan-progress";
+import { OperationJobs, type JobReporter } from "./utilities/operation-jobs";
 import { AxiosError } from "axios";
 
 /**
@@ -314,6 +320,769 @@ function formatApiError(err: unknown): string {
   return String(err);
 }
 
+/**
+ * Shared implementation of the direct `batchUpdatePackagesAsync` RPC and the
+ * background batch update job. `report` streams stage/percent to the job
+ * registry so the webview can render progress without holding a request open.
+ */
+async function runBatchUpdateAsync(
+  request: BatchUpdateRequest,
+  signal?: AbortSignal,
+  report: JobReporter = () => {}
+): Promise<Result<BatchUpdateResponse>> {
+  Logger.info(`batchUpdatePackages: Updating ${request.Updates.length} packages`);
+  report("Preparing update…", 2);
+
+  const outsideWorkspace = await findOutsideWorkspaceAsync(
+    request.Updates.flatMap((update) => update.ProjectPaths)
+  );
+  if (outsideWorkspace) {
+    return fail(`Project path is outside the workspace: ${outsideWorkspace}`);
+  }
+
+  const results: Array<{ PackageId: string; Success: boolean; Error?: string }> = [];
+  const configSkipRestore = getSetting<boolean>("skipRestore", false);
+  const skipRestore = request.SkipRestore === true || configSkipRestore;
+  const cpmMapCache = new Map<string, Promise<CpmPackageMap>>();
+  const transactional = request.Transactional === true;
+  const allProjectPaths = [...new Set(request.Updates.flatMap((update) => update.ProjectPaths))];
+  let snapshots: Map<string, FileSnapshot> | undefined;
+
+  report("Snapshotting files…", 3);
+  if (transactional) {
+    const affectedFiles = new Set<string>(allProjectPaths);
+    for (const update of request.Updates) {
+      for (const projectPath of update.ProjectPaths) {
+        const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(projectPath);
+        if (cpmFilePath) affectedFiles.add(cpmFilePath);
+      }
+    }
+    snapshots = await snapshotFilesAsync([...affectedFiles]);
+  }
+
+  report("Updating packages…", 5);
+  let transactionFailed = false;
+  for (const [i, update] of request.Updates.entries()) {
+    if (signal?.aborted) break;
+    report(
+      `Updating ${update.PackageId} (${i + 1}/${request.Updates.length})…`,
+      5 + (i / Math.max(1, request.Updates.length)) * 70
+    );
+    StatusBarUtils.ShowText(
+      `Updating ${update.PackageId} to ${update.Version} (${i + 1}/${request.Updates.length})...`
+    );
+
+    if (!isValidPackageId(update.PackageId)) {
+      results.push({ PackageId: update.PackageId, Success: false, Error: `Invalid NuGet package ID: ${update.PackageId}` });
+      continue;
+    }
+    if (update.Version && !isValidNuGetVersion(update.Version)) {
+      results.push({ PackageId: update.PackageId, Success: false, Error: `Invalid NuGet version: ${update.Version}` });
+      continue;
+    }
+
+    try {
+      const cpmChanges = new Map<string, CpmVersionChange>();
+      const nonCpmProjects: string[] = [];
+
+      for (const projectPath of update.ProjectPaths) {
+        const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(projectPath);
+
+        let cpmMap: CpmPackageMap | null = null;
+        if (cpmFilePath) {
+          if (!cpmMapCache.has(cpmFilePath)) {
+            cpmMapCache.set(cpmFilePath, CpmResolver.ParseCpmFileAsync(cpmFilePath));
+          }
+          cpmMap = await cpmMapCache.get(cpmFilePath)!;
+        }
+
+        if (!cpmMap || !CpmResolver.HasPackage(cpmMap, update.PackageId)) {
+          nonCpmProjects.push(projectPath);
+          continue;
+        }
+
+        if (!update.Version) {
+          throw new Error(`Version is required for CPM package update: ${update.PackageId}`);
+        }
+
+        let condition = update.CpmCondition;
+        let scope = update.Scope;
+        if (condition === undefined) {
+          const unconditional = cpmMap.unconditional.has(update.PackageId)
+            || [...cpmMap.unconditional.keys()].some(
+              (id) => id.toLowerCase() === update.PackageId.toLowerCase()
+            );
+          const conditionalGroups = cpmMap.conditional.filter((entry) =>
+            [...entry.versions.keys()].some(
+              (id) => id.toLowerCase() === update.PackageId.toLowerCase()
+            )
+          );
+
+          if (!unconditional && conditionalGroups.length === 1 && conditionalGroups[0]) {
+            condition = conditionalGroups[0].condition;
+            scope = scope ?? "group";
+          } else if (unconditional) {
+            scope = scope ?? "unconditional";
+          } else {
+            throw new Error(
+              `Package ${update.PackageId} has multiple framework-scoped versions; specify CpmCondition.`
+            );
+          }
+        } else {
+          scope = scope ?? "group";
+        }
+
+        const change: CpmVersionChange = {
+          packageId: update.PackageId,
+          version: update.Version,
+          scope,
+        };
+        if (condition !== undefined) {
+          change.condition = condition;
+        }
+
+        const key = `${cpmFilePath}\0${update.PackageId}\0${condition ?? ""}`;
+        const existing = cpmChanges.get(key);
+        if (existing && existing.version !== update.Version) {
+          throw new Error(
+            `Conflicting versions requested for ${update.PackageId} in ${cpmFilePath}: ${existing.version} vs ${update.Version}`
+          );
+        }
+        cpmChanges.set(key, change);
+      }
+
+      const changesByFile = new Map<string, CpmVersionChange[]>();
+      for (const [key, change] of cpmChanges) {
+        const propsFilePath = key.split("\0")[0]!;
+        const list = changesByFile.get(propsFilePath) ?? [];
+        list.push(change);
+        changesByFile.set(propsFilePath, list);
+      }
+
+      for (const [propsFilePath, changes] of changesByFile) {
+        await CpmResolver.UpdateCpmVersionsAsync(propsFilePath, changes);
+      }
+
+      for (const projectPath of nonCpmProjects) {
+        // A transactional batch restores once at the end; letting `dotnet add`
+        // restore here would turn one restore into one per package.
+        await executeAddPackage(
+          update.PackageId,
+          projectPath,
+          update.Version,
+          skipRestore || (transactional && !skipRestore),
+          undefined,
+          undefined,
+          signal
+        );
+      }
+
+      results.push({ PackageId: update.PackageId, Success: true });
+      Logger.info(`batchUpdatePackages: Updated ${update.PackageId} to ${update.Version}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      Logger.error(`batchUpdatePackages: Failed to update ${update.PackageId}`, err);
+      results.push({ PackageId: update.PackageId, Success: false, Error: message });
+      if (transactional) {
+        transactionFailed = true;
+        break;
+      }
+    }
+  }
+
+  if (signal?.aborted) {
+    // An explicit cancel rolls back whatever the transaction already wrote; it
+    // never leaves a partially applied update behind.
+    transactionFailed = transactional;
+  }
+
+  if (transactional) {
+    let restoreFailure: RestoreFailure | null = null;
+    const restoreError = (): string | undefined => restoreFailure?.message;
+    if (!transactionFailed && !skipRestore) {
+      report("Restoring updated projects…", 80);
+      StatusBarUtils.ShowText("Restoring updated projects...");
+      restoreFailure = await restoreProjectsInternalAsync(
+        allProjectPaths,
+        signal,
+        true,
+        ({ projectPath, index, total, stage, percent }) => {
+          // One long static bar makes a slow solution look hung; dotnet's own
+          // stage keeps it moving and names the project being restored.
+          const projectName = path.basename(projectPath);
+          report(
+            `${stage} — ${projectName} (${index + 1}/${total})`,
+            80 + (15 * (index + percent / 100)) / Math.max(1, total)
+          );
+        }
+      );
+    }
+
+    const failedRestore = restoreError();
+    if (transactionFailed || failedRestore) {
+      report("Rolling back…", 90);
+      const conflictingPackages = attributeRestoreConflicts(restoreFailure, request.Updates);
+      const rollbackError = await rollbackFilesAsync(snapshots);
+      let rollbackRestoreError: string | undefined;
+      if (!skipRestore && (transactionFailed || failedRestore)) {
+        rollbackRestoreError = (await restoreProjectsInternalAsync(allProjectPaths, signal, false))?.message;
+      }
+      StatusBarUtils.hide();
+      Logger.error("batchUpdatePackages: Transaction rolled back", failedRestore ?? "write failure");
+      const response: BatchUpdateResponse = { Results: results, RolledBack: true };
+      if (failedRestore) response.RestoreError = failedRestore;
+      const rollbackMessage = rollbackError ?? rollbackRestoreError;
+      if (rollbackMessage) response.RollbackError = rollbackMessage;
+      if (conflictingPackages.length > 0) response.ConflictingPackages = conflictingPackages;
+      if (signal?.aborted) response.Cancelled = true;
+      return ok(response);
+    }
+  }
+
+  StatusBarUtils.hide();
+  report("Completed", 100);
+  const response: BatchUpdateResponse = { Results: results };
+  if (signal?.aborted) response.Cancelled = true;
+  return ok(response);
+}
+
+/**
+ * Shared implementation of `updateProjectAsync` and the project update job.
+ * `report` streams stage/percent to the job registry.
+ */
+async function runProjectUpdateAsync(
+  request: UpdateProjectRequest,
+  signal?: AbortSignal,
+  report: JobReporter = () => {}
+): Promise<Result<UpdateProjectResponse>> {
+  Logger.info(`updateProject: ${request.Type} ${request.PackageId} in ${request.ProjectPath}`);
+  report("Preparing update…", 5);
+
+  const outsideWorkspace = await findOutsideWorkspaceAsync([request.ProjectPath]);
+  if (outsideWorkspace) {
+    return fail(`Project path is outside the workspace: ${outsideWorkspace}`);
+  }
+
+  if (!isValidPackageId(request.PackageId)) {
+    return fail(`Invalid NuGet package ID: ${request.PackageId}`);
+  }
+  if (request.Version && !isValidNuGetVersion(request.Version)) {
+    return fail(`Invalid NuGet version: ${request.Version}`);
+  }
+
+  if (request.SourceUrl) {
+    try {
+      const protocol = new URL(request.SourceUrl).protocol;
+      if (protocol !== "https:" && protocol !== "http:") {
+        return fail(`Invalid source URL: ${request.SourceUrl}`);
+      }
+    } catch {
+      return fail(`Invalid source URL: ${request.SourceUrl}`);
+    }
+  }
+
+  if (signal?.aborted) {
+    return fail("cancelled");
+  }
+
+  const skipRestoreConfig = getSetting<boolean>("skipRestore", false);
+  const cpmMapBefore = await CpmResolver.GetFrameworkPackageMapAsync(request.ProjectPath);
+  const isCpmEnabled = cpmMapBefore !== null;
+  const isCpmPackage = cpmMapBefore !== null && CpmResolver.HasPackage(cpmMapBefore, request.PackageId);
+  const skipRestore = !!skipRestoreConfig && !isCpmEnabled;
+
+  // A single-package operation mutates at least the project file and, for
+  // CPM, Directory.Packages.props. Uninstall can also prune other props
+  // files, so snapshot all of them up front. A failed restore then leaves
+  // the workspace exactly as it was, matching the batch path.
+  report("Snapshotting files…", 10);
+  const snapshotPaths = new Set<string>([request.ProjectPath]);
+  const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(request.ProjectPath);
+  if (cpmFilePath) snapshotPaths.add(cpmFilePath);
+  if (request.Type === "UNINSTALL" && isCpmEnabled) {
+    const propsFiles = await vscode.workspace.findFiles(
+      "**/Directory.Packages.props",
+      "**/{bin,obj,node_modules,.git}/**"
+    );
+    for (const file of propsFiles) snapshotPaths.add(file.fsPath);
+  }
+  const snapshots = await snapshotFilesAsync([...snapshotPaths]);
+  let writeAttempted = false;
+
+  try {
+    writeAttempted = true;
+    report("Writing package reference…", 30);
+    if (request.Type === "UNINSTALL") {
+      await executeRemovePackage(request.PackageId, request.ProjectPath, request.OperationId, signal);
+      if (isCpmPackage) {
+        await cleanupUnusedCpmPackageAsync(request.PackageId, signal);
+      }
+    } else if (isCpmEnabled && isCpmPackage) {
+      if (!request.Version || !request.Version.trim()) {
+        return fail("An explicit version is required when updating a Centrally Managed (CPM) package.");
+      }
+
+      const conditionalGroups = cpmMapBefore!.conditional.filter((entry) =>
+        [...entry.versions.keys()].some(
+          (id) => id.toLowerCase() === request.PackageId.toLowerCase()
+        )
+      );
+      const unconditional = [...cpmMapBefore!.unconditional.keys()].some(
+        (id) => id.toLowerCase() === request.PackageId.toLowerCase()
+      );
+      const onlyGroup = !unconditional && conditionalGroups.length === 1
+        ? conditionalGroups[0]
+        : undefined;
+
+      let condition = request.CpmCondition;
+      let scope: "group" | "unconditional";
+      if (condition !== undefined) {
+        scope = "group";
+      } else if (unconditional) {
+        scope = "unconditional";
+      } else if (onlyGroup) {
+        condition = onlyGroup.condition;
+        scope = "group";
+      } else {
+        return fail(
+          `Package ${request.PackageId} has multiple framework-scoped versions; update it from the Updates tab.`
+        );
+      }
+
+      await CpmResolver.UpdatePackageVersionAsync(
+        request.ProjectPath,
+        request.PackageId,
+        request.Version,
+        condition,
+        scope
+      );
+      if (!skipRestore) {
+        report("Restoring project…", 60);
+        await TaskExecutor.ExecuteCommandAsync("dotnet", ["restore", request.ProjectPath.replace(/\\/g, "/")], request.OperationId ?? `restore-${request.PackageId}`, signal);
+      }
+    } else {
+      await executeAddPackage(
+        request.PackageId,
+        request.ProjectPath,
+        request.Version,
+        skipRestore,
+        request.SourceUrl,
+        request.OperationId,
+        signal,
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const detail = err instanceof DotnetError ? SummarizeRestoreFailure(err.output) : null;
+
+    let rollbackError: string | undefined;
+    if (writeAttempted) {
+      report("Rolling back…", 90);
+      rollbackError = await rollbackFilesAsync(snapshots);
+      if (!skipRestore && !signal?.aborted) {
+        // Best effort: bring the restored graph back in line with the
+        // rolled-back files. A failure here is reported together with the
+        // original error rather than masking it.
+        const restoreFailure = await restoreProjectsInternalAsync([request.ProjectPath], signal, false);
+        if (restoreFailure) {
+          rollbackError = [rollbackError, restoreFailure.message].filter(Boolean).join("; ");
+        }
+      }
+      Logger.error(`updateProject: Rolled back ${request.Type.toLowerCase()} of ${request.PackageId}`, err);
+    }
+
+    const action = request.Type === "UNINSTALL"
+      ? "uninstall"
+      : request.Type === "INSTALL"
+        ? "install"
+        : "update";
+    const rollbackNote = writeAttempted
+      ? rollbackError
+        ? ` (rollback incomplete: ${rollbackError})`
+        : " (rolled back)"
+      : "";
+    return fail(`Failed to ${action} package: ${detail ?? message}${rollbackNote}`);
+  } finally {
+    StatusBarUtils.hide();
+  }
+
+  nugetApiFactory.ClearCache();
+
+  report("Refreshing project…", 95);
+  const parsed = await parseProjectWithCpmAsync(request.ProjectPath, createCpmParseContext());
+  const updatedProject = parsed.project;
+
+  return ok({ Project: updatedProject, IsCpmEnabled: isCpmEnabled });
+}
+/**
+ * Shared implementation of `cleanupUnusedPackagesAsync` and the cleanup job.
+ * `report` streams stage/percent to the job registry.
+ */
+async function runCleanupAsync(
+  signal?: AbortSignal,
+  report: JobReporter = () => {}
+): Promise<Result<CleanupUnusedResponse>> {
+  try {
+    report("Scanning projects for unused packages…", 5);
+    const cleanupReport = await buildCleanupReportAsync(signal);
+    const removed: string[] = [];
+    const backups: string[] = [];
+    const errors: string[] = [];
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+    for (const [i, propsFile] of cleanupReport.PropsFiles.entries()) {
+      if (propsFile.Unused.length === 0) continue;
+      report(
+        `Cleaning ${propsFile.Path} (${i + 1}/${cleanupReport.PropsFiles.length})…`,
+        10 + (i / Math.max(1, cleanupReport.PropsFiles.length)) * 80
+      );
+      const backupPath = `${propsFile.Path}.backup.${stamp}`;
+      try {
+        await fs.copyFile(propsFile.Path, backupPath);
+        backups.push(backupPath);
+      } catch (err) {
+        errors.push(`Backup failed for ${propsFile.Path}: ${err instanceof Error ? err.message : String(err)}`);
+        continue;
+      }
+
+      for (const packageId of propsFile.Unused) {
+        if (signal?.aborted) break;
+        try {
+          const didRemove = await CpmResolver.RemovePackageVersionAsync(propsFile.Path, packageId);
+          if (didRemove) removed.push(packageId);
+        } catch (err) {
+          errors.push(`Failed to remove ${packageId} from ${propsFile.Path}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    }
+
+    return ok({ Report: cleanupReport, Removed: [...new Set(removed)], Backups: backups, Errors: errors });
+  } catch (err) {
+    return fail(`Failed to clean unused packages: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+/**
+ * Shared implementation of `consolidatePackagesAsync` and the consolidation
+ * job. `report` streams stage/percent to the job registry.
+ */
+async function runConsolidateAsync(
+  request: ConsolidateRequest,
+  signal?: AbortSignal,
+  report: JobReporter = () => {}
+): Promise<Result<void>> {
+  Logger.info(
+    `consolidatePackages: ${request.PackageId} to ${request.TargetVersion} across ${request.ProjectPaths.length} projects`
+  );
+  report("Preparing consolidation…", 5);
+
+  const outsideWorkspace = await findOutsideWorkspaceAsync(request.ProjectPaths);
+  if (outsideWorkspace) {
+    return fail(`Project path is outside the workspace: ${outsideWorkspace}`);
+  }
+
+  if (!isValidPackageId(request.PackageId)) {
+    return fail(`Invalid NuGet package ID: ${request.PackageId}`);
+  }
+  if (!isValidNuGetVersion(request.TargetVersion)) {
+    return fail(`Invalid NuGet version: ${request.TargetVersion}`);
+  }
+
+  try {
+    const changesByFile = new Map<string, CpmVersionChange[]>();
+    const nonCpmProjects: string[] = [];
+    const cpmMapCache = new Map<string, Promise<CpmPackageMap>>();
+
+    for (const [i, projectPath] of request.ProjectPaths.entries()) {
+      if (signal?.aborted) break;
+      report(
+        `Consolidating ${request.PackageId} (${i + 1}/${request.ProjectPaths.length})…`,
+        10 + (i / Math.max(1, request.ProjectPaths.length)) * 40
+      );
+      StatusBarUtils.ShowText(
+        `Consolidating ${request.PackageId} (${i + 1}/${request.ProjectPaths.length})...`
+      );
+
+      const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(projectPath);
+      let cpmMap: CpmPackageMap | null = null;
+      if (cpmFilePath) {
+        if (!cpmMapCache.has(cpmFilePath)) {
+          cpmMapCache.set(cpmFilePath, CpmResolver.ParseCpmFileAsync(cpmFilePath));
+        }
+        cpmMap = await cpmMapCache.get(cpmFilePath)!;
+      }
+
+      if (cpmMap && CpmResolver.HasPackage(cpmMap, request.PackageId)) {
+        const conditionalGroups = cpmMap.conditional.filter((entry) =>
+          [...entry.versions.keys()].some(
+            (id) => id.toLowerCase() === request.PackageId.toLowerCase()
+          )
+        );
+
+        // Consolidation is per framework line. A blanket scope would rewrite
+        // every framework version of the package to one target, which is
+        // exactly what multi-framework CPM files must avoid.
+        if (
+          (request.Scope === "all" || request.Scope === "first")
+          && conditionalGroups.length > 0
+        ) {
+          throw new Error(
+            `Package ${request.PackageId} has framework-scoped versions; consolidate one framework line at a time.`
+          );
+        }
+
+        let condition = request.CpmCondition;
+        let scope = request.Scope;
+
+        if (condition === undefined && scope === undefined) {
+          const unconditional = [...cpmMap.unconditional.keys()].some(
+            (id) => id.toLowerCase() === request.PackageId.toLowerCase()
+          );
+
+          if (unconditional) {
+            scope = "unconditional";
+          } else if (conditionalGroups.length === 1 && conditionalGroups[0]) {
+            condition = conditionalGroups[0].condition;
+            scope = "group";
+          } else {
+            throw new Error(
+              `Package ${request.PackageId} has multiple framework-scoped versions; specify CpmCondition.`
+            );
+          }
+        }
+
+        const change: CpmVersionChange = {
+          packageId: request.PackageId,
+          version: request.TargetVersion,
+          scope: scope ?? (condition ? "group" : "unconditional"),
+        };
+        if (condition !== undefined) {
+          change.condition = condition;
+        }
+        const list = changesByFile.get(cpmFilePath!) ?? [];
+        list.push(change);
+        changesByFile.set(cpmFilePath!, list);
+      } else {
+        nonCpmProjects.push(projectPath);
+      }
+    }
+
+    report("Writing package versions…", 60);
+    for (const [propsFilePath, changes] of changesByFile) {
+      await CpmResolver.UpdateCpmVersionsAsync(propsFilePath, changes);
+    }
+
+    const skipRestoreConfig = getSetting<boolean>("skipRestore", false);
+
+    for (const projectPath of nonCpmProjects) {
+      await executeAddPackage(request.PackageId, projectPath, request.TargetVersion, skipRestoreConfig, undefined, undefined, signal);
+    }
+
+    if (!skipRestoreConfig) {
+      report("Restoring projects…", 70);
+      for (const [i, projectPath] of request.ProjectPaths.entries()) {
+        report(`Restoring project ${i + 1}/${request.ProjectPaths.length}…`, 70 + (i / Math.max(1, request.ProjectPaths.length)) * 25);
+        await TaskExecutor.ExecuteCommandAsync(
+          "dotnet",
+          ["restore", projectPath.replace(/\\/g, "/")],
+          `restore-${request.PackageId}`
+        );
+      }
+    }
+
+    StatusBarUtils.hide();
+    report("Completed", 100);
+    Logger.info(`consolidatePackages: Done`);
+    return ok(undefined as void);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    Logger.error(`consolidatePackages: Failed`, err);
+    StatusBarUtils.hide();
+    return fail(`Failed to consolidate: ${message}`);
+  }
+}
+
+
+/**
+ * Maps a restore failure back to the batch rows that most likely caused it.
+ *
+ * `dotnet restore` names the contested package and the dependency chains that
+ * pin it. Any requested package that appears in either place is a suspect, so
+ * the UI can offer "retry without these" instead of making the user re-select
+ * 60 packages by hand.
+ */
+function attributeRestoreConflicts(
+  failure: RestoreFailure | null,
+  updates: BatchUpdateRequest["Updates"]
+): string[] {
+  if (!failure) return [];
+
+  const requested = new Map(updates.map((update) => [update.PackageId.toLowerCase(), update.PackageId]));
+  if (requested.size === 0) return [];
+
+  const named = new Set<string>();
+  for (const conflict of failure.conflicts) {
+    if (conflict.packageId) named.add(conflict.packageId.toLowerCase());
+    for (const constraint of conflict.constraints) {
+      // Chains look like "Project -> Package 1.2.3 -> Other (>= 1.0)".
+      for (const match of constraint.chain.matchAll(/([A-Za-z][\w.-]+)\s+v?\d+\.\d+/g)) {
+        const candidate = match[1] ?? "";
+        if (candidate) named.add(candidate.toLowerCase());
+      }
+    }
+  }
+
+  const suspects: string[] = [];
+  for (const id of named) {
+    const requestedId = requested.get(id);
+    if (requestedId && !suspects.includes(requestedId)) suspects.push(requestedId);
+  }
+  return suspects;
+}
+
+/**
+ * Checks the whole selected set against the dependency graph before anything is
+ * written.
+ *
+ * Two directions matter:
+ * 1. the ranges declared by each selected package's *new* version, evaluated
+ *    against the versions the batch will leave in the graph;
+ * 2. the ranges installed packages declare on the selected packages (skipping
+ *    blockers that are themselves being updated, since their new metadata is
+ *    already covered by (1)).
+ *
+ * Without a restored project (`project.assets.json`) there is no graph to check
+ * against, so no conflict is reported; `dotnet restore` stays the authority.
+ */
+async function findBatchUpdateConflictsAsync(
+  request: BatchUpdateRequest,
+  signal?: AbortSignal
+): Promise<BatchUpdateConflict[]> {
+  const updates = request.Updates.filter((update) => update.Version);
+  if (updates.length === 0) return [];
+
+  const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(getWorkspaceRoots());
+  const detailsCache = new Map<string, Promise<Record<string, PackageDependency[]> | null>>();
+  const conflicts: BatchUpdateConflict[] = [];
+  const seen = new Set<string>();
+
+  const selectedByProject = new Map<string, Map<string, { id: string; version: string }>>();
+  for (const update of updates) {
+    for (const projectPath of update.ProjectPaths) {
+      const selected = selectedByProject.get(projectPath) ?? new Map<string, { id: string; version: string }>();
+      selected.set(update.PackageId.toLowerCase(), { id: update.PackageId, version: update.Version });
+      selectedByProject.set(projectPath, selected);
+    }
+  }
+
+  const addConflict = (conflict: BatchUpdateConflict): void => {
+    const key = `${conflict.PackageId.toLowerCase()}|${conflict.BlockedByPackageId.toLowerCase()}|${conflict.RequiredRange}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    conflicts.push(conflict);
+  };
+
+  for (const [projectPath, selected] of selectedByProject) {
+    if (signal?.aborted) break;
+    const graph = await loadProjectDependencyGraphAsync(projectPath);
+    // Without a restored graph there is nothing to compare a single update
+    // against; only a multi-package selection can still conflict with itself.
+    if (!graph && selected.size < 2) continue;
+
+    const effective = new Map(graph?.packageVersions ?? []);
+    for (const [id, entry] of selected) effective.set(id, entry.version);
+
+    const tfms = [...(graph?.tfms ?? [])];
+
+    // (1) Ranges declared by the target version of each selected package.
+    for (const entry of selected.values()) {
+      if (signal?.aborted) break;
+      const frameworks = await fetchDependencyFrameworksAsync(
+        entry.id,
+        entry.version,
+        sources,
+        detailsCache,
+        signal
+      );
+      if (!frameworks) continue;
+
+      const dependencies = selectDependencyGroup(frameworks, tfms);
+      if (!dependencies) continue;
+
+      for (const dependency of dependencies) {
+        const dependencyId = dependency.package.toLowerCase();
+        const resolved = effective.get(dependencyId);
+        if (!resolved) continue;
+        if (satisfiesVersionRange(resolved, dependency.versionRange)) continue;
+
+        const alsoSelected = selected.get(dependencyId);
+        addConflict({
+          PackageId: entry.id,
+          RequestedVersion: entry.version,
+          BlockedByPackageId: dependency.package,
+          BlockedByVersion: resolved,
+          RequiredRange: dependency.versionRange,
+          EffectiveVersion: resolved,
+          ProjectPath: projectPath,
+          Reason: alsoSelected
+            ? `${entry.id} ${entry.version} requires ${dependency.package} ${dependency.versionRange}, but the batch selects ${alsoSelected.version}`
+            : `${entry.id} ${entry.version} requires ${dependency.package} ${dependency.versionRange}, but the graph resolves ${resolved}`,
+        });
+      }
+    }
+
+    // (2) Ranges installed packages declare on the selected packages.
+    if (graph) {
+      // The assets graph is lowercased; keep the project file's casing so the
+      // conflict names the package the way the user sees it.
+      const direct = new Map<string, { id: string; versions: Set<string> }>();
+      try {
+        const parsedProject = await ProjectParser.ParseAsync(projectPath, null);
+        for (const pkg of parsedProject.Packages) {
+          direct.set(pkg.Id.toLowerCase(), { id: pkg.Id, versions: new Set([pkg.Version]) });
+        }
+      } catch (err) {
+        Logger.debug(`checkBatchUpdate: could not parse ${projectPath} for display names`, err);
+      }
+
+      const group: InstalledPackageGroup = {
+        tfms: new Set(graph.tfms),
+        projectPaths: new Set([projectPath]),
+        direct,
+      };
+      const constraintsByPackage = await collectGroupConstraintsAsync(
+        [...selected.keys()],
+        group,
+        sources,
+        detailsCache,
+        signal
+      );
+
+      for (const [candidateId, constraints] of constraintsByPackage) {
+        const entry = selected.get(candidateId);
+        if (!entry) continue;
+        const resolved = effective.get(candidateId) ?? entry.version;
+
+        for (const constraint of constraints) {
+          if (selected.has(constraint.PackageId.toLowerCase())) continue;
+          if (satisfiesVersionRange(resolved, constraint.Range)) continue;
+          addConflict({
+            PackageId: entry.id,
+            RequestedVersion: entry.version,
+            BlockedByPackageId: constraint.PackageId,
+            BlockedByVersion: constraint.InstalledVersion,
+            RequiredRange: constraint.Range,
+            EffectiveVersion: resolved,
+            ProjectPath: projectPath,
+            Reason: `${constraint.PackageId} ${constraint.InstalledVersion} requires ${entry.id} ${constraint.Range}`,
+          });
+        }
+      }
+    }
+  }
+
+  return conflicts;
+}
+
 export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
   const scanCache = new ScanCacheStore(context?.workspaceState);
   return {
@@ -521,158 +1290,7 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
     },
 
     async updateProjectAsync(request: UpdateProjectRequest, signal?: AbortSignal): Promise<Result<UpdateProjectResponse>> {
-      Logger.info(`updateProject: ${request.Type} ${request.PackageId} in ${request.ProjectPath}`);
-
-      const outsideWorkspace = await findOutsideWorkspaceAsync([request.ProjectPath]);
-      if (outsideWorkspace) {
-        return fail(`Project path is outside the workspace: ${outsideWorkspace}`);
-      }
-
-      if (!isValidPackageId(request.PackageId)) {
-        return fail(`Invalid NuGet package ID: ${request.PackageId}`);
-      }
-      if (request.Version && !isValidNuGetVersion(request.Version)) {
-        return fail(`Invalid NuGet version: ${request.Version}`);
-      }
-
-      if (request.SourceUrl) {
-        try {
-          const protocol = new URL(request.SourceUrl).protocol;
-          if (protocol !== "https:" && protocol !== "http:") {
-            return fail(`Invalid source URL: ${request.SourceUrl}`);
-          }
-        } catch {
-          return fail(`Invalid source URL: ${request.SourceUrl}`);
-        }
-      }
-
-      if (signal?.aborted) {
-        return fail("cancelled");
-      }
-
-      const skipRestoreConfig = getSetting<boolean>("skipRestore", false);
-      const cpmMapBefore = await CpmResolver.GetFrameworkPackageMapAsync(request.ProjectPath);
-      const isCpmEnabled = cpmMapBefore !== null;
-      const isCpmPackage = cpmMapBefore !== null && CpmResolver.HasPackage(cpmMapBefore, request.PackageId);
-      const skipRestore = !!skipRestoreConfig && !isCpmEnabled;
-
-      // A single-package operation mutates at least the project file and, for
-      // CPM, Directory.Packages.props. Uninstall can also prune other props
-      // files, so snapshot all of them up front. A failed restore then leaves
-      // the workspace exactly as it was, matching the batch path.
-      const snapshotPaths = new Set<string>([request.ProjectPath]);
-      const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(request.ProjectPath);
-      if (cpmFilePath) snapshotPaths.add(cpmFilePath);
-      if (request.Type === "UNINSTALL" && isCpmEnabled) {
-        const propsFiles = await vscode.workspace.findFiles(
-          "**/Directory.Packages.props",
-          "**/{bin,obj,node_modules,.git}/**"
-        );
-        for (const file of propsFiles) snapshotPaths.add(file.fsPath);
-      }
-      const snapshots = await snapshotFilesAsync([...snapshotPaths]);
-      let writeAttempted = false;
-
-      try {
-        writeAttempted = true;
-        if (request.Type === "UNINSTALL") {
-          await executeRemovePackage(request.PackageId, request.ProjectPath, request.OperationId, signal);
-          if (isCpmPackage) {
-            await cleanupUnusedCpmPackageAsync(request.PackageId, signal);
-          }
-        } else if (isCpmEnabled && isCpmPackage) {
-          if (!request.Version || !request.Version.trim()) {
-            return fail("An explicit version is required when updating a Centrally Managed (CPM) package.");
-          }
-
-          const conditionalGroups = cpmMapBefore!.conditional.filter((entry) =>
-            [...entry.versions.keys()].some(
-              (id) => id.toLowerCase() === request.PackageId.toLowerCase()
-            )
-          );
-          const unconditional = [...cpmMapBefore!.unconditional.keys()].some(
-            (id) => id.toLowerCase() === request.PackageId.toLowerCase()
-          );
-          const onlyGroup = !unconditional && conditionalGroups.length === 1
-            ? conditionalGroups[0]
-            : undefined;
-
-          let condition = request.CpmCondition;
-          let scope: "group" | "unconditional";
-          if (condition !== undefined) {
-            scope = "group";
-          } else if (unconditional) {
-            scope = "unconditional";
-          } else if (onlyGroup) {
-            condition = onlyGroup.condition;
-            scope = "group";
-          } else {
-            return fail(
-              `Package ${request.PackageId} has multiple framework-scoped versions; update it from the Updates tab.`
-            );
-          }
-
-          await CpmResolver.UpdatePackageVersionAsync(
-            request.ProjectPath,
-            request.PackageId,
-            request.Version,
-            condition,
-            scope
-          );
-          if (!skipRestore) {
-            await TaskExecutor.ExecuteCommandAsync("dotnet", ["restore", request.ProjectPath.replace(/\\/g, "/")], request.OperationId ?? `restore-${request.PackageId}`, signal);
-          }
-        } else {
-          await executeAddPackage(
-            request.PackageId,
-            request.ProjectPath,
-            request.Version,
-            skipRestore,
-            request.SourceUrl,
-            request.OperationId,
-            signal,
-          );
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const detail = err instanceof DotnetError ? SummarizeRestoreFailure(err.output) : null;
-
-        let rollbackError: string | undefined;
-        if (writeAttempted) {
-          rollbackError = await rollbackFilesAsync(snapshots);
-          if (!skipRestore && !signal?.aborted) {
-            // Best effort: bring the restored graph back in line with the
-            // rolled-back files. A failure here is reported together with the
-            // original error rather than masking it.
-            const restoreFailure = await restoreProjectsInternalAsync([request.ProjectPath], signal, false);
-            if (restoreFailure) {
-              rollbackError = [rollbackError, restoreFailure.message].filter(Boolean).join("; ");
-            }
-          }
-          Logger.error(`updateProject: Rolled back ${request.Type.toLowerCase()} of ${request.PackageId}`, err);
-        }
-
-        const action = request.Type === "UNINSTALL"
-          ? "uninstall"
-          : request.Type === "INSTALL"
-            ? "install"
-            : "update";
-        const rollbackNote = writeAttempted
-          ? rollbackError
-            ? ` (rollback incomplete: ${rollbackError})`
-            : " (rolled back)"
-          : "";
-        return fail(`Failed to ${action} package: ${detail ?? message}${rollbackNote}`);
-      } finally {
-        StatusBarUtils.hide();
-      }
-
-      nugetApiFactory.ClearCache();
-
-      const parsed = await parseProjectWithCpmAsync(request.ProjectPath, createCpmParseContext());
-      const updatedProject = parsed.project;
-
-      return ok({ Project: updatedProject, IsCpmEnabled: isCpmEnabled });
+      return runProjectUpdateAsync(request, signal);
     },
 
     async getConfigurationAsync(): Promise<Result<GetConfigurationResponse>> {
@@ -1139,7 +1757,16 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
     },
 
     async batchUpdatePackagesAsync(request: BatchUpdateRequest, signal?: AbortSignal): Promise<Result<BatchUpdateResponse>> {
-      Logger.info(`batchUpdatePackages: Updating ${request.Updates.length} packages`);
+      return runBatchUpdateAsync(request, signal);
+    },
+
+    async checkBatchUpdateAsync(
+      request: BatchUpdateRequest,
+      signal?: AbortSignal
+    ): Promise<Result<CheckBatchUpdateResponse>> {
+      if (!Array.isArray(request.Updates) || request.Updates.length === 0) {
+        return ok({ Conflicts: [] });
+      }
 
       const outsideWorkspace = await findOutsideWorkspaceAsync(
         request.Updates.flatMap((update) => update.ProjectPaths)
@@ -1148,165 +1775,68 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
         return fail(`Project path is outside the workspace: ${outsideWorkspace}`);
       }
 
-      const results: Array<{ PackageId: string; Success: boolean; Error?: string }> = [];
-      const configSkipRestore = getSetting<boolean>("skipRestore", false);
-      const skipRestore = request.SkipRestore === true || configSkipRestore;
-      const cpmMapCache = new Map<string, Promise<CpmPackageMap>>();
-      const transactional = request.Transactional === true;
-      const allProjectPaths = [...new Set(request.Updates.flatMap((update) => update.ProjectPaths))];
-      let snapshots: Map<string, FileSnapshot> | undefined;
-
-      if (transactional) {
-        const affectedFiles = new Set<string>(allProjectPaths);
-        for (const update of request.Updates) {
-          for (const projectPath of update.ProjectPaths) {
-            const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(projectPath);
-            if (cpmFilePath) affectedFiles.add(cpmFilePath);
-          }
-        }
-        snapshots = await snapshotFilesAsync([...affectedFiles]);
-      }
-
-      let transactionFailed = false;
-      for (const [i, update] of request.Updates.entries()) {
-        if (signal?.aborted) break;
-        StatusBarUtils.ShowText(
-          `Updating ${update.PackageId} to ${update.Version} (${i + 1}/${request.Updates.length})...`
+      try {
+        const conflicts = await findBatchUpdateConflictsAsync(request, signal);
+        Logger.info(
+          `checkBatchUpdate: ${conflicts.length} conflict(s) across ${request.Updates.length} update(s)`
         );
+        return ok({ Conflicts: conflicts });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        Logger.error("checkBatchUpdate: Failed", err);
+        return fail(`Failed to check the update set: ${message}`);
+      }
+    },
 
-        if (!isValidPackageId(update.PackageId)) {
-          results.push({ PackageId: update.PackageId, Success: false, Error: `Invalid NuGet package ID: ${update.PackageId}` });
-          continue;
-        }
-        if (update.Version && !isValidNuGetVersion(update.Version)) {
-          results.push({ PackageId: update.PackageId, Success: false, Error: `Invalid NuGet version: ${update.Version}` });
-          continue;
-        }
-
-        try {
-          const cpmChanges = new Map<string, CpmVersionChange>();
-          const nonCpmProjects: string[] = [];
-
-          for (const projectPath of update.ProjectPaths) {
-            const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(projectPath);
-
-            let cpmMap: CpmPackageMap | null = null;
-            if (cpmFilePath) {
-              if (!cpmMapCache.has(cpmFilePath)) {
-                cpmMapCache.set(cpmFilePath, CpmResolver.ParseCpmFileAsync(cpmFilePath));
-              }
-              cpmMap = await cpmMapCache.get(cpmFilePath)!;
-            }
-
-            if (!cpmMap || !CpmResolver.HasPackage(cpmMap, update.PackageId)) {
-              nonCpmProjects.push(projectPath);
-              continue;
-            }
-
-            if (!update.Version) {
-              throw new Error(`Version is required for CPM package update: ${update.PackageId}`);
-            }
-
-            let condition = update.CpmCondition;
-            let scope = update.Scope;
-            if (condition === undefined) {
-              const unconditional = cpmMap.unconditional.has(update.PackageId)
-                || [...cpmMap.unconditional.keys()].some(
-                  (id) => id.toLowerCase() === update.PackageId.toLowerCase()
-                );
-              const conditionalGroups = cpmMap.conditional.filter((entry) =>
-                [...entry.versions.keys()].some(
-                  (id) => id.toLowerCase() === update.PackageId.toLowerCase()
-                )
-              );
-
-              if (!unconditional && conditionalGroups.length === 1 && conditionalGroups[0]) {
-                condition = conditionalGroups[0].condition;
-                scope = scope ?? "group";
-              } else if (unconditional) {
-                scope = scope ?? "unconditional";
-              } else {
-                throw new Error(
-                  `Package ${update.PackageId} has multiple framework-scoped versions; specify CpmCondition.`
-                );
-              }
-            } else {
-              scope = scope ?? "group";
-            }
-
-            const change: CpmVersionChange = {
-              packageId: update.PackageId,
-              version: update.Version,
-              scope,
-            };
-            if (condition !== undefined) {
-              change.condition = condition;
-            }
-
-            const key = `${cpmFilePath}\0${update.PackageId}\0${condition ?? ""}`;
-            const existing = cpmChanges.get(key);
-            if (existing && existing.version !== update.Version) {
-              throw new Error(
-                `Conflicting versions requested for ${update.PackageId} in ${cpmFilePath}: ${existing.version} vs ${update.Version}`
-              );
-            }
-            cpmChanges.set(key, change);
-          }
-
-          const changesByFile = new Map<string, CpmVersionChange[]>();
-          for (const [key, change] of cpmChanges) {
-            const propsFilePath = key.split("\0")[0]!;
-            const list = changesByFile.get(propsFilePath) ?? [];
-            list.push(change);
-            changesByFile.set(propsFilePath, list);
-          }
-
-          for (const [propsFilePath, changes] of changesByFile) {
-            await CpmResolver.UpdateCpmVersionsAsync(propsFilePath, changes);
-          }
-
-          for (const projectPath of nonCpmProjects) {
-            await executeAddPackage(update.PackageId, projectPath, update.Version, skipRestore, undefined, undefined, signal);
-          }
-
-          results.push({ PackageId: update.PackageId, Success: true });
-          Logger.info(`batchUpdatePackages: Updated ${update.PackageId} to ${update.Version}`);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          Logger.error(`batchUpdatePackages: Failed to update ${update.PackageId}`, err);
-          results.push({ PackageId: update.PackageId, Success: false, Error: message });
-          if (transactional) {
-            transactionFailed = true;
-            break;
-          }
-        }
+    async startBatchUpdateAsync(request: BatchUpdateRequest): Promise<Result<StartJobResponse>> {
+      if (!Array.isArray(request.Updates) || request.Updates.length === 0) {
+        return fail("No packages to update");
+      }
+      if (OperationJobs.Batch.HasRunning()) {
+        // Two interleaved transactions would let one job's rollback undo
+        // another job's writes.
+        return fail("Another update is already running. Wait for it to finish.");
       }
 
-      if (transactional) {
-        let restoreError: string | undefined;
-        if (!transactionFailed && !skipRestore) {
-          StatusBarUtils.ShowText("Restoring updated projects...");
-          restoreError = (await restoreProjectsInternalAsync(allProjectPaths, signal, true))?.message;
-        }
+      const jobId = globalThis.crypto.randomUUID();
+      OperationJobs.Batch.Start(jobId, (jobSignal, jobReport) => runBatchUpdateAsync(request, jobSignal, jobReport));
+      Logger.info(`batchUpdatePackages: Started job ${jobId} for ${request.Updates.length} packages`);
+      return ok({ JobId: jobId });
+    },
 
-        if (transactionFailed || restoreError) {
-          const rollbackError = await rollbackFilesAsync(snapshots);
-          let rollbackRestoreError: string | undefined;
-          if (!skipRestore && (transactionFailed || restoreError)) {
-            rollbackRestoreError = (await restoreProjectsInternalAsync(allProjectPaths, signal, false))?.message;
-          }
-          StatusBarUtils.hide();
-          Logger.error("batchUpdatePackages: Transaction rolled back", restoreError ?? "write failure");
-          const response: BatchUpdateResponse = { Results: results, RolledBack: true };
-          if (restoreError) response.RestoreError = restoreError;
-          const rollbackMessage = rollbackError ?? rollbackRestoreError;
-          if (rollbackMessage) response.RollbackError = rollbackMessage;
-          return ok(response);
-        }
+    async startProjectUpdateAsync(request: UpdateProjectRequest): Promise<Result<StartJobResponse>> {
+      const jobId = globalThis.crypto.randomUUID();
+      OperationJobs.Project.Start(jobId, (jobSignal, jobReport) => runProjectUpdateAsync(request, jobSignal, jobReport));
+      Logger.info(`updateProject: Started job ${jobId} for ${request.Type} ${request.PackageId}`);
+      return ok({ JobId: jobId });
+    },
+
+    async startConsolidateAsync(request: ConsolidateRequest): Promise<Result<StartJobResponse>> {
+      const jobId = globalThis.crypto.randomUUID();
+      OperationJobs.Consolidate.Start(jobId, (jobSignal, jobReport) => runConsolidateAsync(request, jobSignal, jobReport));
+      Logger.info(`consolidatePackages: Started job ${jobId} for ${request.PackageId}`);
+      return ok({ JobId: jobId });
+    },
+
+    async startCleanupAsync(_request: CleanupUnusedRequest): Promise<Result<StartJobResponse>> {
+      const jobId = globalThis.crypto.randomUUID();
+      OperationJobs.Cleanup.Start(jobId, (jobSignal, jobReport) => runCleanupAsync(jobSignal, jobReport));
+      Logger.info(`cleanupUnusedPackages: Started job ${jobId}`);
+      return ok({ JobId: jobId });
+    },
+
+    async getJobAsync(request: JobRequest): Promise<Result<GetJobResponse>> {
+      const status = OperationJobs.Get(request.JobId);
+      if (!status) return fail(`Unknown job: ${request.JobId}`);
+      return ok(status);
+    },
+
+    async cancelJobAsync(request: JobRequest): Promise<Result<void>> {
+      if (!OperationJobs.Cancel(request.JobId)) {
+        return fail(`Job is not running: ${request.JobId}`);
       }
-
-      StatusBarUtils.hide();
-      return ok({ Results: results });
+      Logger.info(`cancelJob: Cancel requested for job ${request.JobId}`);
+      return ok(undefined);
     },
 
     async updateBadgeAsync(request: UpdateBadgeRequest): Promise<Result<void>> {
@@ -1329,39 +1859,7 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
       _request: CleanupUnusedRequest,
       signal?: AbortSignal
     ): Promise<Result<CleanupUnusedResponse>> {
-      try {
-        const report = await buildCleanupReportAsync(signal);
-        const removed: string[] = [];
-        const backups: string[] = [];
-        const errors: string[] = [];
-        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-
-        for (const propsFile of report.PropsFiles) {
-          if (propsFile.Unused.length === 0) continue;
-          const backupPath = `${propsFile.Path}.backup.${stamp}`;
-          try {
-            await fs.copyFile(propsFile.Path, backupPath);
-            backups.push(backupPath);
-          } catch (err) {
-            errors.push(`Backup failed for ${propsFile.Path}: ${err instanceof Error ? err.message : String(err)}`);
-            continue;
-          }
-
-          for (const packageId of propsFile.Unused) {
-            if (signal?.aborted) break;
-            try {
-              const didRemove = await CpmResolver.RemovePackageVersionAsync(propsFile.Path, packageId);
-              if (didRemove) removed.push(packageId);
-            } catch (err) {
-              errors.push(`Failed to remove ${packageId} from ${propsFile.Path}: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          }
-        }
-
-        return ok({ Report: report, Removed: [...new Set(removed)], Backups: backups, Errors: errors });
-      } catch (err) {
-        return fail(`Failed to clean unused packages: ${err instanceof Error ? err.message : String(err)}`);
-      }
+      return runCleanupAsync(signal);
     },
 
     async restoreProjectsAsync(request: RestoreProjectsRequest, signal?: AbortSignal): Promise<Result<void>> {
@@ -1756,126 +2254,7 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
     },
 
     async consolidatePackagesAsync(request: ConsolidateRequest, signal?: AbortSignal): Promise<Result<void>> {
-      Logger.info(
-        `consolidatePackages: ${request.PackageId} to ${request.TargetVersion} across ${request.ProjectPaths.length} projects`
-      );
-
-      const outsideWorkspace = await findOutsideWorkspaceAsync(request.ProjectPaths);
-      if (outsideWorkspace) {
-        return fail(`Project path is outside the workspace: ${outsideWorkspace}`);
-      }
-
-      if (!isValidPackageId(request.PackageId)) {
-        return fail(`Invalid NuGet package ID: ${request.PackageId}`);
-      }
-      if (!isValidNuGetVersion(request.TargetVersion)) {
-        return fail(`Invalid NuGet version: ${request.TargetVersion}`);
-      }
-
-      try {
-        const changesByFile = new Map<string, CpmVersionChange[]>();
-        const nonCpmProjects: string[] = [];
-        const cpmMapCache = new Map<string, Promise<CpmPackageMap>>();
-
-        for (const [i, projectPath] of request.ProjectPaths.entries()) {
-          if (signal?.aborted) break;
-          StatusBarUtils.ShowText(
-            `Consolidating ${request.PackageId} (${i + 1}/${request.ProjectPaths.length})...`
-          );
-
-          const cpmFilePath = await CpmResolver.FindCpmFilePathAsync(projectPath);
-          let cpmMap: CpmPackageMap | null = null;
-          if (cpmFilePath) {
-            if (!cpmMapCache.has(cpmFilePath)) {
-              cpmMapCache.set(cpmFilePath, CpmResolver.ParseCpmFileAsync(cpmFilePath));
-            }
-            cpmMap = await cpmMapCache.get(cpmFilePath)!;
-          }
-
-          if (cpmMap && CpmResolver.HasPackage(cpmMap, request.PackageId)) {
-            const conditionalGroups = cpmMap.conditional.filter((entry) =>
-              [...entry.versions.keys()].some(
-                (id) => id.toLowerCase() === request.PackageId.toLowerCase()
-              )
-            );
-
-            // Consolidation is per framework line. A blanket scope would rewrite
-            // every framework version of the package to one target, which is
-            // exactly what multi-framework CPM files must avoid.
-            if (
-              (request.Scope === "all" || request.Scope === "first")
-              && conditionalGroups.length > 0
-            ) {
-              throw new Error(
-                `Package ${request.PackageId} has framework-scoped versions; consolidate one framework line at a time.`
-              );
-            }
-
-            let condition = request.CpmCondition;
-            let scope = request.Scope;
-
-            if (condition === undefined && scope === undefined) {
-              const unconditional = [...cpmMap.unconditional.keys()].some(
-                (id) => id.toLowerCase() === request.PackageId.toLowerCase()
-              );
-
-              if (unconditional) {
-                scope = "unconditional";
-              } else if (conditionalGroups.length === 1 && conditionalGroups[0]) {
-                condition = conditionalGroups[0].condition;
-                scope = "group";
-              } else {
-                throw new Error(
-                  `Package ${request.PackageId} has multiple framework-scoped versions; specify CpmCondition.`
-                );
-              }
-            }
-
-            const change: CpmVersionChange = {
-              packageId: request.PackageId,
-              version: request.TargetVersion,
-              scope: scope ?? (condition ? "group" : "unconditional"),
-            };
-            if (condition !== undefined) {
-              change.condition = condition;
-            }
-            const list = changesByFile.get(cpmFilePath!) ?? [];
-            list.push(change);
-            changesByFile.set(cpmFilePath!, list);
-          } else {
-            nonCpmProjects.push(projectPath);
-          }
-        }
-
-        for (const [propsFilePath, changes] of changesByFile) {
-          await CpmResolver.UpdateCpmVersionsAsync(propsFilePath, changes);
-        }
-
-        const skipRestoreConfig = getSetting<boolean>("skipRestore", false);
-
-        for (const projectPath of nonCpmProjects) {
-          await executeAddPackage(request.PackageId, projectPath, request.TargetVersion, skipRestoreConfig, undefined, undefined, signal);
-        }
-
-        if (!skipRestoreConfig) {
-          for (const projectPath of request.ProjectPaths) {
-            await TaskExecutor.ExecuteCommandAsync(
-              "dotnet",
-              ["restore", projectPath.replace(/\\/g, "/")],
-              `restore-${request.PackageId}`
-            );
-          }
-        }
-
-        StatusBarUtils.hide();
-        Logger.info(`consolidatePackages: Done`);
-        return ok(undefined as void);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        Logger.error(`consolidatePackages: Failed`, err);
-        StatusBarUtils.hide();
-        return fail(`Failed to consolidate: ${message}`);
-      }
+      return runConsolidateAsync(request, signal);
     },
   };
 }
@@ -1888,6 +2267,14 @@ type RestoreFailure = {
   projectPaths: string[];
   conflicts: RestoreConflict[];
   message: string;
+};
+
+type RestoreProgress = {
+  projectPath: string;
+  index: number;
+  total: number;
+  stage: string;
+  percent: number;
 };
 
 
@@ -1931,23 +2318,36 @@ async function rollbackFilesAsync(
 async function restoreProjectsInternalAsync(
   projectPaths: string[],
   signal: AbortSignal | undefined,
-  allowConflictResolution: boolean
+  allowConflictResolution: boolean,
+  onProgress?: (progress: RestoreProgress) => void
 ): Promise<RestoreFailure | null> {
   const failedPaths: string[] = [];
   const conflicts: RestoreConflict[] = [];
   const summaries: string[] = [];
+  const uniquePaths = [...new Set(projectPaths)];
 
-  for (const projectPath of [...new Set(projectPaths)]) {
+  for (const [index, projectPath] of uniquePaths.entries()) {
     if (signal?.aborted) break;
+    const reportProgress = (progress: { stage: string; percent: number }): void => {
+      onProgress?.({
+        projectPath,
+        index,
+        total: uniquePaths.length,
+        stage: progress.stage,
+        percent: progress.percent,
+      });
+    };
     try {
       if (allowConflictResolution) {
-        await restoreWithConflictResolutionAsync(projectPath, 0, signal);
+        await restoreWithConflictResolutionAsync(projectPath, 0, signal, reportProgress);
       } else {
         await TaskExecutor.ExecuteCommandAsync(
           "dotnet",
           ["restore", projectPath.replace(/\\/g, "/")],
           `rollback-restore-${projectPath}`,
-          signal
+          signal,
+          undefined,
+          reportProgress
         );
       }
     } catch (err) {
@@ -2088,14 +2488,21 @@ async function cleanupUnusedCpmPackageAsync(packageId: string, signal?: AbortSig
   }
 }
 
-async function restoreWithConflictResolutionAsync(projectPath: string, attempt = 0, signal?: AbortSignal): Promise<void> {
+async function restoreWithConflictResolutionAsync(
+  projectPath: string,
+  attempt = 0,
+  signal?: AbortSignal,
+  onProgress?: (progress: { stage: string; percent: number }) => void
+): Promise<void> {
   const MAX_ATTEMPTS = 2;
   try {
     await TaskExecutor.ExecuteCommandAsync(
       "dotnet",
       ["restore", projectPath.replace(/\\/g, "/")],
       `restore-${projectPath}`,
-      signal
+      signal,
+      undefined,
+      onProgress
     );
   } catch (err) {
     if (!(err instanceof DotnetError) || attempt >= MAX_ATTEMPTS) {

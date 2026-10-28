@@ -8,6 +8,7 @@ import "./dropdown";
 import { scrollableBase } from "@/web/styles/base.css";
 import { sharedStyles } from "@/web/styles/shared.css";
 import { hostApi } from "@/web/registrations";
+import { runConsolidateJobAsync } from "@/web/jobs";
 import { buildFrameworkOptions, getBaseTargetFramework, getFrameworkGroupKey, matchesFrameworkSelection } from "@/common/framework";
 import { InconsistentPackageViewModel } from "../types";
 
@@ -197,6 +198,22 @@ export class ConsolidateView extends LitElement {
     }));
   }
 
+  private _jobIds = new Map<string, string>();
+
+  private jobKey(pkg: InconsistentPackageViewModel): string {
+    return `${pkg.Id}|${pkg.Versions[0]?.CpmCondition ?? ""}|${pkg.Versions[0]?.CpmFramework ?? ""}`;
+  }
+
+  private async cancelConsolidateAsync(pkg: InconsistentPackageViewModel): Promise<void> {
+    const jobId = this._jobIds.get(this.jobKey(pkg));
+    if (!jobId) return;
+    const result = await hostApi.cancelJobAsync({ JobId: jobId });
+    if (!result.ok) {
+      this.statusText = `Failed to cancel ${pkg.Id}: ${result.error}`;
+      this.requestUpdate();
+    }
+  }
+
   private async consolidateSingleAsync(pkg: InconsistentPackageViewModel): Promise<boolean> {
     pkg.IsConsolidating = true;
     this.requestUpdate();
@@ -215,17 +232,25 @@ export class ConsolidateView extends LitElement {
         (lineVersions.length > 0 ? lineVersions : pkg.Versions)
           .flatMap((v) => v.Projects.map((p) => p.Path))
       )];
-      const result = await hostApi.consolidatePackagesAsync({
+      const key = this.jobKey(pkg);
+      const result = await runConsolidateJobAsync({
         PackageId: pkg.Id,
         TargetVersion: pkg.TargetVersion,
         ProjectPaths: allProjects,
         ...(condition
           ? { CpmCondition: condition, Scope: "group" as const }
           : { Scope: "unconditional" as const }),
+      }, {
+        onStarted: (jobId) => {
+          this._jobIds.set(key, jobId);
+          this.requestUpdate();
+        },
       });
 
       if (!result.ok) {
-        this.statusText = `Failed to consolidate ${pkg.Id}: ${result.error}`;
+        this.statusText = /cancelled/i.test(result.error)
+          ? `Consolidation of ${pkg.Id} was cancelled`
+          : `Failed to consolidate ${pkg.Id}: ${result.error}`;
         return false;
       }
 
@@ -253,6 +278,7 @@ export class ConsolidateView extends LitElement {
       this.statusText = `Failed to consolidate ${pkg.Id}: ${err instanceof Error ? err.message : String(err)}`;
       return false;
     } finally {
+      this._jobIds.delete(this.jobKey(pkg));
       pkg.IsConsolidating = false;
       this.requestUpdate();
     }
@@ -297,7 +323,18 @@ export class ConsolidateView extends LitElement {
             : nothing}
           <div class="row-actions">
             ${pkg.IsConsolidating
-              ? html`<span class="spinner medium"></span>`
+              ? html`
+                  <span class="spinner medium"></span>
+                  <button
+                    class="icon-btn"
+                    aria-label="Cancel consolidation of ${pkg.Id}"
+                    title="Cancel"
+                    ?disabled=${!this._jobIds.has(this.jobKey(pkg))}
+                    @click=${async () => await this.cancelConsolidateAsync(pkg)}
+                  >
+                    <span class="codicon codicon-close"></span>
+                  </button>
+                `
               : html`
                   <custom-dropdown
                     class="version-dropdown"

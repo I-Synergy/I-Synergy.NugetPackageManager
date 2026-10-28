@@ -52,16 +52,18 @@ All host-web communication uses a **typed RPC layer** with `Result<T>`:
 - **Result<T>**: Discriminated union `{ ok: true, value: T } | { ok: false, error: string }`
 - **Wire protocol**: `{ type: 'rpc-request', id, method, params }` / `{ type: 'rpc-response', id, result }`
 - **RpcHost** (`src/common/rpc/rpc-host.ts`): Host-side dispatcher mapping method names to HostAPI
-- **RpcClient** (`src/common/rpc/rpc-client.ts`): Client-side ES Proxy, 120s timeout, Promise-based
+- **RpcClient** (`src/common/rpc/rpc-client.ts`): Client-side ES Proxy, 120s request deadline, Promise-based. The deadline only stops the webview waiting — it never cancels host work (cancellation is explicit, via `AbortSignal`).
 - **Host implementation** in `src/host/host-api.ts`: All handlers as functions returning `Result<T>`
 
 ### Real-time Progress
 
-Install/update operations stream dotnet stdout via `child_process.spawn`:
+Long mutations run as host-side jobs, not as request/response calls:
 
-- `TaskExecutor.ExecuteCommandAsync` in `src/host/utilities/task-executor.ts` — spawns dotnet, parses output lines into progress stages, stores in `Map<string, OperationProgress>`
-- `getOperationProgress` RPC method — webview polls every 300ms during an active operation
-- `project-row` component manages poll lifecycle: start on request, stop on `Active=false` or `disconnectedCallback`
+- `OperationJobs` (`src/host/utilities/operation-jobs.ts`) — a `JobRegistry` per kind (`batchUpdate`, `projectUpdate`, `consolidate`, `cleanup`) holding state, stage, percent and the terminal `Result`; running jobs are never pruned.
+- `startBatchUpdateAsync` / `startProjectUpdateAsync` / `startConsolidateAsync` / `startCleanupAsync` return `{ JobId }` immediately; `getJobAsync` polls state and `cancelJobAsync` aborts explicitly. The old single-call RPCs remain and delegate to the same implementations.
+- `src/web/jobs.ts` — `waitForJobAsync` plus typed runners (`runProjectUpdateJobAsync`, …) used by `updates-view`, `project-row`, `packages-view`, `consolidate-view` and `cleanup-view`. Each runner takes `onStarted(jobId)` so the owning component can offer `cancelJobAsync` while it runs.
+- `checkBatchUpdateAsync` preflights a selection against `project.assets.json` + NuGet metadata (`findBatchUpdateConflictsAsync`) before any write; `BatchUpdateResponse.ConflictingPackages` maps a failed restore's diagnostics back to the offending rows.
+- `TaskExecutor.ExecuteCommandAsync` in `src/host/utilities/task-executor.ts` still spawns dotnet and parses stdout into progress stages (`Map<string, OperationProgress>`), exposed through `getOperationProgressAsync`.
 
 ### Web Components (Lit)
 

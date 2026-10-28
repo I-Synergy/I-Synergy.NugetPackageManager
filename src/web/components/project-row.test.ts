@@ -6,6 +6,14 @@ import { ok } from '@/common/rpc/result';
 import * as registrations from '@/web/registrations';
 import type { HostAPI } from '@/common/rpc/types';
 
+/** Waits for an async UI effect instead of assuming a fixed delay. */
+async function waitForAsync(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (!predicate() && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+}
+
 suite('ProjectRow Component', () => {
     let projectRow: ProjectRow;
     let mockHostApi: Partial<HostAPI>;
@@ -24,14 +32,21 @@ suite('ProjectRow Component', () => {
         originalHostApi = registrations.hostApi;
 
         mockHostApi = {
-            updateProjectAsync: async () => ok({
-                Project: {
-                    Name: 'TestProject',
-                    Path: 'path/to/project',
-                    Packages: [],
-                    CpmEnabled: false,
+            startProjectUpdateAsync: async () => ok({ JobId: 'job-project' }),
+            getJobAsync: async () => ok({
+                Kind: 'projectUpdate',
+                State: 'completed',
+                Stage: 'Completed',
+                Percent: 100,
+                Response: {
+                    Project: {
+                        Name: 'TestProject',
+                        Path: 'path/to/project',
+                        Packages: [],
+                        CpmEnabled: false,
+                    },
+                    IsCpmEnabled: false,
                 },
-                IsCpmEnabled: false
             }),
         };
 
@@ -108,20 +123,9 @@ suite('ProjectRow Component', () => {
         await projectRow.updateComplete;
 
         let calledWith: any;
-        mockHostApi.updateProjectAsync = async (req) => {
+        mockHostApi.startProjectUpdateAsync = async (req) => {
             calledWith = req;
-            return ok({
-                Project: {
-                    Name: 'TestProject',
-                    Path: 'path/to/project',
-                    Packages: [
-                        { Id: 'TestPackage', Version: '1.0.0', IsPinned: false, VersionSource: 'project' as VersionSource },
-                        { Id: 'NewPackage', Version: '1.0.0', IsPinned: false, VersionSource: 'project' as VersionSource },
-                    ],
-                    CpmEnabled: false,
-                },
-                IsCpmEnabled: false,
-            });
+            return ok({ JobId: 'job-install' });
         };
 
         const installButton = projectRow.shadowRoot?.querySelector('.icon-btn') as HTMLElement;
@@ -134,19 +138,57 @@ suite('ProjectRow Component', () => {
         assert.strictEqual(calledWith.PackageId, 'NewPackage');
     });
 
+    test('offers cancel while an update job is running', async () => {
+        projectRow.packageId = 'NewPackage';
+        projectRow.packageVersion = '1.0.0';
+        await projectRow.updateComplete;
+
+        let running = true;
+        const cancelled: string[] = [];
+        mockHostApi.startProjectUpdateAsync = async () => ok({ JobId: 'job-row' });
+        mockHostApi.getJobAsync = async () => running
+            ? ok({ Kind: 'projectUpdate', State: 'running', Stage: 'Restoring project…', Percent: 60 })
+            : ok({ Kind: 'projectUpdate', State: 'cancelled', Stage: 'Cancelled', Percent: 60 });
+        mockHostApi.cancelJobAsync = async ({ JobId }: { JobId: string }) => {
+            cancelled.push(JobId);
+            running = false;
+            return ok(undefined);
+        };
+
+        const installButton = projectRow.shadowRoot?.querySelector('.icon-btn') as HTMLElement;
+        installButton?.click();
+
+        await waitForAsync(() => projectRow.shadowRoot?.querySelector('button[aria-label="Cancel"]') != null);
+        const cancelButton = projectRow.shadowRoot?.querySelector('button[aria-label="Cancel"]') as HTMLElement;
+        assert.ok(cancelButton, 'the busy row offers a cancel button');
+        cancelButton.click();
+
+        await waitForAsync(() => cancelled.length > 0, 2000);
+        assert.deepStrictEqual(cancelled, ['job-row']);
+        const row = projectRow as unknown as { errorMessage: string };
+        await waitForAsync(() => /cancelled/i.test(row.errorMessage), 2000);
+        assert.match(row.errorMessage, /rolled back/);
+    });
+
     test('should emit project-updated event after successful update', async () => {
         projectRow.packageId = 'NewPackage';
         projectRow.packageVersion = '1.0.0';
         await projectRow.updateComplete;
 
-        mockHostApi.updateProjectAsync = async () => ok({
-            Project: {
-                Name: 'TestProject',
-                Path: 'path/to/project',
-                Packages: [],
-                CpmEnabled: false,
+        mockHostApi.getJobAsync = async () => ok({
+            Kind: 'projectUpdate',
+            State: 'completed',
+            Stage: 'Completed',
+            Percent: 100,
+            Response: {
+                Project: {
+                    Name: 'TestProject',
+                    Path: 'path/to/project',
+                    Packages: [],
+                    CpmEnabled: false,
+                },
+                IsCpmEnabled: true,
             },
-            IsCpmEnabled: true,
         });
 
         let eventDetail: any;
