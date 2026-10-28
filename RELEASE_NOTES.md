@@ -1,24 +1,24 @@
-# NuGet Package Manager 2.1.0
+# NuGet Package Manager 2.2.0
 
-## Prerelease becomes response
+## Updates that finish
 
-- Toggling **Prerelease** clears the stale count immediately instead of keeping the previous filter's number, and the Updates tab badge shows that it is recalculating.
-- Both the Updates tab badge and the Activity Bar badge now follow the new filter, including when the Updates tab is not open.
-- A Prerelease change rechecks updates for the newly selected filter; switching back rechecks again.
+- A slow update on a large solution is no longer cancelled and reverted by the webview's 120 s request deadline. The deadline now only stops the webview waiting; the extension host finishes the work. Files are rolled back only for a real write/restore failure or an explicit cancel.
+- Every long operation runs as a host-side job — batch update, single install/update/uninstall, consolidation and cleanup. A job keeps running if the tab is closed, reports its stage and percentage, and can be cancelled.
+- Only one batch update runs at a time, so two transactions can never overwrite each other.
+- A transactional batch restores once for the whole selection instead of once per non-CPM package (`dotnet add --no-restore`).
 
-## Live update-check progress
+## Fewer failed batches
 
-- The Updates tab no longer sits on an indefinite `Checking for updates…` spinner. It shows the current stage and item counts while the scan runs:
-  - `Resolving package sources…`
-  - `Parsing projects (2/8)`
-  - `Checking latest versions (23/60)`
-  - `Checking dependency constraints (3/5)`
-  - `Preparing results…`
-- A determinate progress bar tracks overall completion, so a slow NuGet source no longer looks like a hang.
-- Progress polling stops as soon as the scan finishes, fails or the view is closed.
+- Before writing, a multi-package update is checked against the restored dependency graph: the new versions' own requirements and the ranges installed packages declare. Conflicts are listed in a confirmation dialog and those rows are skipped, so one incompatible package no longer fails the other 63.
+- If the final restore still fails, the rollback names the packages the diagnostics point at and offers **Retry without** them.
+- The restore phase streams `dotnet`'s own stages per project, so a multi-minute restore no longer looks like a hang.
 
-## Everything in 2.0.0
+## Cancel anywhere
 
-- Dependency-aware update suggestions with a **Dependency conflicts** section and restore rollback.
-- Per-target-framework Central Package Management resolution, including framework-scoped versions.
-- Faster Updates scanning: persisted last scan, disk-cached NuGet HTTP responses, reused registration dependency groups and configurable concurrency.
+- **Cancel** is available while a batch update runs, on a busy project row, on a consolidating card, during cleanup and during "remove from all projects" (which stops before touching the remaining projects).
+- Each cancellation reports what happened: versions rolled back, versions left applied, or removals kept with their backups.
+
+## Everything in 2.1.0
+
+- Prerelease changes clear and recheck the update count on both the Updates tab badge and the Activity Bar badge.
+- The Updates tab shows live progress while checking (`Parsing projects (2/8)`, `Checking latest versions (23/60)`, …) with a determinate progress bar.

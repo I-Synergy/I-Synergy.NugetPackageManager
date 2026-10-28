@@ -11,6 +11,9 @@ import NuGetConfigResolver from './utilities/nuget-config-resolver';
 import CpmResolver from './utilities/cpm-resolver';
 import ProjectFrameworkResolver from './utilities/project-framework-resolver';
 import TaskExecutorDefault, { DotnetError } from './utilities/task-executor';
+import { OperationJobs } from './utilities/operation-jobs';
+import type { Result } from '../common/rpc/result';
+import type { GetJobResponse } from '../common/rpc/types';
 import { Logger } from '../common/logger';
 
 suite('HostAPI Tests', () => {
@@ -1003,6 +1006,565 @@ suite('HostAPI Tests', () => {
             }
             assert.strictEqual(fs.readFileSync(propsPath, 'utf8'), propsContent);
             assert.strictEqual(fs.readFileSync(projectPath, 'utf8'), projectContent);
+        });
+    });
+
+    // ----------------------------------------------------------------
+    // Mutation jobs
+    // ----------------------------------------------------------------
+    suite('mutation jobs', () => {
+        let workspaceDir: string;
+        let projectPath: string;
+
+        function fixturesRoot(): string {
+            const candidates = [
+                path.join(process.cwd(), 'src', 'host', 'utilities', '__fixtures__'),
+                path.resolve(__dirname, '..', '..', 'src', 'host', 'utilities', '__fixtures__'),
+            ];
+            const found = candidates.find((candidate) => fs.existsSync(candidate));
+            assert.ok(found, `fixtures directory not found; tried ${candidates.join(', ')}`);
+            return found!;
+        }
+
+        function setupWorkspace(fixture: string): void {
+            workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'host-batch-job-'));
+            fs.writeFileSync(
+                path.join(workspaceDir, 'Directory.Packages.props'),
+                fs.readFileSync(path.join(fixturesRoot(), 'cpm', fixture), 'utf8')
+            );
+            projectPath = path.join(workspaceDir, 'App.csproj');
+            fs.writeFileSync(
+                projectPath,
+                '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework><ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally></PropertyGroup><ItemGroup><PackageReference Include="Pkg.Shared" /></ItemGroup></Project>'
+            );
+            sandbox.stub(vscode.workspace, 'workspaceFolders').value([{ uri: { fsPath: workspaceDir } }]);
+        }
+
+        function gate(): { wait: Promise<void>; open: () => void } {
+            let open!: () => void;
+            const wait = new Promise<void>((resolve) => { open = resolve; });
+            return { wait, open };
+        }
+
+        async function waitForJobAsync(
+            api: ReturnType<typeof createHostAPI>,
+            jobId: string
+        ): Promise<Result<GetJobResponse>> {
+            let status = await api.getJobAsync({ JobId: jobId });
+            for (let i = 0; i < 400; i += 1) {
+                if (!status.ok || status.value.State !== 'running') return status;
+                await new Promise((resolve) => setTimeout(resolve, 5));
+                status = await api.getJobAsync({ JobId: jobId });
+            }
+            return status;
+        }
+
+        function batchJob(status: Result<GetJobResponse>) {
+            assert.ok(status.ok, status.ok ? '' : status.error);
+            if (status.value.Kind !== 'batchUpdate') {
+                throw new Error(`Unexpected job kind: ${status.value.Kind}`);
+            }
+            return status.value;
+        }
+
+        function skipRestoreConfig(): void {
+            const configStub = { get: sandbox.stub() };
+            configStub.get.withArgs('skipRestore').returns('true');
+            sandbox.stub(vscode.workspace, 'getConfiguration').returns(
+                configStub as unknown as vscode.WorkspaceConfiguration
+            );
+        }
+
+        teardown(() => {
+            OperationJobs.Reset();
+            ProjectFrameworkResolver.SetEvaluatorForTests(null);
+            if (workspaceDir) {
+                fs.rmSync(workspaceDir, { recursive: true, force: true });
+            }
+        });
+
+        test('runs a batch update as a job and serves the final response', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            skipRestoreConfig();
+
+            const api = createHostAPI();
+            const started = await api.startBatchUpdateAsync({
+                Updates: [{
+                    PackageId: 'Pkg.Shared',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional',
+                }],
+                Transactional: true,
+                SkipRestore: true,
+            });
+
+            assert.ok(started.ok, started.ok ? '' : started.error);
+            const status = await waitForJobAsync(api, started.value.JobId);
+
+            assert.strictEqual(batchJob(status).State, 'completed');
+            assert.strictEqual(batchJob(status).Percent, 100);
+            assert.strictEqual(batchJob(status).Response?.Results[0]?.Success, true);
+            assert.strictEqual(batchJob(status).Response?.RolledBack, undefined);
+
+            const map = await CpmResolver.ParseCpmFileAsync(path.join(workspaceDir, 'Directory.Packages.props'));
+            assert.strictEqual(map.unconditional.get('Pkg.Shared'), '1.5.0');
+        });
+
+        test('rolls back inside the job when the restore fails', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            const propsPath = path.join(workspaceDir, 'Directory.Packages.props');
+            const propsBefore = fs.readFileSync(propsPath, 'utf8');
+            sandbox.stub(TaskExecutorDefault, 'ExecuteCommandAsync').rejects(
+                new DotnetError('dotnet exited with code 1', '')
+            );
+
+            const api = createHostAPI();
+            const started = await api.startBatchUpdateAsync({
+                Updates: [{
+                    PackageId: 'Pkg.Shared',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional',
+                }],
+                Transactional: true,
+                SkipRestore: false,
+            });
+
+            assert.ok(started.ok, started.ok ? '' : started.error);
+            const status = await waitForJobAsync(api, started.value.JobId);
+
+            assert.strictEqual(batchJob(status).State, 'completed');
+            assert.strictEqual(batchJob(status).Response?.RolledBack, true);
+            assert.ok(batchJob(status).Response?.RestoreError);
+            assert.strictEqual(fs.readFileSync(propsPath, 'utf8'), propsBefore);
+        });
+
+        test('refuses to start a second job while one is running', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            skipRestoreConfig();
+
+            const blocker = gate();
+            sandbox.stub(CpmResolver, 'UpdateCpmVersionsAsync').callsFake(async () => {
+                await blocker.wait;
+            });
+
+            const api = createHostAPI();
+            const request = {
+                Updates: [{
+                    PackageId: 'Pkg.Shared',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional' as const,
+                }],
+                Transactional: true,
+                SkipRestore: true,
+            };
+
+            const first = await api.startBatchUpdateAsync(request);
+            assert.ok(first.ok, first.ok ? '' : first.error);
+
+            const second = await api.startBatchUpdateAsync(request);
+            assert.strictEqual(second.ok, false);
+            if (!second.ok) {
+                assert.match(second.error, /already running/);
+            }
+
+            blocker.open();
+            await waitForJobAsync(api, first.value.JobId);
+        });
+
+        test('cancel aborts the job and rolls back the writes it already applied', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            const propsPath = path.join(workspaceDir, 'Directory.Packages.props');
+            const propsBefore = fs.readFileSync(propsPath, 'utf8');
+
+            let written = false;
+            let writeStarted!: () => void;
+            const reachedWrite = new Promise<void>((resolve) => { writeStarted = resolve; });
+            const blocker = gate();
+            sandbox.stub(CpmResolver, 'UpdateCpmVersionsAsync').callsFake(async (propsFilePath) => {
+                writeStarted();
+                await blocker.wait;
+                fs.writeFileSync(
+                    propsFilePath,
+                    fs.readFileSync(propsFilePath, 'utf8').replace('Version="1.0.0"', 'Version="1.5.0"')
+                );
+                written = true;
+            });
+
+            const api = createHostAPI();
+            const started = await api.startBatchUpdateAsync({
+                Updates: [{
+                    PackageId: 'Pkg.Shared',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional',
+                }],
+                Transactional: true,
+                SkipRestore: true,
+            });
+            assert.ok(started.ok, started.ok ? '' : started.error);
+
+            // Cancel only once the transaction is mid-write, so the abort has
+            // something to roll back.
+            await reachedWrite;
+            const cancelled = await api.cancelJobAsync({ JobId: started.value.JobId });
+            assert.ok(cancelled.ok, cancelled.ok ? '' : cancelled.error);
+
+            // The runner is parked inside the CPM write, so let it finish the
+            // iteration; the aborted signal then triggers the rollback.
+            blocker.open();
+            const status = await waitForJobAsync(api, started.value.JobId);
+
+            assert.strictEqual(batchJob(status).State, 'cancelled');
+            assert.strictEqual(batchJob(status).Response?.RolledBack, true);
+            assert.strictEqual(batchJob(status).Response?.Cancelled, true);
+            assert.strictEqual(written, true, 'the cancelled job must have written before rolling back');
+            assert.strictEqual(fs.readFileSync(propsPath, 'utf8'), propsBefore);
+        });
+
+        test('runs a package update as a job', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            sandbox.stub(TaskExecutorDefault, 'ExecuteCommandAsync').resolves();
+
+            const api = createHostAPI();
+            const started = await api.startProjectUpdateAsync({
+                ProjectPath: projectPath,
+                PackageId: 'Pkg.Shared',
+                Version: '1.5.0',
+                Type: 'UPDATE',
+                CpmCondition: "$(TargetFramework.StartsWith('net10.0'))",
+            });
+
+            assert.ok(started.ok, started.ok ? '' : started.error);
+            const status = await waitForJobAsync(api, started.value.JobId);
+            assert.ok(status.ok);
+            assert.strictEqual(status.value.Kind, 'projectUpdate');
+            assert.strictEqual(status.value.State, 'completed');
+
+            const map = await CpmResolver.ParseCpmFileAsync(path.join(workspaceDir, 'Directory.Packages.props'));
+            const net10 = map.conditional.find((entry) => entry.framework === 'net10.0');
+            assert.strictEqual(net10?.versions.get('Pkg.Shared'), '1.5.0');
+            assert.strictEqual(map.unconditional.get('Pkg.Shared'), '1.0.0', 'the other line is untouched');
+        });
+
+        test('runs a consolidation as a job', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            skipRestoreConfig();
+
+            const api = createHostAPI();
+            const started = await api.startConsolidateAsync({
+                PackageId: 'Pkg.Shared',
+                TargetVersion: '3.0.0',
+                ProjectPaths: [projectPath],
+                Scope: 'unconditional',
+            });
+
+            assert.ok(started.ok, started.ok ? '' : started.error);
+            const status = await waitForJobAsync(api, started.value.JobId);
+            assert.ok(status.ok);
+            assert.strictEqual(status.value.Kind, 'consolidate');
+            assert.strictEqual(status.value.State, 'completed');
+
+            const map = await CpmResolver.ParseCpmFileAsync(path.join(workspaceDir, 'Directory.Packages.props'));
+            assert.strictEqual(map.unconditional.get('Pkg.Shared'), '3.0.0');
+        });
+
+        test('runs a cleanup as a job', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            sandbox.stub(vscode.workspace, 'findFiles').resolves([]);
+
+            const api = createHostAPI();
+            const started = await api.startCleanupAsync({});
+
+            assert.ok(started.ok, started.ok ? '' : started.error);
+            const status = await waitForJobAsync(api, started.value.JobId);
+            assert.ok(status.ok);
+            assert.strictEqual(status.value.Kind, 'cleanup');
+            assert.strictEqual(status.value.State, 'completed');
+            if (status.value.Kind === 'cleanup') {
+                assert.deepStrictEqual(status.value.Response?.Removed, []);
+            }
+        });
+
+        function writeAssets(libraries: Record<string, string>, edges: Record<string, Record<string, string>> = {}): void {
+            const assetsLibraries: Record<string, { type: string }> = {};
+            for (const [id, version] of Object.entries(libraries)) {
+                assetsLibraries[`${id}/${version}`] = { type: 'package' };
+            }
+            const target: Record<string, { dependencies?: Record<string, string> }> = {};
+            for (const [id, version] of Object.entries(libraries)) {
+                target[`${id}/${version}`] = edges[id] ? { dependencies: edges[id] } : {};
+            }
+            fs.mkdirSync(path.join(workspaceDir, 'obj'), { recursive: true });
+            fs.writeFileSync(
+                path.join(workspaceDir, 'obj', 'project.assets.json'),
+                JSON.stringify({ libraries: assetsLibraries, targets: { 'net10.0': target } })
+            );
+        }
+
+        function stubPackageMetadataByVersion(
+            packages: Record<string, Record<string, Array<{ package: string; versionRange: string }>>>
+        ): void {
+            // The assets graph keys packages by their lowercased id.
+            const byLowerId = new Map(
+                Object.entries(packages).map(([id, versions]) => [id.toLowerCase(), versions] as const)
+            );
+            const api = {
+                GetPackageAsync: async (packageId: string) => ({
+                    data: {
+                        Versions: Object.entries(byLowerId.get(packageId.toLowerCase()) ?? {}).map(([version]) => ({
+                            Id: `${packageId}@${version}`,
+                            Version: version,
+                        })),
+                    },
+                }),
+                GetPackageDetailsAsync: async (versionId: string) => {
+                    const at = versionId.lastIndexOf('@');
+                    const packageId = versionId.slice(0, at);
+                    const version = versionId.slice(at + 1);
+                    return {
+                        data: {
+                            dependencies: {
+                                frameworks: {
+                                    'net10.0': byLowerId.get(packageId.toLowerCase())?.[version] ?? [],
+                                },
+                            },
+                        },
+                    };
+                },
+            };
+            sandbox.stub(nugetApiFactory, 'GetSourceApiAsync').resolves(
+                api as unknown as Awaited<ReturnType<typeof nugetApiFactory.GetSourceApiAsync>>
+            );
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync').resolves([
+                { Name: 'nuget.org', Url: 'https://api.nuget.org/v3/index.json' },
+            ]);
+        }
+
+        function stubPackageMetadata(
+            version: string,
+            dependencies: Array<{ package: string; versionRange: string }>
+        ): void {
+            const api = {
+                GetPackageAsync: async (packageId: string) => ({
+                    data: { Versions: [{ Id: `reg-${packageId}`, Version: version }] },
+                }),
+                GetPackageDetailsAsync: async () => ({
+                    data: { dependencies: { frameworks: { 'net10.0': dependencies } } },
+                }),
+            };
+            sandbox.stub(nugetApiFactory, 'GetSourceApiAsync').resolves(
+                api as unknown as Awaited<ReturnType<typeof nugetApiFactory.GetSourceApiAsync>>
+            );
+            sandbox.stub(NuGetConfigResolver, 'GetSourcesAndDecodePasswordsAsync').resolves([
+                { Name: 'nuget.org', Url: 'https://api.nuget.org/v3/index.json' },
+            ]);
+        }
+
+        test('preflight reports a selected version that violates the graph', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            // The installed graph resolves Pkg.Leaf 2.0.0, but the new
+            // Pkg.Shared 1.5.0 requires it at exactly 1.0.0.
+            writeAssets({ 'Pkg.Shared': '1.0.0', 'Pkg.Leaf': '2.0.0' });
+            stubPackageMetadata('1.5.0', [{ package: 'Pkg.Leaf', versionRange: '[1.0.0]' }]);
+
+            const api = createHostAPI();
+            const result = await api.checkBatchUpdateAsync({
+                Updates: [{
+                    PackageId: 'Pkg.Shared',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional',
+                }],
+                Transactional: true,
+            });
+
+            assert.ok(result.ok, result.ok ? '' : result.error);
+            assert.strictEqual(result.value.Conflicts.length, 1);
+            const conflict = result.value.Conflicts[0]!;
+            assert.strictEqual(conflict.PackageId, 'Pkg.Shared');
+            assert.strictEqual(conflict.BlockedByPackageId, 'Pkg.Leaf');
+            assert.strictEqual(conflict.RequiredRange, '[1.0.0]');
+            assert.strictEqual(conflict.EffectiveVersion, '2.0.0');
+            assert.match(conflict.Reason, /requires Pkg\.Leaf \[1\.0\.0\]/);
+        });
+
+        test('preflight accepts a compatible selection', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            writeAssets({ 'Pkg.Shared': '1.0.0', 'Pkg.Leaf': '2.0.0' });
+            stubPackageMetadata('1.5.0', [{ package: 'Pkg.Leaf', versionRange: '[2.0.0, )' }]);
+
+            const api = createHostAPI();
+            const result = await api.checkBatchUpdateAsync({
+                Updates: [{
+                    PackageId: 'Pkg.Shared',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional',
+                }],
+                Transactional: true,
+            });
+
+            assert.ok(result.ok, result.ok ? '' : result.error);
+            assert.deepStrictEqual(result.value.Conflicts, []);
+        });
+
+        test('preflight reports installed ranges that the selection would break', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            // Pkg.Pinner pins Pkg.Shared to exactly 1.0.0 and is not updated.
+            writeAssets(
+                { 'Pkg.Shared': '1.0.0', 'Pkg.Pinner': '1.0.0' },
+                { 'Pkg.Pinner': { 'Pkg.Shared': '[1.0.0]' } }
+            );
+            stubPackageMetadataByVersion({
+                'Pkg.Shared': { '1.5.0': [] },
+                'Pkg.Pinner': { '1.0.0': [{ package: 'Pkg.Shared', versionRange: '[1.0.0]' }] },
+            });
+
+            const api = createHostAPI();
+            const result = await api.checkBatchUpdateAsync({
+                Updates: [{
+                    PackageId: 'Pkg.Shared',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional',
+                }],
+                Transactional: true,
+            });
+
+            assert.ok(result.ok, result.ok ? '' : result.error);
+            assert.strictEqual(result.value.Conflicts.length, 1);
+            // A transitive package has no project-file casing to borrow.
+            assert.strictEqual(result.value.Conflicts[0]!.BlockedByPackageId.toLowerCase(), 'pkg.pinner');
+            assert.strictEqual(result.value.Conflicts[0]!.RequiredRange, '[1.0.0]');
+        });
+
+        test('a transactional batch defers non-CPM restores to the single final restore', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            const commands: string[][] = [];
+            sandbox.stub(TaskExecutorDefault, 'ExecuteCommandAsync').callsFake(
+                async (command: string, args: string[]) => {
+                    commands.push([command, ...args]);
+                }
+            );
+
+            const api = createHostAPI();
+            const result = await api.batchUpdatePackagesAsync({
+                Updates: [{
+                    PackageId: 'Pkg.AddedOnly',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                }],
+                Transactional: true,
+                SkipRestore: false,
+            });
+
+            assert.ok(result.ok, result.ok ? '' : result.error);
+            const adds = commands.filter(([, subcommand]) => subcommand === 'add');
+            const restores = commands.filter(([, subcommand]) => subcommand === 'restore');
+            assert.strictEqual(adds.length, 1, 'the non-CPM row goes through dotnet add');
+            assert.ok(adds[0]!.includes('--no-restore'), 'the add must not restore on its own');
+            assert.strictEqual(restores.length, 1, 'one restore covers the whole batch');
+        });
+
+        test('names the batch rows a failed restore points at', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            fs.writeFileSync(
+                path.join(workspaceDir, 'Directory.Packages.props'),
+                [
+                    '<Project>',
+                    '  <PropertyGroup>',
+                    '    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>',
+                    '  </PropertyGroup>',
+                    '  <ItemGroup>',
+                    '    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="11.0.0-rc.2.26504.105" />',
+                    '  </ItemGroup>',
+                    '</Project>',
+                ].join('\n')
+            );
+
+            const output = [
+                '/ws/Sample.Api.csproj : error NU1107: Version conflict detected for Microsoft.EntityFrameworkCore.Relational. Install/reference Microsoft.EntityFrameworkCore.Relational 11.0.0-rc.3.26522.148 directly to project Sample.Api to resolve this issue.',
+                '/ws/Sample.Api.csproj :  Sample.Api -> Npgsql.EntityFrameworkCore.PostgreSQL 11.0.0-rc.2 -> Microsoft.EntityFrameworkCore.Relational (= 11.0.0-rc.2.26504.105).',
+            ].join('\n');
+            sandbox.stub(TaskExecutorDefault, 'ExecuteCommandAsync').rejects(
+                new DotnetError('dotnet exited with code 1', output)
+            );
+
+            const api = createHostAPI();
+            const result = await api.batchUpdatePackagesAsync({
+                Updates: [{
+                    PackageId: 'Microsoft.EntityFrameworkCore.Relational',
+                    Version: '11.0.0-rc.3.26522.148',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional',
+                }],
+                Transactional: true,
+                SkipRestore: false,
+            });
+
+            assert.ok(result.ok, result.ok ? '' : result.error);
+            assert.strictEqual(result.value.RolledBack, true);
+            assert.deepStrictEqual(
+                result.value.ConflictingPackages,
+                ['Microsoft.EntityFrameworkCore.Relational'],
+                'the contested package is a batch row, so the UI can offer a retry without it'
+            );
+        });
+
+        test('streams the restore stage into the job progress', async () => {
+            setupWorkspace('unconditional-plus-conditional.props');
+            let releaseRestore!: () => void;
+            const restoreGate = new Promise<void>((resolve) => { releaseRestore = resolve; });
+
+            sandbox.stub(TaskExecutorDefault, 'ExecuteCommandAsync').callsFake(
+                async (_command: string, args: string[], _operationId, _signal, _timeout, onProgress) => {
+                    if (args[0] === 'restore') {
+                        onProgress?.({ stage: 'Restoring packages...', percent: 40 });
+                        await restoreGate;
+                    }
+                }
+            );
+
+            const api = createHostAPI();
+            const started = await api.startBatchUpdateAsync({
+                Updates: [{
+                    PackageId: 'Pkg.Shared',
+                    Version: '1.5.0',
+                    ProjectPaths: [projectPath],
+                    Scope: 'unconditional',
+                }],
+                Transactional: true,
+                SkipRestore: false,
+            });
+            assert.ok(started.ok, started.ok ? '' : started.error);
+
+            let status = await api.getJobAsync({ JobId: started.value.JobId });
+            for (let i = 0; i < 400; i += 1) {
+                if (status.ok && status.value.Stage.includes('Restoring packages')) break;
+                await new Promise((resolve) => setTimeout(resolve, 5));
+                status = await api.getJobAsync({ JobId: started.value.JobId });
+            }
+
+            assert.ok(status.ok);
+            assert.match(status.value.Stage, /Restoring packages\.\.\. — App\.csproj \(1\/1\)/);
+            assert.ok(status.value.Percent >= 80 && status.value.Percent <= 95, `percent ${status.value.Percent}`);
+
+            releaseRestore();
+            const finished = await waitForJobAsync(api, started.value.JobId);
+            assert.strictEqual(batchJob(finished).State, 'completed');
+        });
+
+        test('reports an unknown job id and refuses to cancel one', async () => {
+            const api = createHostAPI();
+
+            const status = await api.getJobAsync({ JobId: 'missing' });
+            assert.strictEqual(status.ok, false);
+
+            const cancelled = await api.cancelJobAsync({ JobId: 'missing' });
+            assert.strictEqual(cancelled.ok, false);
         });
     });
 

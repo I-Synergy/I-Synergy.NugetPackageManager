@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+## 2.2.0 (2026-10-28)
+
+- fix: a slow update on a large solution is no longer cancelled and reverted by the webview's 120 s request deadline. The deadline now stops the webview waiting but lets the host finish; files are only rolled back for a real write/restore failure or an explicit cancel.
+- feat: every long mutation now runs as a host-side job — batch update, single package install/update/uninstall, consolidation and cleanup (`start*Async` → `{ JobId }`, `getJobAsync`, `cancelJobAsync`). The operation survives the tab being closed, a slow restore can no longer turn into a client timeout error, and the Updates tab renders live stage/percentage progress. Only one batch update runs at a time so two transactions cannot overwrite each other.
+- fix: cancelling a batch update rolls back the versions it already wrote instead of leaving a partially applied update. A **Cancel** action is available while any long operation runs — batch updates, install/update/uninstall, consolidation, cleanup and "remove from all projects" — and reports what was rolled back or left applied.
+- feat: batch updates are **preflighted** against the restored dependency graph before anything is written (`checkBatchUpdateAsync`). A selection that would break a pin is listed in a confirmation dialog, and the conflicting rows are skipped instead of failing the whole transaction.
+- fix: a transactional batch no longer restores once per non-CPM package (`dotnet add --no-restore`); one `dotnet restore` covers the whole batch.
+- feat: when the final restore does fail, the rollback names the packages responsible and offers **Retry without** them, so one bad row no longer costs the rest of the selection.
+- feat: the restore phase streams `dotnet` stages and per-project progress into the job instead of a frozen progress bar.
+
 ## 2.1.0 (2026-10-26)
 
 - fix: toggling **Prerelease** now clears the stale update count and rechecks it for the new filter. The Updates tab badge and the Activity Bar badge no longer keep the prerelease count.

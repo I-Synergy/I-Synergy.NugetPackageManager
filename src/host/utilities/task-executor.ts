@@ -23,14 +23,17 @@ export class TaskExecutor {
     args: string[],
     operationId: string,
     signal?: AbortSignal,
-    timeoutMs: number = 10 * 60 * 1000
+    timeoutMs: number = 10 * 60 * 1000,
+    onProgress?: (progress: OperationProgress) => void
   ): Promise<void> {
     Logger.info(`TaskExecutor.ExecuteCommandAsync: ${command} ${args.join(" ")}`);
     if (signal?.aborted) {
       throw new DotnetError("dotnet operation cancelled", "");
     }
 
-    this.progress.set(operationId, { stage: "Starting...", percent: 5 });
+    const starting: OperationProgress = { stage: "Starting...", percent: 5 };
+    this.progress.set(operationId, starting);
+    onProgress?.(starting);
     const releaser = await this.globalMutex.acquire();
 
     try {
@@ -81,7 +84,10 @@ export class TaskExecutor {
           } else if (l.includes("restored ") || l.includes("restore completed")) {
             next = { stage: "Finishing...", percent: 95 };
           }
-          if (next) this.progress.set(operationId, next);
+          if (next) {
+            this.progress.set(operationId, next);
+            onProgress?.(next);
+          }
         };
 
         child.stdout.on("data", (data: Buffer) => {

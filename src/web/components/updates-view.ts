@@ -8,7 +8,9 @@ import { sharedStyles } from "@/web/styles/shared.css";
 import { hostApi } from "@/web/registrations";
 import { buildFrameworkOptions, getFrameworkGroupKey, getFrameworkLabel, matchesFrameworkSelection, SHARED_FRAMEWORK } from "@/common/framework";
 import { OutdatedPackageViewModel, PackageViewModel } from "../types";
-import type { GetOutdatedPackagesRequest, GetOutdatedPackagesResponse } from "@/common/rpc/types";
+import type { GetOutdatedPackagesRequest, GetOutdatedPackagesResponse, BatchUpdateRequest, BatchUpdateResponse } from "@/common/rpc/types";
+import type { Result } from "@/common/rpc/result";
+import { runBatchUpdateJobAsync } from "@/web/jobs";
 import "./package-row";
 
 @customElement("updates-view")
@@ -176,6 +178,7 @@ export class UpdatesView extends LitElement {
   @state() isRefreshing: boolean = false;
   @state() isUpdating: boolean = false;
   @state() statusText: string = "";
+  @state() jobProgress: { Stage: string; Percent: number } | null = null;
   @state() scanProgress: {
     Stage: string;
     Percent: number;
@@ -192,11 +195,17 @@ export class UpdatesView extends LitElement {
   private _activeScanId: string = "";
   private _progressTimer: ReturnType<typeof setInterval> | undefined;
   private _progressPollInFlight = false;
+  private _jobAbort: AbortController | undefined;
+  private _jobId: string = "";
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this._activeScanId = "";
     this.stopProgressPolling();
+    // The host job keeps running (a deadline must not abort file writes); this
+    // component just stops waiting for it.
+    this._jobAbort?.abort();
+    this._jobAbort = undefined;
   }
 
   private buildRequest(
@@ -292,7 +301,46 @@ export class UpdatesView extends LitElement {
     }
   }
 
+  /**
+   * Runs a batch update as a host job and waits for its terminal response.
+   *
+   * The transaction is a snapshot/write/restore over the whole repo, so its
+   * runtime must not be bounded by the RPC deadline; the job id also lets the
+   * tab render real progress.
+   */
+  private async updateAsJobAsync(request: BatchUpdateRequest): Promise<Result<BatchUpdateResponse>> {
+    const abort = new AbortController();
+    this._jobAbort = abort;
+    this.jobProgress = { Stage: "Starting update…", Percent: 0 };
+    try {
+      return await runBatchUpdateJobAsync(request, {
+        signal: abort.signal,
+        onStarted: (jobId) => {
+          this._jobId = jobId;
+        },
+        onProgress: (progress) => {
+          this.jobProgress = progress;
+        },
+      });
+    } finally {
+      if (this._jobAbort === abort) this._jobAbort = undefined;
+      this._jobId = "";
+      this.jobProgress = null;
+    }
+  }
+
+  /** Explicitly aborts the running transaction; the host rolls back its writes. */
+  private async cancelJobAsync(): Promise<void> {
+    if (!this._jobId) return;
+    this.statusText = "Cancelling update…";
+    const result = await hostApi.cancelJobAsync({ JobId: this._jobId });
+    if (!result.ok) {
+      this.statusText = `Failed to cancel: ${result.error}`;
+    }
+  }
+
   private _loadTask = new Task(this, {
+
     task: async ([projectPaths, sourceUrl, prerelease, forceReload], { signal }) => {
       const scanId = globalThis.crypto.randomUUID();
       this._activeScanId = scanId;
@@ -468,9 +516,9 @@ export class UpdatesView extends LitElement {
     pkg.IsUpdating = true;
     this.requestUpdate();
     try {
-      const result = await hostApi.batchUpdatePackagesAsync({
-        // The host runs the whole transaction: snapshot, write, restore and
-        // roll back if restore fails.
+      const result = await this.updateAsJobAsync({
+        // The host runs the whole transaction as a background job: snapshot,
+        // write, restore and roll back if restore fails.
         SkipRestore: skipRestore,
         Transactional: true,
         Updates: [
@@ -484,6 +532,10 @@ export class UpdatesView extends LitElement {
           },
         ],
       });
+      if (result.ok && result.value.Cancelled) {
+        this.statusText = "Update cancelled — the versions already written were rolled back";
+        return false;
+      }
       const succeeded = result.ok && !result.value.RolledBack && result.value.Results.every((r) => r.Success);
       if (succeeded) {
         // Condition + TFM identify a framework-scoped row, so updating the
@@ -522,64 +574,140 @@ export class UpdatesView extends LitElement {
     }
   }
 
-  private async updatePackagesSequentiallyAsync(
-    packages: OutdatedPackageViewModel[]
-  ): Promise<void> {
-    if (packages.length === 0 || this.isRefreshing) return;
-
-    const updates = packages.map((pkg) => ({
+  private toUpdateRequest(pkg: OutdatedPackageViewModel): BatchUpdateRequest["Updates"][number] {
+    return {
       PackageId: pkg.Id,
       Version: pkg.LatestVersion,
       ProjectPaths: pkg.Projects.map((project) => project.Path),
       ...(pkg.CpmCondition ? { CpmCondition: pkg.CpmCondition } : {}),
       ...(pkg.CpmFramework ? { CpmTfm: pkg.CpmFramework } : {}),
-      Scope: pkg.CpmCondition ? "group" as const : "unconditional" as const,
-    }));
+      Scope: pkg.CpmCondition ? "group" : "unconditional",
+    };
+  }
+
+  /**
+   * Checks the whole selection against the dependency graph before anything is
+   * written. Conflicting rows are dropped only with the user's confirmation, so
+   * one bad package cannot cost the rest of the batch.
+   */
+  private async preflightAsync(packages: OutdatedPackageViewModel[]): Promise<OutdatedPackageViewModel[]> {
+    const check = await hostApi.checkBatchUpdateAsync({
+      Updates: packages.map((pkg) => this.toUpdateRequest(pkg)),
+      Transactional: true,
+      SkipRestore: false,
+    });
+    if (!check.ok || check.value.Conflicts.length === 0) return packages;
+
+    const conflicting = new Set(
+      check.value.Conflicts.map((conflict) => `${conflict.PackageId.toLowerCase()}@${conflict.RequestedVersion}`)
+    );
+    const remaining = packages.filter(
+      (pkg) => !conflicting.has(`${pkg.Id.toLowerCase()}@${pkg.LatestVersion}`)
+    );
+    if (remaining.length === packages.length) return packages;
+
+    const detail = check.value.Conflicts
+      .slice(0, 8)
+      .map((conflict) => `${conflict.PackageId} → ${conflict.RequestedVersion}: ${conflict.Reason}`);
+    if (check.value.Conflicts.length > 8) {
+      detail.push(`…and ${check.value.Conflicts.length - 8} more`);
+    }
+
+    const confirm = await hostApi.showConfirmationAsync({
+      Message: `${packages.length - remaining.length} of ${packages.length} updates conflict with the dependency graph.`,
+      Detail: `${detail.join("\n")}\n\nUpdate the other ${remaining.length} package${remaining.length !== 1 ? "s" : ""}?`,
+    });
+    if (!confirm.ok || !confirm.value.Confirmed) {
+      this.statusText = "Update cancelled before writing — the selection contains dependency conflicts";
+      return [];
+    }
+
+    this.statusText = `Skipping ${packages.length - remaining.length} conflicting update${packages.length - remaining.length !== 1 ? "s" : ""}`;
+    return remaining;
+  }
+
+  private async updatePackagesSequentiallyAsync(
+    packages: OutdatedPackageViewModel[]
+  ): Promise<void> {
+    if (packages.length === 0 || this.isRefreshing) return;
 
     this.isUpdating = true;
     packages.forEach((pkg) => { pkg.IsUpdating = true; });
-    this.statusText = `Updating ${packages.length} package${packages.length !== 1 ? "s" : ""} transactionally...`;
     this.requestUpdate();
     try {
-      const result = await hostApi.batchUpdatePackagesAsync({
-        Updates: updates,
-        Transactional: true,
-        SkipRestore: false,
-      });
-
-      if (!result.ok) {
-        this.statusText = `Update failed: ${result.error}`;
-        return;
-      }
-      if (result.value.RolledBack) {
-        const reason = result.value.RestoreError ?? result.value.RollbackError;
-        this.statusText = `Update rolled back${reason ? `: ${reason}` : ""}`;
-        await hostApi.updateBadgeAsync({
-          Count: this.packages.length,
-          BlockedCount: this.blockedPackages.length,
-        });
-        return;
-      }
-
-      // The transaction succeeded, so every selected row can be removed.
-      this.packages = this.packages.filter((pkg) => !packages.includes(pkg));
-      this.dispatchEvent(new CustomEvent<number>("count-changed", {
-        detail: this.packages.length,
-        bubbles: true,
-        composed: true,
-      }));
-      this.statusText = `${packages.length} package${packages.length !== 1 ? "s" : ""} updated and restored`;
-      await hostApi.updateBadgeAsync({
-        Count: this.packages.length,
-        BlockedCount: this.blockedPackages.length,
-      });
-      this.dispatchEvent(new CustomEvent("packages-updated", { bubbles: true, composed: true }));
+      const remaining = await this.preflightAsync(packages);
+      if (remaining.length === 0) return;
+      await this.runSelectedUpdatesAsync(remaining, true);
     } finally {
       packages.forEach((pkg) => { pkg.IsUpdating = false; });
       this.isUpdating = false;
       this.requestUpdate();
     }
   }
+
+  private async runSelectedUpdatesAsync(
+    packages: OutdatedPackageViewModel[],
+    allowRetry: boolean
+  ): Promise<void> {
+    if (packages.length === 0) return;
+
+    this.statusText = `Updating ${packages.length} package${packages.length !== 1 ? "s" : ""} transactionally...`;
+    this.requestUpdate();
+
+    const result = await this.updateAsJobAsync({
+      Updates: packages.map((pkg) => this.toUpdateRequest(pkg)),
+      Transactional: true,
+      SkipRestore: false,
+    });
+
+    if (!result.ok) {
+      this.statusText = `Update failed: ${result.error}`;
+      return;
+    }
+
+    if (result.value.Cancelled) {
+      this.statusText = "Update cancelled — the versions already written were rolled back";
+      return;
+    }
+
+    if (result.value.RolledBack) {
+      const reason = result.value.RestoreError ?? result.value.RollbackError;
+      this.statusText = `Update rolled back${reason ? `: ${reason}` : ""}`;
+      await hostApi.updateBadgeAsync({
+        Count: this.packages.length,
+        BlockedCount: this.blockedPackages.length,
+      });
+
+      const culprits = result.value.ConflictingPackages ?? [];
+      const culpritIds = new Set(culprits.map((id) => id.toLowerCase()));
+      const retryable = packages.filter((pkg) => !culpritIds.has(pkg.Id.toLowerCase()));
+      if (allowRetry && culprits.length > 0 && retryable.length > 0) {
+        const confirm = await hostApi.showConfirmationAsync({
+          Message: `Retry without ${culprits.length} package${culprits.length !== 1 ? "s" : ""} the failed restore points at?`,
+          Detail: `${culprits.join(", ")}\n\n${reason ?? ""}`,
+        });
+        if (confirm.ok && confirm.value.Confirmed) {
+          await this.runSelectedUpdatesAsync(retryable, false);
+        }
+      }
+      return;
+    }
+
+    // The transaction succeeded, so every selected row can be removed.
+    this.packages = this.packages.filter((pkg) => !packages.includes(pkg));
+    this.dispatchEvent(new CustomEvent<number>("count-changed", {
+      detail: this.packages.length,
+      bubbles: true,
+      composed: true,
+    }));
+    this.statusText = `${packages.length} package${packages.length !== 1 ? "s" : ""} updated and restored`;
+    await hostApi.updateBadgeAsync({
+      Count: this.packages.length,
+      BlockedCount: this.blockedPackages.length,
+    });
+    this.dispatchEvent(new CustomEvent("packages-updated", { bubbles: true, composed: true }));
+  }
+
 
   private toPackageViewModel(pkg: OutdatedPackageViewModel): PackageViewModel {
     const vm = new PackageViewModel({
@@ -741,6 +869,31 @@ export class UpdatesView extends LitElement {
             </section>`
           : nothing}
 
+        ${this.jobProgress
+          ? html`
+              <div class="loading" role="status" aria-live="polite" aria-label="Updating packages">
+                <span class="spinner large"></span>
+                <div class="loading-body">
+                  <span class="loading-stage">${this.jobProgress.Stage}</span>
+                  <div
+                    class="progress-track"
+                    role="progressbar"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                    aria-valuenow=${this.jobProgress.Percent}
+                  >
+                    <div class="progress-fill" style="width: ${this.jobProgress.Percent}%"></div>
+                  </div>
+                </div>
+                <button
+                  class="secondary-btn"
+                  title="Cancel this update and roll back the versions already written"
+                  ?disabled=${!this._jobId}
+                  @click=${async () => await this.cancelJobAsync()}
+                >Cancel</button>
+              </div>
+            `
+          : nothing}
         ${isLoading
           ? html`
               <div class="loading" role="status" aria-live="polite" aria-label="Loading">

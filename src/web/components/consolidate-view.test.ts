@@ -2,9 +2,18 @@ import '../web-setup';
 import * as assert from 'assert';
 import { ConsolidateView } from '@/web/components/consolidate-view';
 import { InconsistentPackageViewModel } from '@/web/types';
-import { fail, ok } from '@/common/rpc/result';
+import { render, type TemplateResult } from 'lit';
+import { ok } from '@/common/rpc/result';
 import * as registrations from '@/web/registrations';
 import type { HostAPI } from '@/common/rpc/types';
+
+/** Waits for an async UI effect instead of assuming a fixed delay. */
+async function waitForAsync(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (!predicate() && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+}
 
 suite('ConsolidateView', () => {
     let view: ConsolidateView;
@@ -26,7 +35,13 @@ suite('ConsolidateView', () => {
     setup(() => {
         originalHostApi = registrations.hostApi;
         mockHostApi = {
-            consolidatePackagesAsync: async () => ok(undefined),
+            startConsolidateAsync: async () => ok({ JobId: 'job-consolidate' }),
+            getJobAsync: async () => ok({
+                Kind: 'consolidate',
+                State: 'completed',
+                Stage: 'Completed',
+                Percent: 100,
+            }),
         };
         Object.defineProperty(registrations, 'hostApi', {
             value: mockHostApi,
@@ -59,9 +74,9 @@ suite('ConsolidateView', () => {
 
     test('sends only the selected framework line when a card contains two lines', async () => {
         const calls: Array<{ CpmCondition?: string; Scope?: string; ProjectPaths: string[] }> = [];
-        mockHostApi.consolidatePackagesAsync = async (req) => {
+        mockHostApi.startConsolidateAsync = async (req) => {
             calls.push(req as { CpmCondition?: string; Scope?: string; ProjectPaths: string[] });
-            return ok(undefined);
+            return ok({ JobId: 'job-consolidate' });
         };
 
         const mixed = new InconsistentPackageViewModel({
@@ -99,7 +114,13 @@ suite('ConsolidateView', () => {
     });
 
     test('keeps the row and reports the error when consolidation fails', async () => {
-        mockHostApi.consolidatePackagesAsync = async () => fail('boom');
+        mockHostApi.getJobAsync = async () => ok({
+            Kind: 'consolidate',
+            State: 'failed',
+            Stage: 'Failed',
+            Percent: 0,
+            Error: 'boom',
+        });
         const pkg = packageModel('$(TargetFramework.StartsWith(\'net10.0\'))', 'net10.0');
         view.packages = [pkg];
 
@@ -123,4 +144,39 @@ suite('ConsolidateView', () => {
         assert.strictEqual(view.packages.length, 1);
         assert.strictEqual(view.packages[0]!.Versions[0]!.CpmCondition, net11.Versions[0]!.CpmCondition);
     });
+    test('cancels a running consolidation from the card action', async () => {
+        let running = true;
+        const cancelled: string[] = [];
+        mockHostApi.startConsolidateAsync = async () => ok({ JobId: 'job-consolidate-cancel' });
+        mockHostApi.getJobAsync = async () => running
+            ? ok({ Kind: 'consolidate', State: 'running', Stage: 'Writing package versions…', Percent: 60 })
+            : ok({ Kind: 'consolidate', State: 'cancelled', Stage: 'Cancelled', Percent: 60 });
+        mockHostApi.cancelJobAsync = async ({ JobId }: { JobId: string }) => {
+            cancelled.push(JobId);
+            running = false;
+            return ok(undefined);
+        };
+
+        const pkg = packageModel('', '');
+        view.packages = [pkg];
+
+        const pending = (view as unknown as {
+            consolidateSingleAsync(p: InconsistentPackageViewModel): Promise<boolean>;
+        }).consolidateSingleAsync(pkg);
+
+        const jobs = (view as unknown as { _jobIds: Map<string, string> })._jobIds;
+        await waitForAsync(() => jobs.size > 0);
+
+        const host = document.createElement('div');
+        render(view.render() as TemplateResult, host);
+        const cancelButton = Array.from(host.querySelectorAll('button'))
+            .find((button) => (button.getAttribute('aria-label') ?? '').startsWith('Cancel consolidation'));
+        assert.ok(cancelButton, 'a running consolidation offers a cancel button');
+        cancelButton!.click();
+
+        await waitForAsync(() => cancelled.length > 0, 2000);
+        assert.deepStrictEqual(cancelled, ['job-consolidate-cancel']);
+        assert.strictEqual(await pending, false);
+    });
+
 });

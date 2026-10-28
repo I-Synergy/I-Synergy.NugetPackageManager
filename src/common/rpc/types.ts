@@ -124,6 +124,31 @@ export type BatchUpdateRequest = {
   Transactional?: boolean;
 };
 
+/**
+ * One selected package whose requested version cannot be applied together with
+ * the rest of the batch. Produced by the preflight check before anything is
+ * written; `dotnet restore` remains the final authority.
+ */
+export type BatchUpdateConflict = {
+  /** The selected package to drop from this batch. */
+  PackageId: string;
+  RequestedVersion: string;
+  /** The package that declares the incompatible requirement. */
+  BlockedByPackageId: string;
+  /** The version of the blocking package (installed, or selected when it is in the batch). */
+  BlockedByVersion: string;
+  /** The NuGet range that rejects the effective version, e.g. `= 11.0.0-rc.2`. */
+  RequiredRange: string;
+  /** Version the dependency graph would resolve for the blocked package. */
+  EffectiveVersion: string;
+  ProjectPath: string;
+  Reason: string;
+};
+
+export type CheckBatchUpdateResponse = {
+  Conflicts: BatchUpdateConflict[];
+};
+
 export type RestoreProjectsRequest = {
   ProjectPaths: string[];
 };
@@ -245,11 +270,60 @@ export type BatchUpdateResponse = {
   RestoreError?: string;
   /** A failure while restoring the snapshots or re-restoring the old versions. */
   RollbackError?: string;
+  /**
+   * Batch rows that the restore failure points at, so the user can retry
+   * without them instead of re-selecting by hand.
+   */
+  ConflictingPackages?: string[];
+  /** True when the user cancelled; the transaction was rolled back. */
+  Cancelled?: boolean;
 };
 
 export type GetConfigurationResponse = {
   Configuration: Configuration;
 };
+
+// ============================================================
+// Long-running operation jobs
+// ============================================================
+
+/**
+ * Long mutations (batch update, single package update, consolidate, cleanup)
+ * run as host-side jobs so no client deadline governs how long a
+ * snapshot/write/restore sequence may take. The webview starts a job, polls
+ * `getJobAsync` for stage + percent, and reads the final response once the job
+ * is no longer `running`.
+ */
+export type JobKind = "batchUpdate" | "projectUpdate" | "consolidate" | "cleanup";
+
+export type JobState = "running" | "completed" | "failed" | "cancelled";
+
+export type JobStatus<TKind extends JobKind, TResponse> = {
+  Kind: TKind;
+  State: JobState;
+  /** Human-readable stage, e.g. "Restoring updated projects…". */
+  Stage: string;
+  /** Overall completion, 0-100. */
+  Percent: number;
+  /** The operation outcome; present once State is not "running". */
+  Response?: TResponse;
+  /** A failure of the job itself (unexpected throw), not of a package. */
+  Error?: string;
+};
+
+export type StartJobResponse = {
+  JobId: string;
+};
+
+export type JobRequest = {
+  JobId: string;
+};
+
+export type GetJobResponse =
+  | JobStatus<"batchUpdate", BatchUpdateResponse>
+  | JobStatus<"projectUpdate", UpdateProjectResponse>
+  | JobStatus<"consolidate", void>
+  | JobStatus<"cleanup", CleanupUnusedResponse>;
 
 // ============================================================
 // Wire Protocol (internal, over postMessage)
@@ -291,6 +365,13 @@ export interface HostAPI {
   updateStatusBarAsync(req: UpdateStatusBarRequest): Promise<Result<void>>;
   getOutdatedPackagesAsync(req: GetOutdatedPackagesRequest, signal?: AbortSignal): Promise<Result<GetOutdatedPackagesResponse>>;
   batchUpdatePackagesAsync(req: BatchUpdateRequest, signal?: AbortSignal): Promise<Result<BatchUpdateResponse>>;
+  checkBatchUpdateAsync(req: BatchUpdateRequest, signal?: AbortSignal): Promise<Result<CheckBatchUpdateResponse>>;
+  startBatchUpdateAsync(req: BatchUpdateRequest): Promise<Result<StartJobResponse>>;
+  startProjectUpdateAsync(req: UpdateProjectRequest): Promise<Result<StartJobResponse>>;
+  startConsolidateAsync(req: ConsolidateRequest): Promise<Result<StartJobResponse>>;
+  startCleanupAsync(req: CleanupUnusedRequest): Promise<Result<StartJobResponse>>;
+  getJobAsync(req: JobRequest): Promise<Result<GetJobResponse>>;
+  cancelJobAsync(req: JobRequest): Promise<Result<void>>;
   restoreProjectsAsync(req: RestoreProjectsRequest, signal?: AbortSignal): Promise<Result<void>>;
   updateBadgeAsync(req: UpdateBadgeRequest): Promise<Result<void>>;
   getInconsistentPackagesAsync(req: GetInconsistentPackagesRequest, signal?: AbortSignal): Promise<Result<GetInconsistentPackagesResponse>>;

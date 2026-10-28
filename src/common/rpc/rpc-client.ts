@@ -51,10 +51,16 @@ export function createRpcClient(
       signal?.addEventListener("abort", cancel, { once: true });
 
       const timer = setTimeout(() => {
+        // A client deadline is not a cancellation. Cancelling here would abort
+        // host work that is merely slow (restore on a large repo), and the
+        // transactional paths treat an abort as a failure and roll back files
+        // that were already written successfully. Drop the pending call so the
+        // late response is ignored, but let the host finish the operation.
         pending.delete(id);
         cleanup?.();
-        postMessage({ type: "rpc-cancel", id } satisfies RpcCancel);
-        resolve(fail(`RPC timeout after ${timeoutMs}ms for method: ${method}`));
+        resolve(fail(
+          `RPC timeout after ${timeoutMs}ms for method: ${method} (the operation is still running in the extension host)`
+        ));
       }, timeoutMs);
 
       pending.set(id, { resolve, timer, cleanup });

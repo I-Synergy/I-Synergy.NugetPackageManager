@@ -1,8 +1,8 @@
 # TheNugetPackageManager — Session Context
 
-**Last Updated:** 2026-10-26
-**Project Version:** 1.2.14
-**Branch:** bugfixes/main
+**Last Updated:** 2026-10-28
+**Project Version:** 2.2.0
+**Branch:** feat/update-jobs-and-cancel
 **Written By:** Reasonix Code
 **Next Session May Use:** Any
 
@@ -18,6 +18,39 @@
 ---
 
 ## Recent Work (this session and last)
+
+### Completed: batch preflight, single restore, attributed retry, live progress + cancel (2026-10-28)
+- Plan: `.ai/plans/batch-preflight-retry-progress.md`; progress: `.ai/completed/batch-preflight-retry-progress.md`
+- `checkBatchUpdateAsync` → `findBatchUpdateConflictsAsync` checks the whole selection before a write: the target version's own dependency ranges against the effective graph (installed versions + selected overrides) and the ranges installed packages declare on the selected packages (skipping blockers that are in the batch). Needs `obj/project.assets.json`; otherwise restore stays the authority.
+- `updates-view` runs the preflight before a multi-row update, shows the conflicts in a confirmation dialog and skips those rows when the user proceeds.
+- Non-CPM `dotnet add` calls inside a transactional batch now pass `--no-restore`; exactly one `dotnet restore` covers the batch.
+- A failed restore is attributed back to batch rows (`attributeRestoreConflicts` → `BatchUpdateResponse.ConflictingPackages`); the tab offers "Retry without …" once.
+- `TaskExecutor.ExecuteCommandAsync` accepts an `onProgress` callback; `restoreProjectsInternalAsync` forwards per-project `dotnet` stages, which the batch maps into its 80–95 % band.
+- `BatchUpdateResponse.Cancelled` + `onStarted(jobId)` in `src/web/jobs.ts` back a **Cancel** button in the Updates progress banner (`cancelJobAsync`), which rolls back.
+- Cancel is wired into every job-triggering UI: `project-row` (busy row), `consolidate-view` (per-card), `cleanup-view`, and `packages-view` "remove from all projects" (stops the per-project loop). Each runner reports cancellation with a message saying what was rolled back or left applied.
+- Tests: **434 passing**; `npm run esbuild`, `npm run lint`, `npm run test-compile` clean.
+- Version bumped 2.1.0 → **2.2.0** (package.json/package-lock, CHANGELOG, RELEASE_NOTES);
+  committed on `feat/update-jobs-and-cancel` with a PR to `main`.
+
+### Completed: every long mutation is a host job (2026-10-28)
+- Plan: `.ai/plans/mutation-jobs-project-consolidate-cleanup.md`; progress: `.ai/completed/mutation-jobs-project-consolidate-cleanup.md`
+- Builds on the detach fix: `updateProjectAsync`, `consolidatePackagesAsync` and `cleanupUnusedPackagesAsync` no longer hold a request open for the length of a repo-wide write/restore, so a slow run neither times out nor loses its result.
+- `src/host/utilities/operation-jobs.ts` replaces `batch-update-jobs.ts`: a generic `JobRegistry<T>` (bounded retention, running jobs never pruned, explicit cancel wins over the abort failure) plus `OperationJobs` for `batchUpdate`, `projectUpdate`, `consolidate` and `cleanup`.
+- RPC surface is now `startBatchUpdateAsync` / `startProjectUpdateAsync` / `startConsolidateAsync` / `startCleanupAsync` → `{ JobId }`, `getJobAsync` → a `GetJobResponse` union discriminated by `Kind`, and `cancelJobAsync`. The legacy single-call RPCs remain and delegate to the same implementations.
+- Host implementations moved to `runBatchUpdateAsync`, `runProjectUpdateAsync`, `runConsolidateAsync`, `runCleanupAsync` with stage/percent reporting.
+- `src/web/jobs.ts` adds `waitForJobAsync` (poll 250 ms, optional `AbortSignal`, no stray timers) and typed runners; `updates-view`, `project-row`, `packages-view`, `consolidate-view` and `cleanup-view` use them.
+- Tests: **421 passing**; `npm run esbuild`, `npm run lint`, `npm run test-compile` clean.
+- Not converted: `restoreProjectsAsync` (never writes versions; only its result can be lost) and `getOutdatedPackagesAsync` (already uses `ScanProgress` + `ScanId`).
+
+### Completed: RPC deadline detach + job-based batch updates (2026-10-28)
+- Plan: `.ai/plans/rpc-timeout-detach-and-batch-jobs.md`; progress: `.ai/completed/rpc-timeout-detach-and-batch-jobs.md`
+- Root cause of the "slow update reverted my packages" reports: `RPC_TIMEOUT_MS` (120 s) was a client deadline on calls whose runtime scales with the repo, and the timeout handler posted `rpc-cancel`. The host aborted the request signal, and `batchUpdatePackagesAsync` / `updateProjectAsync` treated that abort as a failure and ran `rollbackFilesAsync` over files they had just written.
+- `rpc-client.ts`: the deadline now drops the pending call and fails with "still running in the extension host" — it never sends `rpc-cancel`. Explicit cancellation via `AbortSignal` still cancels. Slow work is no longer reverted for any method, including single-package `updateProjectAsync`.
+- New job registry (same bounded/prunable idiom as `ScanProgress`) + RPCs `startBatchUpdateAsync`, `getBatchUpdateJobAsync`, `cancelBatchUpdateAsync`. The job runs detached from the request signal, streams stage/percent, and only one job may run at a time. **Superseded by the entry above**: the registry is now `operation-jobs.ts` and the batch-specific get/cancel were replaced by `getJobAsync` / `cancelJobAsync`.
+- `updates-view` starts a job and polls it (immediate + 250 ms) with a determinate progress bar; polling stops on completion, error, cancel and disconnect.
+- A cancel now rolls back the versions already written (`transactionFailed = transactional` when the signal aborted).
+- Tests: **410 passing**; `npm run esbuild`, `npm run lint`, `npm run test-compile` clean.
+- Follow-up: convert `updateProjectAsync`, `consolidatePackagesAsync` and `cleanupUnusedPackagesAsync` to the same job registry — they currently inherit only the detach fix, so a client that timed out loses the final outcome until it refreshes.
 
 ### Completed: Prerelease-aware update badge + live scan progress (2026-10-26)
 - Plan: `.ai/plans/prerelease-badge-and-scan-progress.md`; progress: `.ai/completed/prerelease-badge-and-scan-progress.md`

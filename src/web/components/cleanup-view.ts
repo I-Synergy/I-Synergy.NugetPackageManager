@@ -4,6 +4,7 @@ import codicon from "@/web/styles/codicon.css";
 import { scrollableBase } from "@/web/styles/base.css";
 import { sharedStyles } from "@/web/styles/shared.css";
 import { hostApi } from "@/web/registrations";
+import { runCleanupJobAsync } from "@/web/jobs";
 import type { CleanupReport } from "@/common/rpc/types";
 
 @customElement("cleanup-view")
@@ -101,6 +102,7 @@ export class CleanupView extends LitElement {
   @state() private isRemoving = false;
   @state() private statusText = "";
   @state() private errorMessage = "";
+  private _jobId = "";
 
   async LoadCleanupReportAsync(): Promise<void> {
     this.isLoading = true;
@@ -124,6 +126,16 @@ export class CleanupView extends LitElement {
     }
   }
 
+  private async cancelCleanupAsync(): Promise<void> {
+    if (!this._jobId) return;
+    this.statusText = "Cancelling cleanup…";
+    const result = await hostApi.cancelJobAsync({ JobId: this._jobId });
+    if (!result.ok) {
+      this.errorMessage = `Failed to cancel: ${result.error}`;
+    }
+    this.requestUpdate();
+  }
+
   private async RemoveUnusedAsync(): Promise<void> {
     if (!this.report || this.report.Unused.length === 0 || this.isRemoving) return;
     const confirm = await hostApi.showConfirmationAsync({
@@ -139,9 +151,18 @@ export class CleanupView extends LitElement {
     this.statusText = "";
     this.requestUpdate();
     try {
-      const result = await hostApi.cleanupUnusedPackagesAsync({});
+      const result = await runCleanupJobAsync({}, {
+        onStarted: (jobId) => {
+          this._jobId = jobId;
+          this.requestUpdate();
+        },
+      });
       if (!result.ok) {
-        this.errorMessage = result.error;
+        if (/cancelled/i.test(result.error)) {
+          this.statusText = result.error;
+        } else {
+          this.errorMessage = result.error;
+        }
         return;
       }
       const { Removed, Errors, Backups } = result.value;
@@ -154,6 +175,7 @@ export class CleanupView extends LitElement {
       await this.LoadCleanupReportAsync();
       this.dispatchEvent(new CustomEvent("cleanup-completed", { bubbles: true, composed: true }));
     } finally {
+      this._jobId = "";
       this.isRemoving = false;
       this.requestUpdate();
     }
@@ -182,6 +204,13 @@ export class CleanupView extends LitElement {
             <button class="ghost-btn" ?disabled=${this.isLoading || this.isRemoving} @click=${async () => await this.LoadCleanupReportAsync()}>
               Refresh
             </button>
+            ${this.isRemoving
+              ? html`
+                  <button class="ghost-btn" ?disabled=${!this._jobId} @click=${async () => await this.cancelCleanupAsync()}>
+                    Cancel
+                  </button>
+                `
+              : nothing}
             <button class="primary-btn" ?disabled=${this.isLoading || this.isRemoving || unused.length === 0} @click=${async () => await this.RemoveUnusedAsync()}>
               Remove unused${unused.length > 0 ? ` (${unused.length})` : ""}
             </button>

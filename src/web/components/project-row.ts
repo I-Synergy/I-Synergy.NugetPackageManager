@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import codicon from "@/web/styles/codicon.css";
 import { sharedStyles } from "@/web/styles/shared.css";
 import { hostApi } from "../registrations";
+import { runProjectUpdateJobAsync } from "@/web/jobs";
 import { ProjectPackageViewModel, ProjectViewModel } from "../types";
 import type { UpdateProjectRequest } from "@/common/rpc/types";
 
@@ -61,6 +62,17 @@ export class ProjectRow extends LitElement {
     return this.project.Packages.find((x) => x.Id === this.packageId);
   }
 
+  private _jobId: string = "";
+
+  private async cancelJobAsync(): Promise<void> {
+    if (!this._jobId) return;
+    const result = await hostApi.cancelJobAsync({ JobId: this._jobId });
+    if (!result.ok) {
+      this.errorMessage = `Failed to cancel: ${result.error}`;
+      this.requestUpdate();
+    }
+  }
+
   private async updateAsync(type: "INSTALL" | "UNINSTALL" | "UPDATE"): Promise<void> {
     if (this.loaders.get(this.packageId) === true) return;
 
@@ -93,7 +105,12 @@ export class ProjectRow extends LitElement {
     this.requestUpdate();
 
     try {
-      const result = await hostApi.updateProjectAsync(request);
+      const result = await runProjectUpdateJobAsync(request, {
+        onStarted: (jobId) => {
+          this._jobId = jobId;
+          this.requestUpdate();
+        },
+      });
 
       if (result.ok) {
         this.project.Packages = result.value.Project.Packages.map(
@@ -112,6 +129,7 @@ export class ProjectRow extends LitElement {
     } catch (err) {
       this.errorMessage = err instanceof Error ? err.message : String(err);
     } finally {
+      this._jobId = "";
       this.loaders.delete(request.PackageId);
       this.requestUpdate();
     }
@@ -119,7 +137,18 @@ export class ProjectRow extends LitElement {
 
   private renderActions() {
     if (this.loaders.get(this.packageId) === true) {
-      return html`<span class="spinner medium" role="status" aria-label="Loading"></span>`;
+      return html`
+        <span class="spinner medium" role="status" aria-label="Loading"></span>
+        <button
+          class="icon-btn"
+          aria-label="Cancel"
+          title="Cancel and roll back this operation"
+          ?disabled=${!this._jobId}
+          @click=${async () => await this.cancelJobAsync()}
+        >
+          <span class="codicon codicon-close"></span>
+        </button>
+      `;
     }
 
     const pkg = this.projectPackage;

@@ -7,6 +7,14 @@ import { ok } from '@/common/rpc/result';
 import * as registrations from '@/web/registrations';
 import type { BatchUpdateRequest, GetOutdatedPackagesRequest, HostAPI } from '@/common/rpc/types';
 
+/** Waits for an async UI effect instead of assuming a fixed delay. */
+async function waitForAsync(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (!predicate() && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+}
+
 suite('UpdatesView', () => {
     let view: UpdatesView;
     let originalHostApi: HostAPI;
@@ -30,10 +38,25 @@ suite('UpdatesView', () => {
         captured = undefined;
         Object.defineProperty(registrations, 'hostApi', {
             value: {
-                batchUpdatePackagesAsync: async (request: BatchUpdateRequest) => {
+                startBatchUpdateAsync: async (request: BatchUpdateRequest) => {
                     captured = request;
-                    return ok({ Results: [{ PackageId: request.Updates[0]!.PackageId, Success: true }] });
+                    return ok({ JobId: 'job-1' });
                 },
+                getJobAsync: async () => ok({
+                    Kind: 'batchUpdate',
+                    State: 'completed',
+                    Stage: 'Completed',
+                    Percent: 100,
+                    Response: {
+                        Results: [{
+                            PackageId: captured?.Updates[0]?.PackageId ?? 'Pkg.Shared',
+                            Success: true,
+                        }],
+                    },
+                }),
+                checkBatchUpdateAsync: async () => ok({ Conflicts: [] }),
+                showConfirmationAsync: async () => ok({ Confirmed: true }),
+                cancelJobAsync: async () => ok(undefined),
                 restoreProjectsAsync: async () => ok(undefined),
                 updateBadgeAsync: async () => ok(undefined),
                 getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
@@ -50,6 +73,211 @@ suite('UpdatesView', () => {
             writable: true,
             configurable: true,
         });
+    });
+
+    test('drops conflicting rows after confirmation and updates the rest', async () => {
+        const requests: BatchUpdateRequest[] = [];
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                checkBatchUpdateAsync: async () => ok({
+                    Conflicts: [{
+                        PackageId: 'Pkg.Bad',
+                        RequestedVersion: '2.0.0',
+                        BlockedByPackageId: 'Pkg.Pin',
+                        BlockedByVersion: '1.0.0',
+                        RequiredRange: '[1.0.0]',
+                        EffectiveVersion: '1.0.0',
+                        ProjectPath: '/ws/A.csproj',
+                        Reason: 'Pkg.Pin 1.0.0 requires Pkg.Bad [1.0.0]',
+                    }],
+                }),
+                showConfirmationAsync: async () => ok({ Confirmed: true }),
+                startBatchUpdateAsync: async (request: BatchUpdateRequest) => {
+                    requests.push(request);
+                    return ok({ JobId: 'job-preflight' });
+                },
+                getJobAsync: async () => ok({
+                    Kind: 'batchUpdate',
+                    State: 'completed',
+                    Stage: 'Completed',
+                    Percent: 100,
+                    Response: { Results: [{ PackageId: 'Pkg.Shared', Success: true }] },
+                }),
+                updateBadgeAsync: async () => ok(undefined),
+                getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        const good = makePackage('', '');
+        const bad = makePackage('', '');
+        bad.Id = 'Pkg.Bad';
+        bad.LatestVersion = '2.0.0';
+        view.packages = [good, bad];
+
+        await (view as unknown as {
+            updatePackagesSequentiallyAsync(packages: OutdatedPackageViewModel[]): Promise<void>;
+        }).updatePackagesSequentiallyAsync([good, bad]);
+
+        assert.strictEqual(requests.length, 1);
+        assert.deepStrictEqual(requests[0]!.Updates.map((update) => update.PackageId), ['Pkg.Shared']);
+        assert.deepStrictEqual(view.packages.map((pkg) => pkg.Id), ['Pkg.Bad'], 'the skipped row stays visible');
+        assert.match(view.statusText, /1 package updated and restored/);
+    });
+
+    test('writes nothing when the user declines the conflicting rows', async () => {
+        let started = 0;
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                checkBatchUpdateAsync: async () => ok({
+                    Conflicts: [{
+                        PackageId: 'Pkg.Shared',
+                        RequestedVersion: '2.0.0',
+                        BlockedByPackageId: 'Pkg.Pin',
+                        BlockedByVersion: '1.0.0',
+                        RequiredRange: '[1.0.0]',
+                        EffectiveVersion: '1.0.0',
+                        ProjectPath: '/ws/A.csproj',
+                        Reason: 'Pkg.Pin 1.0.0 requires Pkg.Shared [1.0.0]',
+                    }],
+                }),
+                showConfirmationAsync: async () => ok({ Confirmed: false }),
+                startBatchUpdateAsync: async () => {
+                    started += 1;
+                    return ok({ JobId: 'job-declined' });
+                },
+                updateBadgeAsync: async () => ok(undefined),
+                getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        const pkg = makePackage('', '');
+        view.packages = [pkg];
+
+        await (view as unknown as {
+            updatePackagesSequentiallyAsync(packages: OutdatedPackageViewModel[]): Promise<void>;
+        }).updatePackagesSequentiallyAsync([pkg]);
+
+        assert.strictEqual(started, 0, 'a declined preflight must not write anything');
+        assert.match(view.statusText, /cancelled before writing/);
+        assert.strictEqual(view.packages.length, 1);
+    });
+
+    test('cancels the running job from the progress banner', async () => {
+        let running = true;
+        const cancelledJobs: string[] = [];
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                checkBatchUpdateAsync: async () => ok({ Conflicts: [] }),
+                startBatchUpdateAsync: async (request: BatchUpdateRequest) => {
+                    captured = request;
+                    return ok({ JobId: 'job-cancel-me' });
+                },
+                getJobAsync: async () => running
+                    ? ok({ Kind: 'batchUpdate', State: 'running', Stage: 'Restoring updated projects…', Percent: 80 })
+                    : ok({
+                        Kind: 'batchUpdate',
+                        State: 'cancelled',
+                        Stage: 'Cancelled',
+                        Percent: 80,
+                        Response: { Results: [], RolledBack: true, Cancelled: true },
+                    }),
+                cancelJobAsync: async ({ JobId }: { JobId: string }) => {
+                    cancelledJobs.push(JobId);
+                    running = false;
+                    return ok(undefined);
+                },
+                updateBadgeAsync: async () => ok(undefined),
+                getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        const pkg = makePackage('', '');
+        view.packages = [pkg];
+        const updating = (view as unknown as {
+            updatePackagesSequentiallyAsync(packages: OutdatedPackageViewModel[]): Promise<void>;
+        }).updatePackagesSequentiallyAsync([pkg]);
+
+        await waitForAsync(() => view.jobProgress?.Percent === 80);
+
+        const host = document.createElement('div');
+        render(view.render() as TemplateResult, host);
+        const cancelButton = Array.from(host.querySelectorAll('button'))
+            .find((button) => button.textContent?.trim() === 'Cancel');
+        assert.ok(cancelButton, 'the progress banner offers a cancel button');
+        cancelButton!.click();
+
+        await waitForAsync(() => cancelledJobs.length > 0, 2000);
+        assert.deepStrictEqual(cancelledJobs, ['job-cancel-me']);
+
+        await updating;
+        assert.match(view.statusText, /cancelled/i);
+        assert.strictEqual(view.packages.length, 1, 'a cancelled update keeps its rows');
+    });
+
+    test('offers to retry without the packages the failed restore names', async () => {
+        const requests: BatchUpdateRequest[] = [];
+        let confirmations = 0;
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                checkBatchUpdateAsync: async () => ok({ Conflicts: [] }),
+                showConfirmationAsync: async () => {
+                    confirmations += 1;
+                    return ok({ Confirmed: true });
+                },
+                startBatchUpdateAsync: async (request: BatchUpdateRequest) => {
+                    requests.push(request);
+                    return ok({ JobId: `job-retry-${requests.length}` });
+                },
+                getJobAsync: async ({ JobId }: { JobId: string }) => JobId === 'job-retry-1'
+                    ? ok({
+                        Kind: 'batchUpdate',
+                        State: 'completed',
+                        Stage: 'Completed',
+                        Percent: 100,
+                        Response: {
+                            Results: [{ PackageId: 'Pkg.Bad', Success: true }],
+                            RolledBack: true,
+                            RestoreError: 'NU1107 for Pkg.Bad',
+                            ConflictingPackages: ['Pkg.Bad'],
+                        },
+                    })
+                    : ok({
+                        Kind: 'batchUpdate',
+                        State: 'completed',
+                        Stage: 'Completed',
+                        Percent: 100,
+                        Response: { Results: [{ PackageId: 'Pkg.Shared', Success: true }] },
+                    }),
+                updateBadgeAsync: async () => ok(undefined),
+                getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        const good = makePackage('', '');
+        const bad = makePackage('', '');
+        bad.Id = 'Pkg.Bad';
+        view.packages = [good, bad];
+
+        await (view as unknown as {
+            updatePackagesSequentiallyAsync(packages: OutdatedPackageViewModel[]): Promise<void>;
+        }).updatePackagesSequentiallyAsync([good, bad]);
+
+        assert.strictEqual(confirmations, 1, 'the user is asked once before the retry');
+        assert.strictEqual(requests.length, 2);
+        assert.deepStrictEqual(
+            requests[1]!.Updates.map((update) => update.PackageId),
+            ['Pkg.Shared'],
+            'the retry excludes the package named by the restore failure'
+        );
+        assert.deepStrictEqual(view.packages.map((pkg) => pkg.Id), ['Pkg.Bad']);
     });
 
     test('sends the unconditional scope for a shared package row', async () => {
@@ -185,6 +413,80 @@ suite('UpdatesView', () => {
         assert.strictEqual(events, 1);
     });
 
+    test('renders live progress while the update job runs and clears it afterwards', async () => {
+        let running = true;
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                startBatchUpdateAsync: async (request: BatchUpdateRequest) => {
+                    captured = request;
+                    return ok({ JobId: 'job-42' });
+                },
+                getJobAsync: async () => running
+                    ? ok({ Kind: 'batchUpdate', State: 'running', Stage: 'Restoring updated projects…', Percent: 80 })
+                    : ok({
+                        Kind: 'batchUpdate',
+                        State: 'completed',
+                        Stage: 'Completed',
+                        Percent: 100,
+                        Response: { Results: [{ PackageId: 'Pkg.Shared', Success: true }] },
+                    }),
+                restoreProjectsAsync: async () => ok(undefined),
+                updateBadgeAsync: async () => ok(undefined),
+                getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        const pkg = makePackage('', '');
+        view.packages = [pkg];
+        const updating = (view as unknown as {
+            updateSingleAsync(p: OutdatedPackageViewModel, skip: boolean): Promise<boolean>;
+        }).updateSingleAsync(pkg, true);
+
+        await waitForAsync(() => view.jobProgress?.Percent === 80);
+        assert.deepStrictEqual(view.jobProgress, { Stage: 'Restoring updated projects…', Percent: 80 });
+
+        running = false;
+        assert.strictEqual(await updating, true);
+        assert.strictEqual(view.jobProgress, null);
+        assert.strictEqual(view.packages.length, 0);
+    });
+
+    test('surfaces a failed update job and keeps the row', async () => {
+        Object.defineProperty(registrations, 'hostApi', {
+            value: {
+                startBatchUpdateAsync: async (request: BatchUpdateRequest) => {
+                    captured = request;
+                    return ok({ JobId: 'job-failed' });
+                },
+                getJobAsync: async () => ok({
+                    Kind: 'batchUpdate',
+                    State: 'failed',
+                    Stage: 'Failed',
+                    Percent: 0,
+                    Error: 'dotnet restore failed',
+                }),
+                restoreProjectsAsync: async () => ok(undefined),
+                updateBadgeAsync: async () => ok(undefined),
+                getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        const pkg = makePackage('', '');
+        view.packages = [pkg];
+        const succeeded = await (view as unknown as {
+            updateSingleAsync(p: OutdatedPackageViewModel, skip: boolean): Promise<boolean>;
+        }).updateSingleAsync(pkg, true);
+
+        assert.strictEqual(succeeded, false);
+        assert.match(view.statusText, /Failed to update Pkg\.Shared: dotnet restore failed/);
+        assert.strictEqual(view.packages.length, 1);
+        assert.strictEqual(view.jobProgress, null);
+    });
+
     test('sends the group scope and condition for a framework row', async () => {
         const pkg = makePackage("$(TargetFramework.StartsWith('net10.0'))", 'net10.0');
         view.packages = [pkg];
@@ -282,7 +584,14 @@ suite('UpdatesView', () => {
                     requests.push(request.PreferCache === true);
                     return ok({ Packages: [], FromCache: request.PreferCache === true });
                 },
-                batchUpdatePackagesAsync: async () => ok({ Results: [] }),
+                startBatchUpdateAsync: async () => ok({ JobId: 'job-unused' }),
+                getJobAsync: async () => ok({
+                    Kind: 'batchUpdate',
+                    State: 'completed',
+                    Stage: 'Completed',
+                    Percent: 100,
+                    Response: { Results: [] },
+                }),
                 restoreProjectsAsync: async () => ok(undefined),
                 updateBadgeAsync: async () => ok(undefined),
                 getOutdatedScanProgressAsync: async () => ok({ Stage: "", Percent: 0, Completed: 0, Total: 0, Active: false }),
