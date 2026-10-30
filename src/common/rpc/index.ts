@@ -7,7 +7,6 @@ export type {
   SourceContext,
   PaginationParams,
   CacheControl,
-  GetProjectsRequest,
   GetProjectsResponse,
   GetPackagesRequest,
   GetPackagesResponse,

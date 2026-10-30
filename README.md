@@ -493,12 +493,21 @@ npm run package
 # → releases/nugetpackagemanager-x.x.x.vsix
 ```
 
+### Releasing
+
+Versions are automatic — do not bump `package.json` by hand. Every push to `main`
+runs `.github/workflows/release.yml`, which derives `YYYY.1MMdd.1HHmm` from the UTC
+build time (the same scheme as the AI repo), sets it for the build only, runs the
+quality gate, publishes the `.vsix`, and creates a tag (no `v` prefix) plus a GitHub
+Release with generated notes. `main` is never modified and no changelog or
+release-notes file is committed. See [`docs/publishing.md`](docs/publishing.md).
+
 ### Pull Request Guidelines
 
 1. Fork the repository and create a feature branch from `main`
 2. Make your changes — small, focused PRs are easier to review
 3. Add or update tests for changed behaviour
-4. Run `npm run lint` and `npm test` — both must pass
+4. Run `npm run quality` — it must pass
 5. Write a clear PR description explaining the **why**, not just the **what**
 6. Reference any related issues with `Closes #123`
 

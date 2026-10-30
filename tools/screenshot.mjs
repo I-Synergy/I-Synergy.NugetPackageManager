@@ -4,8 +4,8 @@
  * Requires the dev server to be running on http://localhost:3729
  */
 import { chromium } from 'playwright';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(__dirname, '..', 'docs', 'images');

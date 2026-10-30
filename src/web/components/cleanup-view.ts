@@ -166,8 +166,10 @@ export class CleanupView extends LitElement {
         return;
       }
       const { Removed, Errors, Backups } = result.value;
+      const packageWord = Removed.length === 1 ? "package" : "packages";
+      const backupWord = Backups.length === 1 ? "backup" : "backups";
       this.statusText = Removed.length > 0
-        ? `Removed ${Removed.length} unused package${Removed.length !== 1 ? "s" : ""}. ${Backups.length} backup${Backups.length !== 1 ? "s" : ""} created.`
+        ? `Removed ${Removed.length} unused ${packageWord}. ${Backups.length} ${backupWord} created.`
         : "No unused packages were removed.";
       if (Errors.length > 0) {
         this.errorMessage = Errors.join("\n");

@@ -1,7 +1,7 @@
 import type { HostAPI } from "@/common/rpc/types";
 
 export default class ConfigurationService extends EventTarget {
-  private hostApi: HostAPI;
+  private readonly hostApi: HostAPI;
   private configuration: Configuration | null = null;
 
   constructor(hostApi: HostAPI) {

@@ -1,5 +1,5 @@
-import fs from "fs";
-import * as path from "path";
+import fs from "node:fs";
+import * as path from "node:path";
 import { DOMParser } from "@xmldom/xmldom";
 import xpath from "xpath";
 import { Mutex } from "async-mutex";
@@ -145,100 +145,21 @@ export default class CpmResolver {
       const add = (resolution: CpmVersionResolution): void => {
         // One row per version line (condition). A condition that matches several
         // TFMs of the same project still represents a single version line.
-        const key = resolution.Condition;
-        if (seenKeys.has(key)) return;
-        seenKeys.add(key);
+        if (seenKeys.has(resolution.Condition)) return;
+        seenKeys.add(resolution.Condition);
         resolutions.push(resolution);
       };
 
       if (uniqueTfms.length === 0) {
-        const unconditionalVersion = this.findCaseInsensitive(cpmMap.unconditional, packageId);
-        if (unconditionalVersion !== undefined) {
-          add({
-            PackageId: packageId,
-            Tfm: "",
-            Version: unconditionalVersion,
-            Condition: "",
-            ConditionLabel: "",
-            Matched: true,
-          });
-        }
-        for (const entry of cpmMap.conditional) {
-          const version = this.findCaseInsensitive(entry.versions, packageId);
-          if (version !== undefined) {
-            add({
-              PackageId: packageId,
-              Tfm: entry.framework,
-              Version: version,
-              Condition: entry.condition,
-              ConditionLabel: entry.framework,
-              Matched: true,
-            });
-          }
-        }
+        this.addUnconditionalAndConditional(packageId, cpmMap, add);
       } else {
         for (const tfm of uniqueTfms) {
-          const applicable = cpmMap.conditional.filter(
-            (entry) => evaluateCondition(entry.condition, { TargetFramework: tfm }) === true
-          );
-
-          let winner: CpmFrameworkEntry | undefined;
-          for (const entry of applicable) {
-            if (this.findCaseInsensitive(entry.versions, packageId) !== undefined) {
-              if (!winner || entry.order > winner.order) {
-                winner = entry;
-              }
-            }
-          }
-
-          if (winner) {
-            add({
-              PackageId: packageId,
-              Tfm: tfm,
-              Version: this.findCaseInsensitive(winner.versions, packageId)!,
-              Condition: winner.condition,
-              ConditionLabel: winner.framework,
-              Matched: true,
-            });
-            continue;
-          }
-
-          const unconditionalVersion = this.findCaseInsensitive(cpmMap.unconditional, packageId);
-          if (unconditionalVersion !== undefined) {
-            // Unconditional versions are shared across TFMs: surface one row only.
-            add({
-              PackageId: packageId,
-              Tfm: "",
-              Version: unconditionalVersion,
-              Condition: "",
-              ConditionLabel: "",
-              Matched: true,
-            });
-          }
+          this.addForTfm(packageId, tfm, cpmMap, add);
         }
       }
 
       if (resolutions.length === 0 && uniqueTfms.length > 0) {
-        // No condition matched. Fall back only for conditions that could not be
-        // evaluated at all; a condition that evaluated to false simply means the
-        // package belongs to a different framework line and should not be shown.
-        const unknownEntries = cpmMap.conditional.filter(
-          (entry) =>
-            this.findCaseInsensitive(entry.versions, packageId) !== undefined &&
-            uniqueTfms.some(
-              (tfm) => evaluateCondition(entry.condition, { TargetFramework: tfm }) === null
-            )
-        );
-        for (const entry of unknownEntries) {
-          add({
-            PackageId: packageId,
-            Tfm: entry.framework,
-            Version: this.findCaseInsensitive(entry.versions, packageId)!,
-            Condition: entry.condition,
-            ConditionLabel: entry.framework,
-            Matched: false,
-          });
-        }
+        this.addUnknownEntries(packageId, cpmMap, uniqueTfms, add);
       }
 
       if (resolutions.length > 0) {
@@ -247,6 +168,101 @@ export default class CpmResolver {
     }
 
     return result;
+  }
+
+  private static addUnconditionalAndConditional(
+    packageId: string,
+    cpmMap: CpmPackageMap,
+    add: (resolution: CpmVersionResolution) => void
+  ): void {
+    const unconditionalVersion = this.findCaseInsensitive(cpmMap.unconditional, packageId);
+    if (unconditionalVersion !== undefined) {
+      add(this.unconditionalResolution(packageId, unconditionalVersion));
+    }
+    for (const entry of cpmMap.conditional) {
+      const version = this.findCaseInsensitive(entry.versions, packageId);
+      if (version !== undefined) {
+        add(this.conditionalResolution(packageId, entry.framework, version, entry, true));
+      }
+    }
+  }
+
+  private static addForTfm(
+    packageId: string,
+    tfm: string,
+    cpmMap: CpmPackageMap,
+    add: (resolution: CpmVersionResolution) => void
+  ): void {
+    const applicable = cpmMap.conditional.filter(
+      (entry) => evaluateCondition(entry.condition, { TargetFramework: tfm }) === true
+    );
+
+    let winner: CpmFrameworkEntry | undefined;
+    for (const entry of applicable) {
+      if (this.findCaseInsensitive(entry.versions, packageId) !== undefined) {
+        if (!winner || entry.order > winner.order) winner = entry;
+      }
+    }
+
+    if (winner) {
+      add(this.conditionalResolution(packageId, tfm, this.findCaseInsensitive(winner.versions, packageId)!, winner, true));
+      return;
+    }
+
+    const unconditionalVersion = this.findCaseInsensitive(cpmMap.unconditional, packageId);
+    if (unconditionalVersion !== undefined) {
+      // Unconditional versions are shared across TFMs: surface one row only.
+      add(this.unconditionalResolution(packageId, unconditionalVersion));
+    }
+  }
+
+  private static addUnknownEntries(
+    packageId: string,
+    cpmMap: CpmPackageMap,
+    uniqueTfms: string[],
+    add: (resolution: CpmVersionResolution) => void
+  ): void {
+    // No condition matched. Fall back only for conditions that could not be
+    // evaluated at all; a condition that evaluated to false simply means the
+    // package belongs to a different framework line and should not be shown.
+    const unknownEntries = cpmMap.conditional.filter(
+      (entry) =>
+        this.findCaseInsensitive(entry.versions, packageId) !== undefined &&
+        uniqueTfms.some(
+          (tfm) => evaluateCondition(entry.condition, { TargetFramework: tfm }) === null
+        )
+    );
+    for (const entry of unknownEntries) {
+      add(this.conditionalResolution(packageId, entry.framework, this.findCaseInsensitive(entry.versions, packageId)!, entry, false));
+    }
+  }
+
+  private static unconditionalResolution(packageId: string, version: string): CpmVersionResolution {
+    return {
+      PackageId: packageId,
+      Tfm: "",
+      Version: version,
+      Condition: "",
+      ConditionLabel: "",
+      Matched: true,
+    };
+  }
+
+  private static conditionalResolution(
+    packageId: string,
+    tfm: string,
+    version: string,
+    entry: CpmFrameworkEntry,
+    matched: boolean
+  ): CpmVersionResolution {
+    return {
+      PackageId: packageId,
+      Tfm: tfm,
+      Version: version,
+      Condition: entry.condition,
+      ConditionLabel: entry.framework,
+      Matched: matched,
+    };
   }
 
   static HasPackage(cpmMap: CpmPackageMap, packageId: string): boolean {
@@ -328,9 +344,9 @@ export default class CpmResolver {
     try {
       const beforeStat = await fs.promises.stat(propsFilePath);
       const content = await fs.promises.readFile(propsFilePath, "utf8");
-      const escaped = packageId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const escaped = packageId.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
       const elementPattern = new RegExp(
-        `[ \\t]*<PackageVersion\\b[^>]*\\bInclude\\s*=\\s*("${escaped}"|'${escaped}')[^>]*(?:\\/>|>\\s*<\\/PackageVersion>)[ \\t]*(?:\\r?\\n)?`,
+        String.raw`[ \t]*<PackageVersion\b[^>]*\bInclude\s*=\s*("${escaped}"|'${escaped}')[^>]*(?:\/>|>\s*<\/PackageVersion>)[ \t]*(?:\r?\n)?`,
         "gi"
       );
 
@@ -343,7 +359,7 @@ export default class CpmResolver {
       if (removed === 0) return false;
 
       const remainingPattern = new RegExp(
-        `<PackageVersion\\b[^>]*\\bInclude\\s*=\\s*("${escaped}"|'${escaped}')`,
+        String.raw`<PackageVersion\b[^>]*\bInclude\s*=\s*("${escaped}"|'${escaped}')`,
         "i"
       );
       if (remainingPattern.test(updated)) {
@@ -504,7 +520,7 @@ export default class CpmResolver {
     while ((match = PACKAGE_VERSION_TAG_RE.exec(body)) !== null) {
       const tag = match[0];
       const include = this.getAttribute(tag, "Include");
-      if (!include || include.toLowerCase() !== packageId.toLowerCase() || !predicate(tag)) {
+      if (include?.toLowerCase() !== packageId.toLowerCase() || !predicate(tag)) {
         continue;
       }
 
@@ -543,7 +559,7 @@ export default class CpmResolver {
       if (changed && !global) return tag;
 
       const include = this.getAttribute(tag, "Include");
-      if (!include || include.toLowerCase() !== packageId.toLowerCase()) {
+      if (include?.toLowerCase() !== packageId.toLowerCase()) {
         return tag;
       }
 
@@ -577,61 +593,114 @@ export default class CpmResolver {
     }
 
     for (const packageChanges of byPackage.values()) {
-      const packageId = packageChanges[0]!.packageId;
-      const before = this.collectOccurrences(originalContent, packageId);
-      const after = this.collectOccurrences(updatedContent, packageId);
+      this.verifyPackageChanges(originalContent, updatedContent, propsFilePath, packageChanges);
+    }
+  }
 
-      if (before.length === 0) {
-        throw new Error(`Verification failed: ${packageId} missing from ${propsFilePath}`);
-      }
-      if (before.length !== after.length) {
+  private static verifyPackageChanges(
+    originalContent: string,
+    updatedContent: string,
+    propsFilePath: string,
+    packageChanges: CpmVersionChange[]
+  ): void {
+    const packageId = packageChanges[0]!.packageId;
+    const before = this.collectOccurrences(originalContent, packageId);
+    const after = this.collectOccurrences(updatedContent, packageId);
+    this.assertOccurrenceCounts(before, after, packageId, propsFilePath);
+
+    const expected = before.map((entry) => entry.version);
+    for (const change of packageChanges) {
+      this.applyExpectedChange(expected, before, change, packageId, propsFilePath);
+    }
+    this.assertExpectedVersions(after, expected, packageId, propsFilePath);
+  }
+
+  private static assertOccurrenceCounts(
+    before: Array<{ condition: string; version: string }>,
+    after: Array<{ condition: string; version: string }>,
+    packageId: string,
+    propsFilePath: string
+  ): void {
+    if (before.length === 0) {
+      throw new Error(`Verification failed: ${packageId} missing from ${propsFilePath}`);
+    }
+    if (before.length !== after.length) {
+      throw new Error(
+        `Verification failed: element count for ${packageId} changed in ${propsFilePath}`
+      );
+    }
+  }
+
+  private static applyExpectedChange(
+    expected: string[],
+    before: Array<{ condition: string; version: string }>,
+    change: CpmVersionChange,
+    packageId: string,
+    propsFilePath: string
+  ): void {
+    const scope = change.scope ?? (change.condition !== undefined ? "group" : "first");
+    if (scope === "group") {
+      this.applyGroupChange(expected, before, change, packageId, propsFilePath);
+    } else if (scope === "unconditional") {
+      this.applyUnconditionalChange(expected, before, change, packageId, propsFilePath);
+    } else if (scope === "all") {
+      for (let index = 0; index < expected.length; index++) expected[index] = change.version;
+    } else {
+      // "first": replaceInElements changes exactly the first matching element.
+      expected[0] = change.version;
+    }
+  }
+
+  private static applyGroupChange(
+    expected: string[],
+    before: Array<{ condition: string; version: string }>,
+    change: CpmVersionChange,
+    packageId: string,
+    propsFilePath: string
+  ): void {
+    if (change.condition === undefined) {
+      throw new Error(
+        `Verification failed for ${packageId}: a condition is required for a group-scoped update in ${propsFilePath}`
+      );
+    }
+    const index = before.findIndex((entry) => entry.condition === change.condition);
+    if (index < 0) {
+      throw new Error(
+        `Verification failed for ${packageId}: Condition="${change.condition}" produced no occurrences in ${propsFilePath}`
+      );
+    }
+    expected[index] = change.version;
+  }
+
+  private static applyUnconditionalChange(
+    expected: string[],
+    before: Array<{ condition: string; version: string }>,
+    change: CpmVersionChange,
+    packageId: string,
+    propsFilePath: string
+  ): void {
+    const indices = before
+      .map((entry, index) => (entry.condition === "" ? index : -1))
+      .filter((index) => index >= 0);
+    if (indices.length === 0) {
+      throw new Error(
+        `Verification failed for ${packageId}: no unconditional occurrence in ${propsFilePath}`
+      );
+    }
+    for (const index of indices) expected[index] = change.version;
+  }
+
+  private static assertExpectedVersions(
+    after: Array<{ condition: string; version: string }>,
+    expected: string[],
+    packageId: string,
+    propsFilePath: string
+  ): void {
+    for (let index = 0; index < after.length; index++) {
+      if (after[index]!.version !== expected[index]) {
         throw new Error(
-          `Verification failed: element count for ${packageId} changed in ${propsFilePath}`
+          `Verification failed for ${packageId}: occurrence ${index} expected ${expected[index]}, got ${after[index]!.version} in ${propsFilePath}`
         );
-      }
-
-      const expected = before.map((entry) => entry.version);
-
-      for (const change of packageChanges) {
-        const scope = change.scope ?? (change.condition !== undefined ? "group" : "first");
-
-        if (scope === "group") {
-          if (change.condition === undefined) {
-            throw new Error(
-              `Verification failed for ${packageId}: a condition is required for a group-scoped update in ${propsFilePath}`
-            );
-          }
-          const index = before.findIndex((entry) => entry.condition === change.condition);
-          if (index < 0) {
-            throw new Error(
-              `Verification failed for ${packageId}: Condition="${change.condition}" produced no occurrences in ${propsFilePath}`
-            );
-          }
-          expected[index] = change.version;
-        } else if (scope === "unconditional") {
-          const indices = before
-            .map((entry, index) => (entry.condition === "" ? index : -1))
-            .filter((index) => index >= 0);
-          if (indices.length === 0) {
-            throw new Error(
-              `Verification failed for ${packageId}: no unconditional occurrence in ${propsFilePath}`
-            );
-          }
-          for (const index of indices) expected[index] = change.version;
-        } else if (scope === "all") {
-          for (let index = 0; index < expected.length; index++) expected[index] = change.version;
-        } else {
-          // "first": replaceInElements changes exactly the first matching element.
-          expected[0] = change.version;
-        }
-      }
-
-      for (let index = 0; index < after.length; index++) {
-        if (after[index]!.version !== expected[index]) {
-          throw new Error(
-            `Verification failed for ${packageId}: occurrence ${index} expected ${expected[index]}, got ${after[index]!.version} in ${propsFilePath}`
-          );
-        }
       }
     }
   }
@@ -696,7 +765,7 @@ export default class CpmResolver {
   }
 
   private static getAttribute(tag: string, name: string): string | undefined {
-    const pattern = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, "i");
+    const pattern = new RegExp(String.raw`\b${name}\s*=\s*(?:"([^"]*)"|'([^']*)')`, "i");
     const match = pattern.exec(tag);
     return match?.[1] ?? match?.[2];
   }

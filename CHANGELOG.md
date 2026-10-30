@@ -3,9 +3,11 @@
 ## Unreleased
 
 - chore: add a quality gate mirroring the CI workflow — `npm run quality` builds, lints with ESLint + SonarJS, type-checks, runs the test suite and audits dependencies; `npm run quality:coverage` also writes `coverage/lcov.info` for SonarQube Cloud.
-- ci: add the `Quality Gate` workflow with a SonarCloud scan (`sonar-project.properties`, gate wait enabled when `SONAR_TOKEN` is set).
-- fix: clear the SonarJS correctness findings the new gate reported (dead store, unused collection/variable, redundant null comparison, duplicate character class, deprecated OpenTelemetry semantic-convention constants, writable static styles, message-origin check in the RPC client, locale-independent cache-key sorting).
-- docs: add CI, quality-gate, SonarCloud and Marketplace badges to `README.md`.
+- ci: add the `Quality Gate` workflow; SonarCloud analysis is handled by its GitHub integration (automatic analysis), configured by `.sonarcloud.properties`, so no scanner or `SONAR_TOKEN` is required.
+- fix: clear the SonarQube Cloud findings for product code — dead stores, unused collections/variables, redundant comparisons and type aliases, duplicate character classes, deprecated OpenTelemetry constants, writable static styles, message-origin verification in the RPC client, locale-independent cache keys, throwing non-`Error` values, and all cognitive-complexity hotspots (extracted helpers instead of suppressing).
+- ci: scope SonarCloud automatic analysis to product paths (`.ai/**` skill templates and `docs/**` mockups excluded) and harden the workflows (`npm ci --ignore-scripts`, no `npx`, pinned release action).
+- refactor: release versions are now automatic and follow the AI-repo scheme — each push to `main` derives `YYYY.1MMdd.1HHmm` from the UTC build time, publishes with that version, and tags it without a `v` prefix. The manual release script and `RELEASE_NOTES.md` were removed.
+- docs: add CI, quality-gate, SonarCloud and Marketplace badges to `README.md`, and document the automatic release flow.
 
 ## 2.2.0 (2026-10-28)
 

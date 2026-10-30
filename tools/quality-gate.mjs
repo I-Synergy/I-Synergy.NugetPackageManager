@@ -68,7 +68,7 @@ if (!skipBuild) {
 }
 
 steps.push(["Lint + SonarJS", "npm", ["run", "lint"]]);
-steps.push(["Type check", "npx", ["--no-install", "tsc", "--noEmit"]]);
+steps.push(["Type check", "npm", ["run", "typecheck"]]);
 
 if (!skipTests) {
   steps.push(["Compile tests", "npm", ["run", "test-compile"]]);

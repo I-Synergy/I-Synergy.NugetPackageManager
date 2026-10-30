@@ -521,57 +521,72 @@ export class UpdatesView extends LitElement {
         // write, restore and roll back if restore fails.
         SkipRestore: skipRestore,
         Transactional: true,
-        Updates: [
-          {
-            PackageId: pkg.Id,
-            Version: version,
-            ProjectPaths: pkg.Projects.map((p) => p.Path),
-            ...(pkg.CpmCondition ? { CpmCondition: pkg.CpmCondition } : {}),
-            ...(pkg.CpmFramework ? { CpmTfm: pkg.CpmFramework } : {}),
-            Scope: pkg.CpmCondition ? "group" : "unconditional",
-          },
-        ],
+        Updates: [this.toUpdateRequestFor(pkg, version)],
       });
       if (result.ok && result.value.Cancelled) {
         this.statusText = "Update cancelled — the versions already written were rolled back";
         return false;
       }
       const succeeded = result.ok && !result.value.RolledBack && result.value.Results.every((r) => r.Success);
-      if (succeeded) {
-        // Condition + TFM identify a framework-scoped row, so updating the
-        // net10.0 line does not also remove the net11.0 entry.
-        this.packages = this.packages.filter(
-          (p) => !(p.Id === pkg.Id && p.CpmCondition === pkg.CpmCondition && p.CpmFramework === pkg.CpmFramework)
-        );
-        this.dispatchEvent(new CustomEvent<number>("count-changed", {
-          detail: this.packages.length,
-          bubbles: true,
-          composed: true,
-        }));
-        this.statusText =
-          this.packages.length > 0
-            ? `${this.packages.length} update${this.packages.length !== 1 ? "s" : ""} available`
-            : "All packages are up to date";
-        await hostApi.updateBadgeAsync({
-          Count: this.packages.length,
-          BlockedCount: this.blockedPackages.length,
-        });
-        this.dispatchEvent(new CustomEvent("packages-updated", { bubbles: true, composed: true }));
-      } else {
-        const error = result.ok
-          ? (result.value.RestoreError ?? result.value.RollbackError ?? result.value.Results.find((r) => !r.Success)?.Error)
-          : result.error;
-        this.statusText = result.ok && result.value.RolledBack
-          ? `Update rolled back${error ? `: ${error}` : ""}`
-          : `Failed to update ${pkg.Id}${error ? `: ${error}` : ""}`;
+      if (!succeeded) {
+        this.setSingleFailureStatus(pkg, result);
         return false;
       }
-
+      await this.handleSingleSuccessAsync(pkg);
       return true;
     } finally {
       pkg.IsUpdating = false;
       this.requestUpdate();
     }
+  }
+
+  private toUpdateRequestFor(
+    pkg: OutdatedPackageViewModel,
+    version: string
+  ): BatchUpdateRequest["Updates"][number] {
+    return {
+      PackageId: pkg.Id,
+      Version: version,
+      ProjectPaths: pkg.Projects.map((p) => p.Path),
+      ...(pkg.CpmCondition ? { CpmCondition: pkg.CpmCondition } : {}),
+      ...(pkg.CpmFramework ? { CpmTfm: pkg.CpmFramework } : {}),
+      Scope: pkg.CpmCondition ? "group" : "unconditional",
+    };
+  }
+
+  private async handleSingleSuccessAsync(pkg: OutdatedPackageViewModel): Promise<void> {
+    // Condition + TFM identify a framework-scoped row, so updating the net10.0
+    // line does not also remove the net11.0 entry.
+    this.packages = this.packages.filter(
+      (p) => !(p.Id === pkg.Id && p.CpmCondition === pkg.CpmCondition && p.CpmFramework === pkg.CpmFramework)
+    );
+    this.dispatchEvent(new CustomEvent<number>("count-changed", {
+      detail: this.packages.length,
+      bubbles: true,
+      composed: true,
+    }));
+    const updateWord = this.packages.length === 1 ? "update" : "updates";
+    this.statusText = this.packages.length > 0
+      ? `${this.packages.length} ${updateWord} available`
+      : "All packages are up to date";
+    await hostApi.updateBadgeAsync({
+      Count: this.packages.length,
+      BlockedCount: this.blockedPackages.length,
+    });
+    this.dispatchEvent(new CustomEvent("packages-updated", { bubbles: true, composed: true }));
+  }
+
+  private setSingleFailureStatus(
+    pkg: OutdatedPackageViewModel,
+    result: Result<BatchUpdateResponse>
+  ): void {
+    const error = result.ok
+      ? (result.value.RestoreError ?? result.value.RollbackError ?? result.value.Results.find((r) => !r.Success)?.Error)
+      : result.error;
+    const errorSuffix = error ? `: ${error}` : "";
+    this.statusText = result.ok && result.value.RolledBack
+      ? `Update rolled back${errorSuffix}`
+      : `Failed to update ${pkg.Id}${errorSuffix}`;
   }
 
   private toUpdateRequest(pkg: OutdatedPackageViewModel): BatchUpdateRequest["Updates"][number] {
@@ -651,7 +666,8 @@ export class UpdatesView extends LitElement {
   ): Promise<void> {
     if (packages.length === 0) return;
 
-    this.statusText = `Updating ${packages.length} package${packages.length !== 1 ? "s" : ""} transactionally...`;
+    const packageWord = packages.length === 1 ? "package" : "packages";
+    this.statusText = `Updating ${packages.length} ${packageWord} transactionally...`;
     this.requestUpdate();
 
     const result = await this.updateAsJobAsync({
@@ -664,35 +680,47 @@ export class UpdatesView extends LitElement {
       this.statusText = `Update failed: ${result.error}`;
       return;
     }
-
     if (result.value.Cancelled) {
       this.statusText = "Update cancelled — the versions already written were rolled back";
       return;
     }
-
     if (result.value.RolledBack) {
-      const reason = result.value.RestoreError ?? result.value.RollbackError;
-      this.statusText = `Update rolled back${reason ? `: ${reason}` : ""}`;
-      await hostApi.updateBadgeAsync({
-        Count: this.packages.length,
-        BlockedCount: this.blockedPackages.length,
-      });
-
-      const culprits = result.value.ConflictingPackages ?? [];
-      const culpritIds = new Set(culprits.map((id) => id.toLowerCase()));
-      const retryable = packages.filter((pkg) => !culpritIds.has(pkg.Id.toLowerCase()));
-      if (allowRetry && culprits.length > 0 && retryable.length > 0) {
-        const confirm = await hostApi.showConfirmationAsync({
-          Message: `Retry without ${culprits.length} package${culprits.length !== 1 ? "s" : ""} the failed restore points at?`,
-          Detail: `${culprits.join(", ")}\n\n${reason ?? ""}`,
-        });
-        if (confirm.ok && confirm.value.Confirmed) {
-          await this.runSelectedUpdatesAsync(retryable, false);
-        }
-      }
+      await this.handleSelectedRollbackAsync(packages, allowRetry, result.value);
       return;
     }
 
+    await this.handleSelectedSuccessAsync(packages);
+  }
+
+  private async handleSelectedRollbackAsync(
+    packages: OutdatedPackageViewModel[],
+    allowRetry: boolean,
+    response: BatchUpdateResponse
+  ): Promise<void> {
+    const reason = response.RestoreError ?? response.RollbackError;
+    const reasonSuffix = reason ? `: ${reason}` : "";
+    this.statusText = `Update rolled back${reasonSuffix}`;
+    await hostApi.updateBadgeAsync({
+      Count: this.packages.length,
+      BlockedCount: this.blockedPackages.length,
+    });
+
+    const culprits = response.ConflictingPackages ?? [];
+    const culpritIds = new Set(culprits.map((id) => id.toLowerCase()));
+    const retryable = packages.filter((pkg) => !culpritIds.has(pkg.Id.toLowerCase()));
+    if (!allowRetry || culprits.length === 0 || retryable.length === 0) return;
+
+    const culpritWord = culprits.length === 1 ? "package" : "packages";
+    const confirm = await hostApi.showConfirmationAsync({
+      Message: `Retry without ${culprits.length} ${culpritWord} the failed restore points at?`,
+      Detail: `${culprits.join(", ")}\n\n${reason ?? ""}`,
+    });
+    if (confirm.ok && confirm.value.Confirmed) {
+      await this.runSelectedUpdatesAsync(retryable, false);
+    }
+  }
+
+  private async handleSelectedSuccessAsync(packages: OutdatedPackageViewModel[]): Promise<void> {
     // The transaction succeeded, so every selected row can be removed.
     this.packages = this.packages.filter((pkg) => !packages.includes(pkg));
     this.dispatchEvent(new CustomEvent<number>("count-changed", {
@@ -700,7 +728,8 @@ export class UpdatesView extends LitElement {
       bubbles: true,
       composed: true,
     }));
-    this.statusText = `${packages.length} package${packages.length !== 1 ? "s" : ""} updated and restored`;
+    const packageWord = packages.length === 1 ? "package" : "packages";
+    this.statusText = `${packages.length} ${packageWord} updated and restored`;
     await hostApi.updateBadgeAsync({
       Count: this.packages.length,
       BlockedCount: this.blockedPackages.length,
@@ -731,22 +760,53 @@ export class UpdatesView extends LitElement {
   }
 
   private renderPackageRow(pkg: OutdatedPackageViewModel): unknown {
+    const checkbox = pkg.IsUpdating
+      ? html`<span class="spinner medium row-checkbox" role="status" aria-label="Updating ${pkg.Id}"></span>`
+      : html`
+          <input
+            class="row-checkbox"
+            type="checkbox"
+            aria-label="Select ${pkg.Id} for update"
+            .checked=${pkg.Selected}
+            @change=${(e: Event) => {
+              pkg.Selected = (e.target as HTMLInputElement).checked;
+              this.requestUpdate();
+            }}
+          />
+        `;
+
+    const unmatchedBadge = pkg.CpmMatched
+      ? nothing
+      : html`<span class="codicon codicon-warning" title="This condition matches none of the project's target frameworks"></span>`;
+
+    const blockedBadge = pkg.BlockedBy.length > 0
+      ? html`<span
+          class="codicon codicon-lock"
+          title="Latest ${pkg.LatestOverallVersion} is blocked by ${pkg.blockedReason}. Suggested version stays at ${pkg.LatestVersion}."
+        ></span>`
+      : nothing;
+
+    const latestOverallTitle = pkg.BlockedBy.length > 0
+      ? `Update ${pkg.Id} to ${pkg.LatestOverallVersion}, overriding ${pkg.blockedReason}. Restore may fail.`
+      : `Update ${pkg.Id} to latest overall ${pkg.LatestOverallVersion}`;
+
+    const latestOverallButton = pkg.LatestOverallVersion
+      ? html`
+          <button
+            class="icon-btn"
+            aria-label="Update ${pkg.Id} to latest overall ${pkg.LatestOverallVersion}"
+            title=${latestOverallTitle}
+            ?disabled=${this.isUpdating || this.isRefreshing || pkg.IsUpdating}
+            @click=${async () => await this.updateSingleAsync(pkg, false, pkg.LatestOverallVersion)}
+          >
+            <span class="codicon codicon-arrow-up"></span>
+          </button>
+        `
+      : nothing;
+
     return html`
       <div class="outdated-row">
-        ${pkg.IsUpdating
-          ? html`<span class="spinner medium row-checkbox" role="status" aria-label="Updating ${pkg.Id}"></span>`
-          : html`
-              <input
-                class="row-checkbox"
-                type="checkbox"
-                aria-label="Select ${pkg.Id} for update"
-                .checked=${pkg.Selected}
-                @change=${(e: Event) => {
-                  pkg.Selected = (e.target as HTMLInputElement).checked;
-                  this.requestUpdate();
-                }}
-              />
-            `}
+        ${checkbox}
         <package-row
           .package=${this.toPackageViewModel(pkg)}
           .embedded=${true}
@@ -757,31 +817,10 @@ export class UpdatesView extends LitElement {
             composed: true,
           }))}
         ></package-row>
-        ${!pkg.CpmMatched
-          ? html`<span class="codicon codicon-warning" title="This condition matches none of the project's target frameworks"></span>`
-          : nothing}
-        ${pkg.BlockedBy.length > 0
-          ? html`<span
-              class="codicon codicon-lock"
-              title="Latest ${pkg.LatestOverallVersion} is blocked by ${pkg.blockedReason}. Suggested version stays at ${pkg.LatestVersion}."
-            ></span>`
-          : nothing}
+        ${unmatchedBadge}
+        ${blockedBadge}
         <div class="row-actions">
-          ${pkg.LatestOverallVersion
-            ? html`
-                <button
-                  class="icon-btn"
-                  aria-label="Update ${pkg.Id} to latest overall ${pkg.LatestOverallVersion}"
-                  title=${pkg.BlockedBy.length > 0
-                    ? `Update ${pkg.Id} to ${pkg.LatestOverallVersion}, overriding ${pkg.blockedReason}. Restore may fail.`
-                    : `Update ${pkg.Id} to latest overall ${pkg.LatestOverallVersion}`}
-                  ?disabled=${this.isUpdating || this.isRefreshing || pkg.IsUpdating}
-                  @click=${async () => await this.updateSingleAsync(pkg, false, pkg.LatestOverallVersion)}
-                >
-                  <span class="codicon codicon-arrow-up"></span>
-                </button>
-              `
-            : nothing}
+          ${latestOverallButton}
           <button class="icon-btn" aria-label="Update ${pkg.Id}" title="Update ${pkg.Id}" ?disabled=${this.isUpdating || this.isRefreshing || pkg.IsUpdating} @click=${async () => await this.updateSingleAsync(pkg)}>
             <span class="codicon codicon-arrow-circle-up"></span>
           </button>
@@ -790,17 +829,204 @@ export class UpdatesView extends LitElement {
     `;
   }
 
-  override render(): unknown {
-    const isLoading = this._loadTask.status === TaskStatus.PENDING;
-    const hasError = this._loadTask.status === TaskStatus.ERROR;
-    const progress = this.scanProgress;
-    const progressPercent = Math.max(0, Math.min(100, Math.round(progress?.Percent ?? 0)));
-    const visible = this.visiblePackages;
-    const totalSelectedCount = visible.filter((p) => p.Selected).length;
-    const allVisibleSelected = this.allVisibleSelected;
-    const updateBtnLabel = allVisibleSelected
+  private renderHeaderActions(): unknown {
+    if (this.visiblePackages.length === 0) return nothing;
+
+    const totalSelectedCount = this.visiblePackages.filter((p) => p.Selected).length;
+    const selectAllLabel = this.allVisibleSelected ? "Deselect all" : "Select all";
+    const updateBtnLabel = this.allVisibleSelected
       ? `Update all (${totalSelectedCount})`
       : `Update selected (${totalSelectedCount})`;
+    const multipleTfmButton = this.hasMultipleTfmsSelected
+      ? html`
+          <button
+            class="secondary-btn"
+            ?disabled=${this.isUpdating || this.isRefreshing}
+            title="Update every selected package for all of its target frameworks"
+            @click=${async () => await this.updateAllTfmsAsync()}
+          >
+            Update all TFMs
+          </button>
+        `
+      : nothing;
+
+    return html`
+      <button class="ghost-btn" title="${selectAllLabel}" @click=${() => this.toggleSelectAll()}>
+        ${selectAllLabel}
+      </button>
+      <button class="primary-btn" ?disabled=${this.isUpdating || this.isRefreshing || totalSelectedCount === 0} @click=${async () => await this.updateAllSelectedAsync()}>
+        ${updateBtnLabel}
+      </button>
+      ${multipleTfmButton}
+    `;
+  }
+
+  private renderStatusSuffix(): unknown {
+    return this.statusText ? html` · ${this.statusText}` : nothing;
+  }
+
+  private renderInfoBanner(): unknown {
+    if (this.visiblePackages.length === 0) return nothing;
+    return html`<div class="info-banner">
+      <span class="codicon codicon-info"></span>
+      <span>Framework-aligned packages stay on the target framework's major line. Use the separate latest-overall action only when you intend to cross it.</span>
+    </div>`;
+  }
+
+  private renderConflicts(): unknown {
+    if (this.blockedPackages.length === 0) return nothing;
+    return html`<section class="conflicts" aria-label="Dependency conflicts">
+      <div class="conflicts-header">
+        <span class="codicon codicon-lock"></span>
+        <span>Dependency conflicts (${this.blockedPackages.length})</span>
+      </div>
+      <ul class="conflicts-list">
+        ${this.blockedPackages.map((blocked) => html`
+          <li class="conflict-row">
+            <span class="conflict-title">
+              <span class="conflict-id">${blocked.Id}</span>
+              <span class="conflict-version">
+                ${blocked.InstalledVersion} → ${blocked.BlockedVersion} blocked
+              </span>
+            </span>
+            <span class="conflict-reason">
+              blocked by ${blocked.BlockedBy.map((constraint) =>
+                `${constraint.PackageId} ${constraint.InstalledVersion} requires ${constraint.Range}`
+              ).join("; ")}
+            </span>
+          </li>
+        `)}
+      </ul>
+    </section>`;
+  }
+
+  private renderJobProgress(): unknown {
+    if (!this.jobProgress) return nothing;
+    return html`
+      <div class="loading" role="status" aria-live="polite" aria-label="Updating packages">
+        <span class="spinner large"></span>
+        <div class="loading-body">
+          <span class="loading-stage">${this.jobProgress.Stage}</span>
+          <div
+            class="progress-track"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow=${this.jobProgress.Percent}
+          >
+            <div class="progress-fill" style="width: ${this.jobProgress.Percent}%"></div>
+          </div>
+        </div>
+        <button
+          class="secondary-btn"
+          title="Cancel this update and roll back the versions already written"
+          ?disabled=${!this._jobId}
+          @click=${async () => await this.cancelJobAsync()}
+        >Cancel</button>
+      </div>
+    `;
+  }
+
+  private renderLoading(): unknown {
+    if (this._loadTask.status !== TaskStatus.PENDING) return nothing;
+    const progress = this.scanProgress;
+    const progressPercent = Math.max(0, Math.min(100, Math.round(progress?.Percent ?? 0)));
+    const progressCount = progress && progress.Total > 0
+      ? html`<span class="loading-count">${progress.Completed} of ${progress.Total}</span>`
+      : nothing;
+    return html`
+      <div class="loading" role="status" aria-live="polite" aria-label="Loading">
+        <span class="spinner large"></span>
+        <div class="loading-body">
+          <span class="loading-stage">${progress?.Stage || "Checking for updates..."}</span>
+          ${progressCount}
+          <div
+            class="progress-track"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow=${progressPercent}
+          >
+            <div class="progress-fill" style="width: ${progressPercent}%"></div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  private renderEmpty(): unknown {
+    const show = this._loadTask.status !== TaskStatus.PENDING
+      && this._loadTask.status !== TaskStatus.ERROR
+      && this.packages.length === 0
+      && this.blockedPackages.length === 0;
+    if (!show) return nothing;
+    return html`
+      <div class="empty">
+        <span class="codicon codicon-check"></span>
+        All packages are up to date
+      </div>
+    `;
+  }
+
+  private renderNoMatch(): unknown {
+    const show = this._loadTask.status !== TaskStatus.PENDING
+      && this._loadTask.status !== TaskStatus.ERROR
+      && this.packages.length > 0
+      && this.visiblePackages.length === 0;
+    if (!show) return nothing;
+    return html`
+      <div class="empty">
+        <span class="codicon codicon-search"></span>
+        No matching updates
+      </div>
+    `;
+  }
+
+  private renderError(): unknown {
+    if (this._loadTask.status !== TaskStatus.ERROR) return nothing;
+    return html`
+      <div class="error" role="alert">
+        <span class="codicon codicon-error"></span>
+        Failed to check for updates
+      </div>
+    `;
+  }
+
+  private renderPackageList(): unknown {
+    const visible = this.visiblePackages;
+    const show = this._loadTask.status !== TaskStatus.PENDING && visible.length > 0;
+    if (!show) return nothing;
+    return html`
+      <div class="package-list" role="list" aria-label="Outdated packages">
+        ${this.groupedVisiblePackages.map(
+          (group) => html`
+            <label class="group-header">
+              <input
+                type="checkbox"
+                class="group-select"
+                aria-label="Select all ${group.label} updates"
+                .checked=${group.packages.length > 0 && group.packages.every((pkg) => pkg.Selected)}
+                .indeterminate=${group.packages.some((pkg) => pkg.Selected) && !group.packages.every((pkg) => pkg.Selected)}
+                @change=${(e: Event) =>
+                  this.toggleGroupSelection(
+                    group.packages,
+                    (e.target as HTMLInputElement).checked
+                  )}
+              />
+              <span>${group.label}</span>
+              <span class="group-count">${group.packages.length}</span>
+            </label>
+            ${group.packages.map((pkg) => this.renderPackageRow(pkg))}
+          `
+        )}
+      </div>
+    `;
+  }
+
+  override render(): unknown {
+    const visible = this.visiblePackages;
+    const isLoading = this._loadTask.status === TaskStatus.PENDING;
+    const updateWord = visible.length === 1 ? "update" : "updates";
 
     return html`
       <div class="updates-container" aria-busy=${isLoading}>
@@ -808,165 +1034,21 @@ export class UpdatesView extends LitElement {
           <div>
             <div class="list-title">Updates</div>
             <div class="list-subtitle">
-              ${visible.length} update${visible.length !== 1 ? "s" : ""} available
-              ${this.statusText ? html` · ${this.statusText}` : nothing}
+              ${visible.length} ${updateWord} available${this.renderStatusSuffix()}
             </div>
           </div>
           <div class="list-actions">
-            ${visible.length > 0
-              ? html`
-                  <button class="ghost-btn" title="${allVisibleSelected ? "Deselect all" : "Select all"}" @click=${() => this.toggleSelectAll()}>
-                    ${allVisibleSelected ? "Deselect all" : "Select all"}
-                  </button>
-                  <button class="primary-btn" ?disabled=${this.isUpdating || this.isRefreshing || totalSelectedCount === 0} @click=${async () => await this.updateAllSelectedAsync()}>
-                    ${updateBtnLabel}
-                  </button>
-                  ${this.hasMultipleTfmsSelected
-                    ? html`
-                        <button
-                          class="secondary-btn"
-                          ?disabled=${this.isUpdating || this.isRefreshing}
-                          title="Update every selected package for all of its target frameworks"
-                          @click=${async () => await this.updateAllTfmsAsync()}
-                        >
-                          Update all TFMs
-                        </button>
-                      `
-                    : nothing}
-                `
-              : nothing}
+            ${this.renderHeaderActions()}
           </div>
         </div>
-        ${visible.length > 0
-          ? html`<div class="info-banner">
-              <span class="codicon codicon-info"></span>
-              <span>Framework-aligned packages stay on the target framework's major line. Use the separate latest-overall action only when you intend to cross it.</span>
-            </div>`
-          : nothing}
-        ${this.blockedPackages.length > 0
-          ? html`<section class="conflicts" aria-label="Dependency conflicts">
-              <div class="conflicts-header">
-                <span class="codicon codicon-lock"></span>
-                <span>Dependency conflicts (${this.blockedPackages.length})</span>
-              </div>
-              <ul class="conflicts-list">
-                ${this.blockedPackages.map((blocked) => html`
-                  <li class="conflict-row">
-                    <span class="conflict-title">
-                      <span class="conflict-id">${blocked.Id}</span>
-                      <span class="conflict-version">
-                        ${blocked.InstalledVersion} → ${blocked.BlockedVersion} blocked
-                      </span>
-                    </span>
-                    <span class="conflict-reason">
-                      blocked by ${blocked.BlockedBy.map((constraint) =>
-                        `${constraint.PackageId} ${constraint.InstalledVersion} requires ${constraint.Range}`
-                      ).join("; ")}
-                    </span>
-                  </li>
-                `)}
-              </ul>
-            </section>`
-          : nothing}
-
-        ${this.jobProgress
-          ? html`
-              <div class="loading" role="status" aria-live="polite" aria-label="Updating packages">
-                <span class="spinner large"></span>
-                <div class="loading-body">
-                  <span class="loading-stage">${this.jobProgress.Stage}</span>
-                  <div
-                    class="progress-track"
-                    role="progressbar"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                    aria-valuenow=${this.jobProgress.Percent}
-                  >
-                    <div class="progress-fill" style="width: ${this.jobProgress.Percent}%"></div>
-                  </div>
-                </div>
-                <button
-                  class="secondary-btn"
-                  title="Cancel this update and roll back the versions already written"
-                  ?disabled=${!this._jobId}
-                  @click=${async () => await this.cancelJobAsync()}
-                >Cancel</button>
-              </div>
-            `
-          : nothing}
-        ${isLoading
-          ? html`
-              <div class="loading" role="status" aria-live="polite" aria-label="Loading">
-                <span class="spinner large"></span>
-                <div class="loading-body">
-                  <span class="loading-stage">${progress?.Stage || "Checking for updates..."}</span>
-                  ${progress && progress.Total > 0
-                    ? html`<span class="loading-count">${progress.Completed} of ${progress.Total}</span>`
-                    : nothing}
-                  <div
-                    class="progress-track"
-                    role="progressbar"
-                    aria-valuemin="0"
-                    aria-valuemax="100"
-                    aria-valuenow=${progressPercent}
-                  >
-                    <div class="progress-fill" style="width: ${progressPercent}%"></div>
-                  </div>
-                </div>
-              </div>
-            `
-          : nothing}
-        ${!isLoading && this.packages.length === 0 && this.blockedPackages.length === 0 && !hasError
-          ? html`
-              <div class="empty">
-                <span class="codicon codicon-check"></span>
-                All packages are up to date
-              </div>
-            `
-          : nothing}
-        ${!isLoading && !hasError && this.packages.length > 0 && visible.length === 0
-          ? html`
-              <div class="empty">
-                <span class="codicon codicon-search"></span>
-                No matching updates
-              </div>
-            `
-          : nothing}
-        ${hasError
-          ? html`
-              <div class="error" role="alert">
-                <span class="codicon codicon-error"></span>
-                Failed to check for updates
-              </div>
-            `
-          : nothing}
-        ${!isLoading && visible.length > 0
-          ? html`
-              <div class="package-list" role="list" aria-label="Outdated packages">
-                ${this.groupedVisiblePackages.map(
-                  (group) => html`
-                    <label class="group-header">
-                      <input
-                        type="checkbox"
-                        class="group-select"
-                        aria-label="Select all ${group.label} updates"
-                        .checked=${group.packages.length > 0 && group.packages.every((pkg) => pkg.Selected)}
-                        .indeterminate=${group.packages.some((pkg) => pkg.Selected) && !group.packages.every((pkg) => pkg.Selected)}
-                        @change=${(e: Event) =>
-                          this.toggleGroupSelection(
-                            group.packages,
-                            (e.target as HTMLInputElement).checked
-                          )}
-                      />
-                      <span>${group.label}</span>
-                      <span class="group-count">${group.packages.length}</span>
-                    </label>
-                    ${group.packages.map((pkg) => this.renderPackageRow(pkg))}
-                  `
-                )}
-              </div>
-            `
-          : nothing}
+        ${this.renderInfoBanner()}
+        ${this.renderConflicts()}
+        ${this.renderJobProgress()}
+        ${this.renderLoading()}
+        ${this.renderEmpty()}
+        ${this.renderNoMatch()}
+        ${this.renderError()}
+        ${this.renderPackageList()}
       </div>
     `;
   }

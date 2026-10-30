@@ -10,8 +10,7 @@ import codicon from "@/web/styles/codicon.css";
 import { scrollableBase } from "@/web/styles/base.css";
 import { sharedStyles } from "@/web/styles/shared.css";
 import { PackageViewModel, ProjectViewModel } from "../types";
-import type { FilterEvent } from "./search-bar";
-import type { SearchBar } from "./search-bar";
+import type { FilterEvent, SearchBar } from "./search-bar";
 import type { UpdatesView } from "./updates-view";
 import type { ConsolidateView } from "./consolidate-view";
 import type { VulnerabilitiesView } from "./vulnerabilities-view";
@@ -518,9 +517,10 @@ export class PackagesView extends LitElement {
     ) {
       return "";
     }
-    return (
-      this.selectedPackage.Model.Versions.filter((x) => x.Version == this.selectedVersion)[0]?.Id ?? ""
+    const matchingVersion = this.selectedPackage.Model.Versions.find(
+      (x) => x.Version === this.selectedVersion
     );
+    return matchingVersion?.Id ?? "";
   }
 
   private get effectiveProjectPaths(): string[] {
@@ -1097,9 +1097,7 @@ export class PackagesView extends LitElement {
                   ></package-row>
                 `
               )}
-              ${!this.noMorePackages
-                ? html`<span class="spinner medium loader"></span>`
-                : nothing}
+              ${this.renderLoader()}
             `}
       </div>
     `;
@@ -1239,9 +1237,7 @@ export class PackagesView extends LitElement {
     const pkg = this.selectedPackage;
     if (!pkg || this.removingPackage) return;
 
-    const targets = this.projects.filter((project) =>
-      project.Packages.some((projectPackage) => projectPackage.Id.toLowerCase() === pkg.Id.toLowerCase())
-    );
+    const targets = this.findProjectsUsing(pkg.Id);
     if (targets.length === 0) return;
 
     const confirm = await hostApi.showConfirmationAsync({
@@ -1256,47 +1252,68 @@ export class PackagesView extends LitElement {
     this.requestUpdate();
     const errors: string[] = [];
     try {
-      for (const project of targets) {
-        if (this._removeCancelled) break;
-        const result = await runProjectUpdateJobAsync({
-          Type: "UNINSTALL",
-          ProjectPath: project.Path,
-          PackageId: pkg.Id,
-        }, {
-          onStarted: (jobId) => {
-            this._removeJobId = jobId;
-          },
-        });
-        if (!result.ok) {
-          errors.push(`${project.Name}: ${result.error}`);
-          if (this._removeCancelled) break;
-        }
-      }
-
-      if (this._removeCancelled) {
-        await this.LoadProjectsAsync();
-        this.selectedPackage = null;
-        this.removeError = errors.length > 0
-          ? `Cancelled. ${errors.join("\n")}`
-          : "Cancelled before every project was updated";
+      const cancelled = await this.uninstallFromProjectsAsync(pkg.Id, targets, errors);
+      if (cancelled) {
+        await this.finishCancelledRemovalAsync(errors);
         return;
       }
-
-      const restore = await hostApi.restoreProjectsAsync({
-        ProjectPaths: targets.map((project) => project.Path),
-      });
-      if (!restore.ok) errors.push(`Restore: ${restore.error}`);
-
-      await this.LoadProjectsAsync();
-      this.selectedPackage = null;
-      if (errors.length > 0) {
-        this.removeError = `Removed from some projects, but not all:\n${errors.join("\n")}`;
-      }
+      await this.finishRemovalAsync(targets, errors);
     } finally {
       this._removeJobId = "";
       this._removeCancelled = false;
       this.removingPackage = false;
       this.requestUpdate();
+    }
+  }
+
+  private findProjectsUsing(packageId: string): typeof this.projects {
+    return this.projects.filter((project) =>
+      project.Packages.some((projectPackage) => projectPackage.Id.toLowerCase() === packageId.toLowerCase())
+    );
+  }
+
+  private async uninstallFromProjectsAsync(
+    packageId: string,
+    targets: typeof this.projects,
+    errors: string[]
+  ): Promise<boolean> {
+    for (const project of targets) {
+      if (this._removeCancelled) break;
+      const result = await runProjectUpdateJobAsync({
+        Type: "UNINSTALL",
+        ProjectPath: project.Path,
+        PackageId: packageId,
+      }, {
+        onStarted: (jobId) => {
+          this._removeJobId = jobId;
+        },
+      });
+      if (!result.ok) {
+        errors.push(`${project.Name}: ${result.error}`);
+        if (this._removeCancelled) break;
+      }
+    }
+    return this._removeCancelled;
+  }
+
+  private async finishCancelledRemovalAsync(errors: string[]): Promise<void> {
+    await this.LoadProjectsAsync();
+    this.selectedPackage = null;
+    this.removeError = errors.length > 0
+      ? `Cancelled. ${errors.join("\n")}`
+      : "Cancelled before every project was updated";
+  }
+
+  private async finishRemovalAsync(targets: typeof this.projects, errors: string[]): Promise<void> {
+    const restore = await hostApi.restoreProjectsAsync({
+      ProjectPaths: targets.map((project) => project.Path),
+    });
+    if (!restore.ok) errors.push(`Restore: ${restore.error}`);
+
+    await this.LoadProjectsAsync();
+    this.selectedPackage = null;
+    if (errors.length > 0) {
+      this.removeError = `Removed from some projects, but not all:\n${errors.join("\n")}`;
     }
   }
 
@@ -1450,186 +1467,27 @@ export class PackagesView extends LitElement {
     return this.renderMissingDetailsPackage();
   }
 
+  private renderLoader(): unknown {
+    return this.noMorePackages ? nothing : html`<span class="spinner medium loader"></span>`;
+  }
+
+  private renderProjectScopeSummary(): unknown {
+    if (this.projectsLoading) {
+      return html`<span class="scope-summary">Loading projects…</span>`;
+    }
+    if (this.projects.length === 0) return nothing;
+    return html`<span class="scope-summary" title="Selected projects / total projects">${this.selectedProjectPaths.length}/${this.projects.length} projects</span>`;
+  }
+
   override render(): unknown {
     return html`
       <div class="container">
-        ${this.showProjectTree
-          ? html`<div class="col" id="project-tree">
-              <project-tree
-                .projects=${this.projects}
-                .loading=${this.projectsLoading}
-                .loadingMessage=${this.projectsLoadingMessage}
-                @selection-changed=${async (e: CustomEvent<string[]>) =>
-                  await this.OnProjectSelectionChangedAsync(e.detail)}
-              ></project-tree>
-            </div>`
-          : nothing}
-
+        ${this.renderProjectTreeColumn()}
         <div class="col" id="packages">
-          <div class="tab-bar" role="tablist" @keydown=${async (e: KeyboardEvent) => await this.handleTabKeydownAsync(e)}>
-            <button
-              class="icon-btn tab-tree-toggle ${this.showProjectTree ? "active" : ""}"
-              title="${this.showProjectTree ? "Hide project tree" : "Show project tree"}"
-              aria-label="${this.showProjectTree ? "Hide project tree" : "Show project tree"}"
-              aria-pressed="${this.showProjectTree}"
-              @click=${async () => await this.toggleProjectTreeAsync()}
-            >
-              <span class="codicon codicon-list-tree"></span>
-            </button>
-            ${this.projectsLoading
-              ? html`<span class="scope-summary">Loading projects…</span>`
-              : this.projects.length > 0
-                ? html`<span class="scope-summary" title="Selected projects / total projects">${this.selectedProjectPaths.length}/${this.projects.length} projects</span>`
-                : nothing}
-            <button
-              class="tab ${this.activeTab === "browse" ? "active" : ""}"
-              role="tab"
-              aria-selected=${this.activeTab === "browse"}
-              tabindex=${this.activeTab === "browse" ? 0 : -1}
-              @click=${async () => await this.setTabAsync("browse")}
-            >
-              Browse
-            </button>
-            <button
-              class="tab ${this.activeTab === "installed" ? "active" : ""}"
-              role="tab"
-              aria-selected=${this.activeTab === "installed"}
-              tabindex=${this.activeTab === "installed" ? 0 : -1}
-              @click=${async () => await this.setTabAsync("installed")}
-            >
-              Installed${this.filteredInstalledPackages.length > 0
-                ? html`<span class="tab-badge">${this.filteredInstalledPackages.length}</span>`
-                : nothing}
-            </button>
-            <button
-              class="tab ${this.activeTab === "updates" ? "active" : ""}"
-              role="tab"
-              aria-selected=${this.activeTab === "updates"}
-              tabindex=${this.activeTab === "updates" ? 0 : -1}
-              @click=${async () => await this.setTabAsync("updates")}
-            >
-              Updates${this.updatesCount !== null || this.updatesCountLoading
-                ? html`<span class="tab-badge">${this.updatesCountLoading ? "…" : this.updatesCount}</span>`
-                : nothing}
-            </button>
-            <button
-              class="tab ${this.activeTab === "consolidate" ? "active" : ""}"
-              role="tab"
-              aria-selected=${this.activeTab === "consolidate"}
-              tabindex=${this.activeTab === "consolidate" ? 0 : -1}
-              @click=${async () => await this.setTabAsync("consolidate")}
-            >
-              Consolidate${this.consolidateCount !== null
-                ? html`<span class="tab-badge">${this.consolidateCount}</span>`
-                : nothing}
-            </button>
-            <button
-              class="tab tab-cleanup ${this.activeTab === "cleanup" ? "active" : ""}"
-              role="tab"
-              aria-selected=${this.activeTab === "cleanup"}
-              tabindex=${this.activeTab === "cleanup" ? 0 : -1}
-              @click=${async () => await this.setTabAsync("cleanup")}
-            >
-              Cleanup${this.cleanupCount !== null
-                ? html`<span class="tab-badge">${this.cleanupCount}</span>`
-                : nothing}
-            </button>
-            <button
-              class="tab ${this.activeTab === "vulnerabilities" ? "active" : ""}"
-              role="tab"
-              aria-selected=${this.activeTab === "vulnerabilities"}
-              tabindex=${this.activeTab === "vulnerabilities" ? 0 : -1}
-              @click=${async () => await this.setTabAsync("vulnerabilities")}
-            >
-              Vulnerabilities${this.vulnerabilitiesCount !== null
-                ? html`<span class="tab-badge">${this.vulnerabilitiesCount}</span>`
-                : nothing}
-            </button>
-          </div>
-          <search-bar
-            @reload-invoked=${async (e: CustomEvent<boolean>) =>
-              await this.ReloadInvokedAsync(e.detail)}
-            @filter-changed=${async (e: CustomEvent<FilterEvent>) =>
-              await this.UpdatePackagesFiltersAsync(e.detail)}
-          >${this.renderFrameworkSlot()}</search-bar>
-          ${this.vulnerabilitiesCount && this.vulnerabilitiesCount > 0
-            ? html`<button class="vulnerability-banner" @click=${async () => await this.setTabAsync("vulnerabilities")}>
-                <span class="codicon codicon-warning"></span>
-                <span>${this.vulnerabilitiesCount} vulnerable package${this.vulnerabilitiesCount !== 1 ? "s" : ""} found — review vulnerabilities</span>
-              </button>`
-            : nothing}
-          ${this.activeTab === "browse"
-            ? html`<div class="tab-content" role="tabpanel" aria-label="browse tab">
-                ${this.renderBrowseTab()}
-              </div>`
-            : nothing}
-          ${this.activeTab === "installed"
-            ? html`<div class="tab-content" role="tabpanel" aria-label="installed tab">
-                ${this.renderInstalledTab()}
-              </div>`
-            : nothing}
-          ${this.activeTab === "updates"
-            ? html`<div class="tab-content" role="tabpanel" aria-label="updates tab">
-                <updates-view
-                  .prerelease=${this.filters.Prerelease}
-                  .projectPaths=${this.effectiveProjectPaths}
-                  .sourceUrl=${this.filters.SourceUrl}
-                  .filterQuery=${this.filters.Query}
-                  .availableFrameworks=${this.installedFrameworkOptions}
-                  .selectedFramework=${this._updatesFramework}
-                  @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
-                  @badge-changed=${async (e: CustomEvent<{ Count: number; BlockedCount: number }>) =>
-                    await this.OnUpdatesBadgeChangedAsync(e)}
-                  @scan-finished=${() => { this.updatesCountLoading = false; }}
-                  @packages-updated=${async () => await this.onPackagesUpdatedAsync()}
-                  @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
-                  @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
-                    this._updatesFrameworkOptions = e.detail;
-                    this._updatesFramework = "";
-                  }}
-                  @framework-changed=${(e: CustomEvent<string>) => {
-                    this._updatesFramework = e.detail;
-                  }}
-                ></updates-view>
-              </div>`
-            : nothing}
-          ${this.activeTab === "consolidate"
-            ? html`<div class="tab-content" role="tabpanel" aria-label="consolidate tab">
-                <consolidate-view
-                  .projectPaths=${this.effectiveProjectPaths}
-                  .selectedFramework=${this._consolidateFramework}
-                  @count-changed=${(e: CustomEvent<number>) => { this.consolidateCount = e.detail; }}
-                  @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
-                  @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
-                    const previousFramework = this._consolidateFramework;
-                    this._consolidateFrameworkOptions = e.detail;
-                    const isStillValid = !!previousFramework && e.detail.some(option => option.value === previousFramework);
-                    this._consolidateFramework = isStillValid ? previousFramework : "";
-                  }}
-                ></consolidate-view>
-              </div>`
-            : nothing}
-          ${this.activeTab === "cleanup"
-            ? html`<div class="tab-content" role="tabpanel" aria-label="cleanup tab">
-                <cleanup-view
-                  @count-changed=${(e: CustomEvent<number>) => { this.cleanupCount = e.detail; }}
-                  @cleanup-completed=${async () => {
-                    await this.LoadProjectsAsync();
-                  }}
-                ></cleanup-view>
-              </div>`
-            : nothing}
-          ${this.activeTab === "vulnerabilities"
-            ? html`<div class="tab-content" role="tabpanel" aria-label="vulnerabilities tab">
-                <vulnerabilities-view
-                  .projectPaths=${this.effectiveProjectPaths}
-                  @count-changed=${(e: CustomEvent<number>) => { this.vulnerabilitiesCount = e.detail; }}
-                  @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
-                ></vulnerabilities-view>
-              </div>`
-            : nothing}
+          ${this.renderTabBar()}
+          ${this.renderSearchAndBanner()}
+          ${this.renderActiveTab()}
         </div>
-
         <div class="col" id="projects">
           ${this.renderSelectedPackagePanel()}
         </div>
@@ -1637,5 +1495,186 @@ export class PackagesView extends LitElement {
       <nuget-output-log></nuget-output-log>
       <nuget-license-dialog></nuget-license-dialog>
     `;
+  }
+
+  private renderProjectTreeColumn(): unknown {
+    if (!this.showProjectTree) return nothing;
+    return html`<div class="col" id="project-tree">
+      <project-tree
+        .projects=${this.projects}
+        .loading=${this.projectsLoading}
+        .loadingMessage=${this.projectsLoadingMessage}
+        @selection-changed=${async (e: CustomEvent<string[]>) =>
+          await this.OnProjectSelectionChangedAsync(e.detail)}
+      ></project-tree>
+    </div>`;
+  }
+
+  private renderTabBar(): unknown {
+    return html`
+      <div class="tab-bar" role="tablist" @keydown=${async (e: KeyboardEvent) => await this.handleTabKeydownAsync(e)}>
+        ${this.renderTreeToggleButton()}
+        ${this.renderProjectScopeSummary()}
+        ${this.renderTabButton("browse", "Browse")}
+        ${this.renderTabButton("installed", "Installed", this.renderCountBadge(this.filteredInstalledPackages.length, false))}
+        ${this.renderTabButton("updates", "Updates", this.renderUpdatesBadge())}
+        ${this.renderTabButton("consolidate", "Consolidate", this.renderCountBadge(this.consolidateCount))}
+        ${this.renderTabButton("cleanup", "Cleanup", this.renderCountBadge(this.cleanupCount), "tab-cleanup")}
+        ${this.renderTabButton("vulnerabilities", "Vulnerabilities", this.renderCountBadge(this.vulnerabilitiesCount))}
+      </div>
+    `;
+  }
+
+  private renderTreeToggleButton(): unknown {
+    return html`
+      <button
+        class="icon-btn tab-tree-toggle ${this.showProjectTree ? "active" : ""}"
+        title="${this.showProjectTree ? "Hide project tree" : "Show project tree"}"
+        aria-label="${this.showProjectTree ? "Hide project tree" : "Show project tree"}"
+        aria-pressed="${this.showProjectTree}"
+        @click=${async () => await this.toggleProjectTreeAsync()}
+      >
+        <span class="codicon codicon-list-tree"></span>
+      </button>
+    `;
+  }
+
+  private renderTabButton(
+    tab: TabId,
+    label: string,
+    badge: unknown = nothing,
+    extraClass = ""
+  ): unknown {
+    return html`
+      <button
+        class="tab ${extraClass} ${this.activeTab === tab ? "active" : ""}"
+        role="tab"
+        aria-selected=${this.activeTab === tab}
+        tabindex=${this.activeTab === tab ? 0 : -1}
+        @click=${async () => await this.setTabAsync(tab)}
+      >
+        ${label}${badge}
+      </button>
+    `;
+  }
+
+  private renderCountBadge(count: number | null, showZero = true): unknown {
+    if (count === null) return nothing;
+    if (!showZero && count <= 0) return nothing;
+    return html`<span class="tab-badge">${count}</span>`;
+  }
+
+  private renderUpdatesBadge(): unknown {
+    if (this.updatesCount === null && !this.updatesCountLoading) return nothing;
+    const text = this.updatesCountLoading ? "…" : this.updatesCount;
+    return html`<span class="tab-badge">${text}</span>`;
+  }
+
+  private renderSearchAndBanner(): unknown {
+    return html`
+      <search-bar
+        @reload-invoked=${async (e: CustomEvent<boolean>) =>
+          await this.ReloadInvokedAsync(e.detail)}
+        @filter-changed=${async (e: CustomEvent<FilterEvent>) =>
+          await this.UpdatePackagesFiltersAsync(e.detail)}
+      >${this.renderFrameworkSlot()}</search-bar>
+      ${this.renderVulnerabilityBanner()}
+    `;
+  }
+
+  private renderVulnerabilityBanner(): unknown {
+    if (!this.vulnerabilitiesCount || this.vulnerabilitiesCount <= 0) return nothing;
+    const vulnerabilityWord = this.vulnerabilitiesCount === 1 ? "" : "s";
+    return html`<button class="vulnerability-banner" @click=${async () => await this.setTabAsync("vulnerabilities")}>
+      <span class="codicon codicon-warning"></span>
+      <span>${this.vulnerabilitiesCount} vulnerable package${vulnerabilityWord} found — review vulnerabilities</span>
+    </button>`;
+  }
+
+  private renderActiveTab(): unknown {
+    switch (this.activeTab) {
+      case "browse":
+        return html`<div class="tab-content" role="tabpanel" aria-label="browse tab">
+          ${this.renderBrowseTab()}
+        </div>`;
+      case "installed":
+        return html`<div class="tab-content" role="tabpanel" aria-label="installed tab">
+          ${this.renderInstalledTab()}
+        </div>`;
+      case "updates":
+        return this.renderUpdatesTab();
+      case "consolidate":
+        return this.renderConsolidateTab();
+      case "cleanup":
+        return this.renderCleanupTab();
+      case "vulnerabilities":
+        return this.renderVulnerabilitiesTab();
+      default:
+        return nothing;
+    }
+  }
+
+  private renderUpdatesTab(): unknown {
+    return html`<div class="tab-content" role="tabpanel" aria-label="updates tab">
+      <updates-view
+        .prerelease=${this.filters.Prerelease}
+        .projectPaths=${this.effectiveProjectPaths}
+        .sourceUrl=${this.filters.SourceUrl}
+        .filterQuery=${this.filters.Query}
+        .availableFrameworks=${this.installedFrameworkOptions}
+        .selectedFramework=${this._updatesFramework}
+        @count-changed=${(e: CustomEvent<number>) => { this.updatesCount = e.detail; }}
+        @badge-changed=${async (e: CustomEvent<{ Count: number; BlockedCount: number }>) =>
+          await this.OnUpdatesBadgeChangedAsync(e)}
+        @scan-finished=${() => { this.updatesCountLoading = false; }}
+        @packages-updated=${async () => await this.onPackagesUpdatedAsync()}
+        @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
+        @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
+          this._updatesFrameworkOptions = e.detail;
+          this._updatesFramework = "";
+        }}
+        @framework-changed=${(e: CustomEvent<string>) => {
+          this._updatesFramework = e.detail;
+        }}
+      ></updates-view>
+    </div>`;
+  }
+
+  private renderConsolidateTab(): unknown {
+    return html`<div class="tab-content" role="tabpanel" aria-label="consolidate tab">
+      <consolidate-view
+        .projectPaths=${this.effectiveProjectPaths}
+        .selectedFramework=${this._consolidateFramework}
+        @count-changed=${(e: CustomEvent<number>) => { this.consolidateCount = e.detail; }}
+        @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
+        @framework-options-changed=${(e: CustomEvent<Array<{ value: string; label: string }>>) => {
+          const previousFramework = this._consolidateFramework;
+          this._consolidateFrameworkOptions = e.detail;
+          const isStillValid = !!previousFramework && e.detail.some(option => option.value === previousFramework);
+          this._consolidateFramework = isStillValid ? previousFramework : "";
+        }}
+      ></consolidate-view>
+    </div>`;
+  }
+
+  private renderCleanupTab(): unknown {
+    return html`<div class="tab-content" role="tabpanel" aria-label="cleanup tab">
+      <cleanup-view
+        @count-changed=${(e: CustomEvent<number>) => { this.cleanupCount = e.detail; }}
+        @cleanup-completed=${async () => {
+          await this.LoadProjectsAsync();
+        }}
+      ></cleanup-view>
+    </div>`;
+  }
+
+  private renderVulnerabilitiesTab(): unknown {
+    return html`<div class="tab-content" role="tabpanel" aria-label="vulnerabilities tab">
+      <vulnerabilities-view
+        .projectPaths=${this.effectiveProjectPaths}
+        @count-changed=${(e: CustomEvent<number>) => { this.vulnerabilitiesCount = e.detail; }}
+        @package-selected=${(e: CustomEvent) => void this.onChildPackageSelectedAsync(e)}
+      ></vulnerabilities-view>
+    </div>`;
   }
 }

@@ -225,6 +225,14 @@ npm run package          # produce .vsix in releases/
 Requirements: Node.js 19+ (for `globalThis.crypto.randomUUID()`), and `dotnet` on PATH for
 install/update/restore, vulnerability and target-framework evaluation.
 
+### Release versioning
+
+Versions are automatic and are never bumped by hand. A push to `main` runs
+`.github/workflows/release.yml`, which derives `YYYY.1MMdd.1HHmm` from the UTC build
+time (the same scheme as the AI repo), sets it for the build only, publishes the `.vsix`,
+and tags the commit with that build number (no `v` prefix). No changelog or
+release-notes file is committed and `main` is not modified.
+
 After every code change:
 
 1. run `npm run quality` (or at minimum `npm run esbuild` and `npm run lint`);

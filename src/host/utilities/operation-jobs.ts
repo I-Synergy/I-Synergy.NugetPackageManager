@@ -85,7 +85,7 @@ export class JobRegistry<T> {
 
   public Report(jobId: string, stage: string, percent: number): void {
     const entry = this.entries.get(jobId);
-    if (!entry || entry.State !== "running") return;
+    if (entry?.State !== "running") return;
     entry.Stage = stage;
     entry.Percent = clampPercent(percent);
     entry.UpdatedAt = Date.now();
@@ -106,7 +106,7 @@ export class JobRegistry<T> {
   /** True when an explicit cancel reached a job that was still running. */
   public Cancel(jobId: string): boolean {
     const entry = this.entries.get(jobId);
-    if (!entry || entry.State !== "running") return false;
+    if (entry?.State !== "running") return false;
     entry.cancelled = true;
     entry.Stage = "Cancelling…";
     entry.UpdatedAt = Date.now();

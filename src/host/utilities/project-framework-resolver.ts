@@ -1,18 +1,16 @@
-import fs from "fs";
-import * as path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
+import fs from "node:fs";
+import * as path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { DOMParser } from "@xmldom/xmldom";
 import xpath from "xpath";
 import { Logger } from "../../common/logger";
 
 const execFileAsync = promisify(execFile);
 
-/** Locale-independent comparator, so cached key parts are stable across machines. */
+/** Locale-fixed comparator, so cached key parts are stable across machines. */
 function compareStrings(a: string, b: string): number {
-  if (a < b) return -1;
-  if (a > b) return 1;
-  return 0;
+  return a.localeCompare(b, "en");
 }
 
 export type TargetFrameworkSource = "msbuild" | "xml" | "assets" | "override";

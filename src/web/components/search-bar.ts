@@ -100,7 +100,7 @@ export type FilterEvent = {
 export class SearchBar extends LitElement {
   static override readonly styles = [codicon, sharedStyles, styles];
 
-  private delayedPackagesLoader = debounce(() => this.emitFilterChangedEvent(), 500);
+  private readonly delayedPackagesLoader = debounce(() => this.emitFilterChangedEvent(), 500);
   @state() prerelease: boolean = false;
   @state() filterQuery: string = "";
   @state() selectedSourceUrl: string = "";

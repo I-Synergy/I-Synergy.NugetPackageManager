@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import CpmResolver from './cpm-resolver';
 import { evaluateCondition, getConditionLabel } from './cpm-condition';
 import { Logger } from '../../common/logger';
@@ -90,7 +90,7 @@ suite('CPM fixture variants', () => {
         const map = await CpmResolver.GetFrameworkPackageMapAsync(projectPath);
         assert.ok(map);
         assert.deepStrictEqual(
-            map!.conditional.map((entry) => entry.framework).sort(),
+            map!.conditional.map((entry) => entry.framework).sort((a, b) => a.localeCompare(b)),
             ['net8.0', 'net9.0']
         );
 
@@ -144,7 +144,7 @@ suite('CPM fixture variants', () => {
         assert.ok(map);
         assert.strictEqual(map!.unconditional.size, 2);
         assert.deepStrictEqual(
-            map!.conditional.map((entry) => entry.framework).sort(),
+            map!.conditional.map((entry) => entry.framework).sort((a, b) => a.localeCompare(b)),
             ['net11.0', 'not net11.0']
         );
 

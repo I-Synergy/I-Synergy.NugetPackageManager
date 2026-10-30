@@ -336,7 +336,7 @@ suite('UpdatesView', () => {
 
         view.selectedFramework = 'net11.0';
         const visible = (view as unknown as { visiblePackages: OutdatedPackageViewModel[] }).visiblePackages;
-        assert.deepStrictEqual(visible.map((pkg) => pkg.CpmFramework).sort(), ['net11.0']);
+        assert.deepStrictEqual(visible.map((pkg) => pkg.CpmFramework).sort((a, b) => a.localeCompare(b)), ['net11.0']);
 
         view.selectedFramework = '__shared__';
         const sharedOnly = (view as unknown as { visiblePackages: OutdatedPackageViewModel[] }).visiblePackages;

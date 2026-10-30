@@ -19,7 +19,15 @@
 
 ## Recent Work (this session and last)
 
-### In progress: quality gate — awaiting commit approval (2026-10-30)
+### In progress: SonarCloud remediation + automatic releases — committed locally (2026-10-30)
+- Plan: `.ai/plans/sonar-remediation.md`; progress: `.ai/progress/sonar-remediation.md`
+- Sonar scope: `.sonarcloud.properties` now drives automatic analysis (`.ai/**` and `docs/**` excluded, `src/**`/`tools/**`/`.github/**` kept). `sonar-project.properties` and the token-based scan step were removed.
+- Product findings: all 269 scoped issues addressed, including 13 vulnerabilities; cognitive-complexity hotspots were refactored into helpers, not suppressed. `eslint src` is clean (0 errors, 0 warnings).
+- CI hardening: `npm ci --ignore-scripts`, no `npx`, pinned `softprops/action-gh-release`.
+- Releases: `release.yml` now derives `YYYY.1MMdd.1HHmm` from the UTC build time, sets it for the build only, runs the quality gate, publishes, tags without `v`, and creates generated notes. `tools/release.mjs`, `RELEASE_NOTES.md` and the manual release workflow were removed.
+- Verification: `npm run quality` PASS (434 tests), `.ai/tests/run-all-tests.sh` 11/11, `git diff --check` clean.
+
+### Completed: quality gate (2026-10-30)
 - Plan: `.ai/plans/quality-gate.md`; progress: `.ai/progress/quality-gate.md`
 - Added `npm run quality` (`tools/quality-gate.mjs`): build, ESLint + SonarJS, `tsc --noEmit`, tests, `npm audit --audit-level=high`; `npm run quality:coverage` also writes `coverage/lcov.info`.
 - Added `.github/workflows/quality-gate.yml`, `sonar-project.properties` (`sonar.projectKey=I-Synergy_NugetPackageManager`, org `i-synergy`) and the `Quality Gate` wait flag. The Sonar scan step is skipped when `SONAR_TOKEN` is absent.

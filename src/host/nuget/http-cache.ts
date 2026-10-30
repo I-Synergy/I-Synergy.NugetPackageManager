@@ -1,7 +1,7 @@
-import * as fs from "fs/promises";
-import * as fsSync from "fs";
-import * as path from "path";
-import { createHash } from "crypto";
+import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
+import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { Logger } from "../../common/logger";
 
 type CacheFile = {

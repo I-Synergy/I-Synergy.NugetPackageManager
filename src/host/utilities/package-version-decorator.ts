@@ -1,13 +1,27 @@
 import * as vscode from 'vscode';
 import { Logger } from '../../common/logger';
 import { getSetting, isConfigAffected } from '../../common/configuration';
-import NuGetConfigResolver from './nuget-config-resolver';
+import NuGetConfigResolver, { type SourceWithCredentials } from './nuget-config-resolver';
 import nugetApiFactory from '../nuget/api-factory';
 
+type PackagePosition = { start: vscode.Position; end: vscode.Position; version: string };
+type PackagePositions = Map<string, PackagePosition[]>;
+
+function isSupportedDocument(fileName: string): boolean {
+    return fileName.endsWith('Directory.Packages.props')
+        || fileName.endsWith('.csproj')
+        || fileName.endsWith('.fsproj')
+        || fileName.endsWith('.vbproj');
+}
+
+function isPinnedVersion(version: string): boolean {
+    return version.startsWith('[') && version.endsWith(']') && !version.includes(',');
+}
+
 export class PackageVersionDecorator implements vscode.Disposable {
-    private _disposables: vscode.Disposable[] = [];
+    private readonly _disposables: vscode.Disposable[] = [];
     private _decorationType: vscode.TextEditorDecorationType;
-    private _failedCache: Set<string> = new Set(); // PackageIds that failed to fetch
+    private readonly _failedCache: Set<string> = new Set(); // PackageIds that failed to fetch
     private _isEnabled: boolean = false;
     private _prerelease: boolean = false;
 
@@ -22,31 +36,29 @@ export class PackageVersionDecorator implements vscode.Disposable {
 
         this.updateConfiguration();
 
-        // Listen for configuration changes
-        this._disposables.push(vscode.workspace.onDidChangeConfiguration(e => {
-            if (isConfigAffected(e, 'enablePackageVersionInlineInfo') ||
-                isConfigAffected(e, 'prerelease')) {
-                this.updateConfiguration();
-                if (vscode.window.activeTextEditor) {
+        // Listen for configuration changes, active editor changes and document changes.
+        this._disposables.push(
+            vscode.workspace.onDidChangeConfiguration(e => {
+                if (isConfigAffected(e, 'enablePackageVersionInlineInfo') ||
+                    isConfigAffected(e, 'prerelease')) {
+                    this.updateConfiguration();
+                    if (vscode.window.activeTextEditor) {
+                        this.triggerUpdateDecorations(vscode.window.activeTextEditor);
+                    }
+                }
+            }),
+            vscode.window.onDidChangeActiveTextEditor(editor => {
+                if (editor) {
+                    Logger.debug(`PackageVersionDecorator.constructor: Active editor changed to ${editor.document.fileName}`);
+                    this.triggerUpdateDecorations(editor);
+                }
+            }),
+            vscode.workspace.onDidChangeTextDocument(event => {
+                if (vscode.window.activeTextEditor && event.document === vscode.window.activeTextEditor.document) {
                     this.triggerUpdateDecorations(vscode.window.activeTextEditor);
                 }
-            }
-        }));
-
-        // Listen for active editor changes
-        this._disposables.push(vscode.window.onDidChangeActiveTextEditor(editor => {
-            if (editor) {
-                Logger.debug(`PackageVersionDecorator.constructor: Active editor changed to ${editor.document.fileName}`);
-                this.triggerUpdateDecorations(editor);
-            }
-        }));
-
-        // Listen for document changes
-        this._disposables.push(vscode.workspace.onDidChangeTextDocument(event => {
-            if (vscode.window.activeTextEditor && event.document === vscode.window.activeTextEditor.document) {
-                this.triggerUpdateDecorations(vscode.window.activeTextEditor);
-            }
-        }));
+            })
+        );
 
         if (vscode.window.activeTextEditor) {
             this.triggerUpdateDecorations(vscode.window.activeTextEditor);
@@ -84,130 +96,122 @@ export class PackageVersionDecorator implements vscode.Disposable {
         }
 
         const doc = editor.document;
-        const fileName = doc.fileName;
-
-        if (!fileName.endsWith('Directory.Packages.props') &&
-            !fileName.endsWith('.csproj') &&
-            !fileName.endsWith('.fsproj') &&
-            !fileName.endsWith('.vbproj')) {
+        if (!isSupportedDocument(doc.fileName)) {
             return;
         }
 
-        Logger.debug(`PackageVersionDecorator.updateDecorations: Processing ${fileName}`);
+        Logger.debug(`PackageVersionDecorator.updateDecorations: Processing ${doc.fileName}`);
 
-        const text = doc.getText();
-        const regex = /<(PackageReference|PackageVersion)\s+[^>]*>/g;
-        const packagesToFetch: Set<string> = new Set();
+        const { packagePositions, packagesToFetch } = this.collectPackagePositions(doc, doc.getText());
+        if (packagesToFetch.size > 0) {
+            await this.fetchAndDecorateAsync(packagesToFetch, packagePositions, editor);
+        }
+    }
 
-        // Map current document positions for packages
-        const packagePositions: Map<string, { start: vscode.Position, end: vscode.Position, version: string }[]> = new Map();
+    private collectPackagePositions(
+        doc: vscode.TextDocument,
+        text: string
+    ): { packagePositions: PackagePositions; packagesToFetch: Set<string> } {
+        const regex = /<(?:PackageReference|PackageVersion)\s[^>]*>/g;
+        const packagesToFetch = new Set<string>();
+        const packagePositions: PackagePositions = new Map();
 
         let match;
         while ((match = regex.exec(text))) {
             const tag = match[0];
             const includeMatch = /Include="([^"]+)"/.exec(tag);
             const versionMatch = /Version="([^"]+)"/.exec(tag);
+            if (!includeMatch || !versionMatch) continue;
 
-            if (includeMatch && versionMatch) {
-                const packageId = includeMatch[1] ?? "";
-                const currentVersion = versionMatch[1] ?? "";
+            const packageId = includeMatch[1] ?? "";
+            const currentVersion = versionMatch[1] ?? "";
+            if (isPinnedVersion(currentVersion)) continue;
 
-                // Skip pinned versions (exact version match using [x.x.x] notation - no comma)
-                // Ranges like [1.0,2.0], (1.0,), [1.0,) etc. are NOT pinned and should show updates
-                const isPinned = currentVersion.startsWith('[') && currentVersion.endsWith(']') && !currentVersion.includes(',');
-                if (isPinned) {
-                    continue;
-                }
+            const versionAttrIndex = tag.indexOf(versionMatch[0]);
+            if (versionAttrIndex === -1) continue;
 
-                // Find position of Version value
-                const versionAttrIndex = tag.indexOf(versionMatch[0]);
-                if (versionAttrIndex === -1) continue;
+            const absoluteIndex = match.index + versionAttrIndex + 'Version="'.length;
+            const startPos = doc.positionAt(absoluteIndex);
+            const endPos = doc.positionAt(absoluteIndex + currentVersion.length);
 
-                // Value start is after Version="
-                const versionValueStartIndex = versionAttrIndex + 'Version="'.length;
-                const absoluteIndex = match.index + versionValueStartIndex;
+            const positions = packagePositions.get(packageId) ?? [];
+            positions.push({ start: startPos, end: endPos, version: currentVersion });
+            packagePositions.set(packageId, positions);
 
-                const startPos = doc.positionAt(absoluteIndex);
-                const endPos = doc.positionAt(absoluteIndex + currentVersion.length);
-
-                if (!packagePositions.has(packageId)) {
-                    packagePositions.set(packageId, []);
-                }
-                packagePositions.get(packageId)!.push({ start: startPos, end: endPos, version: currentVersion });
-
-                if (!this._failedCache.has(packageId)) {
-                    packagesToFetch.add(packageId);
-                }
+            if (!this._failedCache.has(packageId)) {
+                packagesToFetch.add(packageId);
             }
         }
 
-        // Fetch and decorate
-        if (packagesToFetch.size > 0) {
-            await this.fetchAndDecorateAsync(packagesToFetch, packagePositions, editor);
-        }
+        return { packagePositions, packagesToFetch };
     }
 
     private async fetchAndDecorateAsync(
         packageIds: Set<string>,
-        packagePositions: Map<string, { start: vscode.Position, end: vscode.Position, version: string }[]>,
+        packagePositions: PackagePositions,
         editor: vscode.TextEditor
     ) {
         Logger.debug(`PackageVersionDecorator.fetchAndDecorate: Fetching versions for ${Array.from(packageIds).join(', ')}`);
-        const decorations: vscode.DecorationOptions[] = [];
 
         const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoot);
 
-        const promises = Array.from(packageIds).map(async (packageId) => {
-             if (this._failedCache.has(packageId)) return;
+        const decorationLists = await Promise.all(
+            Array.from(packageIds).map((packageId) =>
+                this.decoratePackageAsync(packageId, packagePositions.get(packageId), sources)
+            )
+        );
+        const decorations = decorationLists.flat();
 
-             try {
-                 let latestVersion: string | null = null;
-
-                 for (const source of sources) {
-                     try {
-                         const api = await nugetApiFactory.GetSourceApiAsync(source.Url);
-                         const result = await api.GetPackageAsync(packageId, this._prerelease);
-                         if (!result.isError && result.data) {
-                             latestVersion = result.data.Version;
-                             break;
-                         }
-                     } catch {
-                         // Try next source
-                     }
-                 }
-
-                 if (latestVersion) {
-                    const positions = packagePositions.get(packageId);
-                    if (positions) {
-                        for (const pos of positions) {
-                            if (pos.version !== latestVersion) {
-                                decorations.push({
-                                    range: new vscode.Range(pos.start, pos.end),
-                                    renderOptions: {
-                                        after: {
-                                            contentText: ` (Latest: ${latestVersion})`,
-                                        }
-                                    }
-                                });
-                            }
-                        }
-                    }
-                 } else {
-                     this._failedCache.add(packageId);
-                 }
-             } catch (error) {
-                 Logger.error(`PackageVersionDecorator.fetchAndDecorate: Failed to fetch version for ${packageId}`, error);
-                 this._failedCache.add(packageId);
-             }
-        });
-
-        await Promise.all(promises);
-
-        // Ensure editor is still active and valid
         if (editor && !editor.document.isClosed) {
-             editor.setDecorations(this._decorationType, decorations);
+            editor.setDecorations(this._decorationType, decorations);
         }
+    }
+
+    private async decoratePackageAsync(
+        packageId: string,
+        positions: PackagePosition[] | undefined,
+        sources: SourceWithCredentials[]
+    ): Promise<vscode.DecorationOptions[]> {
+        if (this._failedCache.has(packageId)) return [];
+
+        try {
+            const latestVersion = await this.findLatestVersionAsync(packageId, sources);
+            if (!latestVersion) {
+                this._failedCache.add(packageId);
+                return [];
+            }
+            if (!positions) return [];
+
+            return positions
+                .filter((pos) => pos.version !== latestVersion)
+                .map((pos) => ({
+                    range: new vscode.Range(pos.start, pos.end),
+                    renderOptions: {
+                        after: { contentText: ` (Latest: ${latestVersion})` }
+                    }
+                }));
+        } catch (error) {
+            Logger.error(`PackageVersionDecorator.fetchAndDecorate: Failed to fetch version for ${packageId}`, error);
+            this._failedCache.add(packageId);
+            return [];
+        }
+    }
+
+    private async findLatestVersionAsync(
+        packageId: string,
+        sources: SourceWithCredentials[]
+    ): Promise<string | null> {
+        for (const source of sources) {
+            try {
+                const api = await nugetApiFactory.GetSourceApiAsync(source.Url);
+                const result = await api.GetPackageAsync(packageId, this._prerelease);
+                if (!result.isError && result.data) return result.data.Version;
+            } catch {
+                // Try the next source.
+            }
+        }
+        return null;
     }
 
     dispose() {

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import * as util from 'util';
-import * as os from 'os';
+import * as util from 'node:util';
+import * as os from 'node:os';
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BasicTracerProvider, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";

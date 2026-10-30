@@ -6,9 +6,9 @@
 import { chromium } from 'playwright';
 import GIFEncoder from 'gif-encoder-2';
 import { PNG } from 'pngjs';
-import { createWriteStream } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { createWriteStream } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT_FILE = join(__dirname, '..', 'docs', 'images', 'demo.gif');
@@ -43,10 +43,10 @@ async function record(encoder, page, ms) {
   const interval = 100;
   const steps = Math.max(1, Math.round(ms / interval));
   for (let i = 0; i < steps; i++) {
-    const frame = await captureFrame(page);
+    const frame = await captureFrame(page); // NOSONAR: frames must be captured sequentially
     encoder.setDelay(interval);
     encoder.addFrame(frame);
-    if (i < steps - 1) await page.waitForTimeout(interval);
+    if (i < steps - 1) await page.waitForTimeout(interval); // NOSONAR: pacing must be sequential
   }
 }
 
@@ -93,8 +93,8 @@ await record(encoder, page, 500);
 await page.click('input[placeholder="Search packages..."]');
 await record(encoder, page, 300);
 for (const ch of 'serilog') {
-  await page.keyboard.type(ch, { delay: 0 });
-  await record(encoder, page, 120);
+  await page.keyboard.type(ch, { delay: 0 }); // NOSONAR: keystrokes must be recorded one by one
+  await record(encoder, page, 120); // NOSONAR: per-character animation
 }
 await waitForNoSpinner(page);
 await record(encoder, page, 800);
