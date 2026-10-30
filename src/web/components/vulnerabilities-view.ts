@@ -137,7 +137,7 @@ export class VulnerabilitiesView extends LitElement {
   @state() statusText: string = "";
   @property({ attribute: false }) projectPaths: string[] = [];
 
-  private _loadTask = new Task(this, {
+  private readonly _loadTask = new Task(this, {
     task: async ([projectPaths, forceReload], { signal }) => {
       const req: Parameters<typeof hostApi.getVulnerablePackagesAsync>[0] = {};
       if (projectPaths.length > 0) req.ProjectPaths = projectPaths;

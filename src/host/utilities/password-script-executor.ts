@@ -13,9 +13,9 @@ class PasswordScriptTerminal implements vscode.Pseudoterminal {
   private errorOutput: string = '';
   
   constructor(
-    private scriptPath: string,
-    private encodedPassword: string,
-    private spawnFn: typeof spawn = spawn
+    private readonly scriptPath: string,
+    private readonly encodedPassword: string,
+    private readonly spawnFn: typeof spawn = spawn
   ) {}
 
   open(_initialDimensions: vscode.TerminalDimensions | undefined): void {

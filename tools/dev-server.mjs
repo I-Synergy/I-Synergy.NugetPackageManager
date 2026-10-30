@@ -108,7 +108,7 @@ function isVersionInRange(version, range) {
   if (!range) return false;
   const open = range[0];
   const close = range[range.length - 1];
-  if ((open !== '[' && open !== '(') || (close !== ']' && close !== ')')) return false;
+  if (!isRangeBracket(open, close)) return false;
 
   const inner = range.slice(1, -1).trim();
   const comma = inner.indexOf(',');
@@ -117,19 +117,24 @@ function isVersionInRange(version, range) {
     return open === '[' && close === ']' && compareVersions(version, inner) === 0;
   }
 
-  const minVer = inner.slice(0, comma).trim();
-  const maxVer = inner.slice(comma + 1).trim();
-  if (minVer) {
-    const cmp = compareVersions(version, minVer);
-    if (open === '[' && cmp < 0) return false;
-    if (open === '(' && cmp <= 0) return false;
-  }
-  if (maxVer) {
-    const cmp = compareVersions(version, maxVer);
-    if (close === ']' && cmp > 0) return false;
-    if (close === ')' && cmp >= 0) return false;
-  }
-  return true;
+  return satisfiesMin(version, inner.slice(0, comma).trim(), open)
+    && satisfiesMax(version, inner.slice(comma + 1).trim(), close);
+}
+
+function isRangeBracket(open, close) {
+  return (open === '[' || open === '(') && (close === ']' || close === ')');
+}
+
+function satisfiesMin(version, minVersion, open) {
+  if (!minVersion) return true;
+  const cmp = compareVersions(version, minVersion);
+  return open === '[' ? cmp >= 0 : cmp > 0;
+}
+
+function satisfiesMax(version, maxVersion, close) {
+  if (!maxVersion) return true;
+  const cmp = compareVersions(version, maxVersion);
+  return close === ']' ? cmp <= 0 : cmp < 0;
 }
 
 function mapSearchItem(item) {

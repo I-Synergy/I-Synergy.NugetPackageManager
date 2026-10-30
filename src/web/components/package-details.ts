@@ -194,7 +194,7 @@ export class PackageDetailsComponent extends LitElement {
   @state() packageDetails: PackageDetails | undefined;
   @state() activeTab: DetailTab = "description";
 
-  private _detailsTask = new Task(this, {
+  private readonly _detailsTask = new Task(this, {
     task: async ([packageVersionUrl, source, passwordScriptPath], { signal }) => {
       this.packageDetails = undefined;
       if (!packageVersionUrl || !source) return;

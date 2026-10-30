@@ -71,13 +71,13 @@ export default class NuGetApi {
   private _packageInfoUrl: string = "";
   private _vulnerabilityUrl: string = "";
   private readonly http: AxiosInstance;
-  private _packageCache: Map<string, { data: Package, timestamp: number }> = new Map();
-  private _packageDetailsCache: Map<string, PackageDetails> = new Map();
+  private readonly _packageCache: Map<string, { data: Package, timestamp: number }> = new Map();
+  private readonly _packageDetailsCache: Map<string, PackageDetails> = new Map();
   private _vulnerabilityCache: { data: Map<string, VulnerabilityEntry[]>, timestamp: number } | null = null;
   private readonly _cacheTtl: number = 5 * 60 * 1000; // 5 minutes
   private readonly _vulnCacheTtl: number = 60 * 60 * 1000; // 1 hour
 
-  private _sourceHost: string = "";
+  private readonly _sourceHost: string = "";
   private readonly _trustedHosts = new Set<string>();
   private readonly _localFeed: LocalNuGetFeed | null;
   private readonly _httpCache: HttpCache;

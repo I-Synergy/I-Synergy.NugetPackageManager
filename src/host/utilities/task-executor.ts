@@ -16,7 +16,7 @@ export class DotnetError extends Error {
 
 export class TaskExecutor {
   private readonly globalMutex: Mutex = new Mutex();
-  private progress = new Map<string, OperationProgress>();
+  private readonly progress = new Map<string, OperationProgress>();
 
   async ExecuteCommandAsync(
     command: string,

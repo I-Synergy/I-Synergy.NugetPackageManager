@@ -148,12 +148,12 @@ export class CustomDropdown extends LitElement {
     }
   }
 
-  private _closeHandler = () => {
+  private readonly _closeHandler = () => {
     this.open = false;
     this.removeListeners();
   };
 
-  private _outsideClickHandler = (e: MouseEvent) => {
+  private readonly _outsideClickHandler = (e: MouseEvent) => {
     const path = e.composedPath();
     if (!path.includes(this)) {
       this.open = false;

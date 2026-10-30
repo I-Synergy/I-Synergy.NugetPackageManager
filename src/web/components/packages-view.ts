@@ -644,7 +644,7 @@ export class PackagesView extends LitElement {
     ]);
   }
 
-  private debouncedLoadProjectsPackages = debounce(async () => {
+  private readonly debouncedLoadProjectsPackages = debounce(async () => {
     await this.LoadProjectsPackagesAsync();
     await this.RefreshVulnerabilityCountAsync();
   }, 300);

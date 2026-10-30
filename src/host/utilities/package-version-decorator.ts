@@ -20,7 +20,7 @@ function isPinnedVersion(version: string): boolean {
 
 export class PackageVersionDecorator implements vscode.Disposable {
     private readonly _disposables: vscode.Disposable[] = [];
-    private _decorationType: vscode.TextEditorDecorationType;
+    private readonly _decorationType: vscode.TextEditorDecorationType;
     private readonly _failedCache: Set<string> = new Set(); // PackageIds that failed to fetch
     private _isEnabled: boolean = false;
     private _prerelease: boolean = false;
