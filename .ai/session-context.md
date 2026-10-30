@@ -19,6 +19,9 @@
 
 ## Recent Work (this session and last)
 
+### In progress: remaining Sonar findings — PR #41 (2026-10-30)
+- Follow-up to PR #40: 17 main-branch findings cleared; PR #41 → `main`: https://github.com/I-Synergy/NugetPackageManager/pull/41
+
 ### In progress: SonarCloud remediation + automatic releases — PR #40 (2026-10-30)
 - Branch `development/main` pushed; PR #40 → `main`: https://github.com/I-Synergy/NugetPackageManager/pull/40
 - Plan: `.ai/plans/sonar-remediation.md`; progress: `.ai/progress/sonar-remediation.md`
