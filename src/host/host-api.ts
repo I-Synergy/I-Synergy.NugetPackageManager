@@ -3085,7 +3085,7 @@ async function applyConflictFixesAsync(
 
   for (const { packageId, suggestedVersion } of conflicts) {
     const requiredVersion = suggestedVersion!;
-    if (cpmVersions && cpmVersions.has(packageId)) {
+    if (cpmVersions?.has(packageId)) {
       Logger.info(`restoreWithConflictResolution: Updating CPM ${packageId} to ${requiredVersion}`);
       await CpmResolver.UpdatePackageVersionAsync(projectPath, packageId, requiredVersion);
       fixedAny = true;

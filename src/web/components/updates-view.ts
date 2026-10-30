@@ -339,7 +339,7 @@ export class UpdatesView extends LitElement {
     }
   }
 
-  private _loadTask = new Task(this, {
+  private readonly _loadTask = new Task(this, {
 
     task: async ([projectPaths, sourceUrl, prerelease, forceReload], { signal }) => {
       const scanId = globalThis.crypto.randomUUID();

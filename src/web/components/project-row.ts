@@ -55,7 +55,7 @@ export class ProjectRow extends LitElement {
   @property() packageId!: string;
   @property() packageVersion!: string;
   @property() sourceUrl!: string;
-  @state() private loaders = new Map<string, boolean>();
+  @state() private readonly loaders = new Map<string, boolean>();
   @state() private errorMessage = "";
 
   get projectPackage() {

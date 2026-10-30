@@ -74,7 +74,7 @@ export default class ProjectFrameworkResolver {
 
     const key = await this.BuildCacheKeyAsync(projectPath);
     const cached = this.cache.get(this.normalize(projectPath));
-    if (cached && cached.key === key) {
+    if (cached?.key === key) {
       return this.withOverrides(cached.info, overrides);
     }
 
@@ -161,7 +161,7 @@ export default class ProjectFrameworkResolver {
 
       const element = nodes[0] as Element;
       let ancestor: Node | null = element;
-      while (ancestor && ancestor.nodeType === 1) {
+      while (ancestor?.nodeType === 1) {
         if ((ancestor as Element).attributes?.getNamedItem("Condition")) return null;
         ancestor = ancestor.parentNode;
       }

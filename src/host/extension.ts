@@ -104,8 +104,6 @@ export function activate(context: vscode.ExtensionContext) {
   projectWatcher.onDidDelete(scheduleProjectDiscovery);
   context.subscriptions.push(projectWatcher);
 
-  context.subscriptions.push(new PackageVersionDecorator());
-
   const previousVersion: string | undefined = context.globalState.get("nugetpackagemanager.version");
   context.globalState.update("nugetpackagemanager.version", context.extension.packageJSON.version);
   if (previousVersion == undefined) {
@@ -119,13 +117,11 @@ export function activate(context: vscode.ExtensionContext) {
   );
   RegisterBadgeView(launcherTree);
   context.subscriptions.push(
+    new PackageVersionDecorator(),
     launcherTree,
     launcherTree.onDidChangeVisibility((event) => {
       if (event.visible) webviews.openPanel();
-    })
-  );
-
-  context.subscriptions.push(
+    }),
     vscode.window.registerWebviewPanelSerializer(PANEL_ID, {
       deserializeWebviewPanel: (panel: vscode.WebviewPanel) => {
         webviews.restorePanel(panel);

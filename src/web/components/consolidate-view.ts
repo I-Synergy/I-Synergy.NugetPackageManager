@@ -116,7 +116,7 @@ export class ConsolidateView extends LitElement {
   @property() selectedFramework: string = "";
   @property({ attribute: false }) projectPaths: string[] = [];
 
-  private _loadTask = new Task(this, {
+  private readonly _loadTask = new Task(this, {
     task: async ([projectPaths, forceReload], { signal }) => {
       const req: Parameters<typeof hostApi.getInconsistentPackagesAsync>[0] = {};
       if (projectPaths.length > 0) req.ProjectPaths = projectPaths;
@@ -198,7 +198,7 @@ export class ConsolidateView extends LitElement {
     }));
   }
 
-  private _jobIds = new Map<string, string>();
+  private readonly _jobIds = new Map<string, string>();
 
   private jobKey(pkg: InconsistentPackageViewModel): string {
     return `${pkg.Id}|${pkg.Versions[0]?.CpmCondition ?? ""}|${pkg.Versions[0]?.CpmFramework ?? ""}`;
