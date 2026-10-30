@@ -19,7 +19,8 @@
 
 ## Recent Work (this session and last)
 
-### In progress: SonarCloud remediation + automatic releases — committed locally (2026-10-30)
+### In progress: SonarCloud remediation + automatic releases — PR #40 (2026-10-30)
+- Branch `development/main` pushed; PR #40 → `main`: https://github.com/I-Synergy/NugetPackageManager/pull/40
 - Plan: `.ai/plans/sonar-remediation.md`; progress: `.ai/progress/sonar-remediation.md`
 - Sonar scope: `.sonarcloud.properties` now drives automatic analysis (`.ai/**` and `docs/**` excluded, `src/**`/`tools/**`/`.github/**` kept). `sonar-project.properties` and the token-based scan step were removed.
 - Product findings: all 269 scoped issues addressed, including 13 vulnerabilities; cognitive-complexity hotspots were refactored into helpers, not suppressed. `eslint src` is clean (0 errors, 0 warnings).
