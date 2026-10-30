@@ -23,6 +23,13 @@ export type ScanCacheKeyParts = {
     excludeGlobs: string[];
 };
 
+/** Locale-independent comparator: cache keys must be identical on every machine. */
+function compareStrings(a: string, b: string): number {
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
+}
+
 /** FNV-1a; keeps the persisted key short and stable. */
 function hashKey(value: string): string {
     let hash = 0x811c9dc5;
@@ -35,11 +42,11 @@ function hashKey(value: string): string {
 
 export function BuildScanCacheKey(parts: ScanCacheKeyParts): string {
     const normalized = JSON.stringify({
-        workspaceRoots: [...parts.workspaceRoots].map((root) => root.toLowerCase()).sort(),
-        projectPaths: [...parts.projectPaths].map((project) => project.toLowerCase()).sort(),
-        sourceUrls: [...parts.sourceUrls].map((url) => url.toLowerCase()).sort(),
+        workspaceRoots: [...parts.workspaceRoots].map((root) => root.toLowerCase()).sort(compareStrings),
+        projectPaths: [...parts.projectPaths].map((project) => project.toLowerCase()).sort(compareStrings),
+        sourceUrls: [...parts.sourceUrls].map((url) => url.toLowerCase()).sort(compareStrings),
         prerelease: parts.prerelease,
-        excludeGlobs: [...parts.excludeGlobs].sort(),
+        excludeGlobs: [...parts.excludeGlobs].sort(compareStrings),
     });
     return `scan:${hashKey(normalized)}`;
 }

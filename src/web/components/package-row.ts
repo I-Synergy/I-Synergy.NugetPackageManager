@@ -182,7 +182,7 @@ const styles = css`
 
 @customElement("package-row")
 export class PackageRow extends LitElement {
-  static override styles = [codicon, sharedStyles, styles];
+  static override readonly styles = [codicon, sharedStyles, styles];
 
   @property({ type: Boolean }) showInstalledVersion!: boolean;
   @property() updateVersion: string = "";

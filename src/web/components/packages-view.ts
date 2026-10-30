@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 
 import Split from "split.js";
-import lodash from "lodash";
+import debounce from "lodash/debounce";
 import { hostApi, configuration } from "@/web/registrations";
 import { runProjectUpdateJobAsync } from "@/web/jobs";
 import { buildFrameworkOptions, getFrameworkGroupKey, matchesFrameworkSelection } from "@/common/framework";
@@ -27,7 +27,7 @@ const NUGET_ORG_PREFIX = "https://api.nuget.org";
 
 @customElement("packages-view")
 export class PackagesView extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     scrollableBase,
     sharedStyles,
@@ -538,7 +538,7 @@ export class PackagesView extends LitElement {
   private async handleTabKeydownAsync(e: KeyboardEvent): Promise<void> {
     const tabs: TabId[] = ["browse", "installed", "updates", "consolidate", "vulnerabilities", "cleanup"];
     const currentIdx = tabs.indexOf(this.activeTab);
-    let newIdx = currentIdx;
+    let newIdx: number;
 
     switch (e.key) {
       case "ArrowRight":
@@ -644,7 +644,7 @@ export class PackagesView extends LitElement {
     ]);
   }
 
-  private debouncedLoadProjectsPackages = lodash.debounce(async () => {
+  private debouncedLoadProjectsPackages = debounce(async () => {
     await this.LoadProjectsPackagesAsync();
     await this.RefreshVulnerabilityCountAsync();
   }, 300);
@@ -1132,11 +1132,14 @@ export class PackagesView extends LitElement {
     }
 
     return [...groups.entries()]
-      .map(([key, packages]) => ({
-        key,
-        label: key || "Shared",
-        packages: packages.sort((a, b) => a.Name.localeCompare(b.Name)),
-      }))
+      .map(([key, packages]) => {
+        const sortedPackages = [...packages].sort((a, b) => a.Name.localeCompare(b.Name));
+        return {
+          key,
+          label: key || "Shared",
+          packages: sortedPackages,
+        };
+      })
       .sort((a, b) => {
         if (a.key === "" && b.key !== "") return -1;
         if (a.key !== "" && b.key === "") return 1;

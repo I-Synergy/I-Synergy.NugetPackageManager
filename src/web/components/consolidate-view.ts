@@ -14,7 +14,7 @@ import { InconsistentPackageViewModel } from "../types";
 
 @customElement("consolidate-view")
 export class ConsolidateView extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     scrollableBase,
     sharedStyles,

@@ -278,7 +278,7 @@ async function findOutsideWorkspaceAsync(paths: string[]): Promise<string | null
 function extractResponseDetail(data: unknown): string {
   if (!data) return "";
   if (typeof data === "string") return data;
-  if (typeof data === "object" && data !== null) {
+  if (typeof data === "object") {
     const obj = data as Record<string, unknown>;
     // GitLab: { error: "invalid_token", error_description: "Token is expired..." }
     if (obj.error_description) return String(obj.error_description);
@@ -1146,7 +1146,7 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
         }
       });
 
-      const sorted = projects.sort((a, b) =>
+      const sorted = [...projects].sort((a, b) =>
         a.Name?.toLowerCase().localeCompare(b.Name?.toLowerCase())
       );
 
@@ -1479,11 +1479,9 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
           })
         );
         const projects: Project[] = [];
-        const projectCpmMaps = new Map<string, CpmPackageMap | null>();
         parseResults.forEach((r, i) => {
           if (r.status === "fulfilled") {
             projects.push(r.value.project);
-            projectCpmMaps.set(r.value.project.Path, r.value.cpmMap);
           } else {
             Logger.error(`getOutdatedPackages: Failed to parse ${projectFiles[i]?.fsPath ?? "?"}`, r.reason);
           }
@@ -1609,7 +1607,7 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
             // Search results occasionally omit the version list; the reported
             // latest version must still be considered.
             const allVersions = latest.versions.length > 0 ? latest.versions : [latest.version];
-            const alignedVersions = aligned && tfmMajor !== null
+            const alignedVersions = tfmMajor !== null && aligned
               ? allVersions.filter((version) => getVersionMajor(version) === tfmMajor)
               : allVersions;
             // Keep the historical fallback: when the TFM's major line has no
@@ -2202,11 +2200,11 @@ export function createHostAPI(context?: vscode.ExtensionContext): HostAPI {
               AffectedVersionRange: worstMatch.versions,
               Projects: installed.projects,
               ...(installed.frameworks.size > 0
-                ? { CpmFrameworks: [...installed.frameworks].sort() }
+                ? { CpmFrameworks: [...installed.frameworks].sort((a, b) => a.localeCompare(b)) }
                 : {}),
               ...(!installed.direct ? { IsTransitive: true } : {}),
               ...(installed.dependencyOf.size > 0
-                ? { DependencyOf: [...installed.dependencyOf].sort() }
+                ? { DependencyOf: [...installed.dependencyOf].sort((a, b) => a.localeCompare(b)) }
                 : {}),
             });
           }
@@ -2610,7 +2608,7 @@ async function getLatestVersion(
           ...(pkg.Versions ?? []).map((v) => v.Version),
           ...(pkg.Version ? [pkg.Version] : []),
         ])].filter((version) => prerelease || !version.includes("-"));
-        const sorted = versions.sort(compareVersions);
+        const sorted = [...versions].sort(compareVersions);
         return {
           version: sorted[sorted.length - 1] ?? pkg.Version,
           versions: sorted,

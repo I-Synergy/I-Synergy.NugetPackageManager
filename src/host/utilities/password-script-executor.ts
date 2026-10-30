@@ -89,6 +89,7 @@ export default class PasswordScriptExecutor {
 
   // START: Test Hook
   // Exposed for testing purposes to mock child_process.spawn
+  // eslint-disable-next-line sonarjs/public-static-readonly -- writable test hook
   public static _spawn = spawn;
   // END: Test Hook
 

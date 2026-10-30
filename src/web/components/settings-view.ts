@@ -8,7 +8,7 @@ import { SourceViewModel } from "../types";
 
 @customElement("settings-view")
 export class SettingsView extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     scrollableBase,
     css`

@@ -11,7 +11,7 @@ type DetailTab = "description" | "dependencies" | "versions";
 
 @customElement("package-details")
 export class PackageDetailsComponent extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     sharedStyles,
     css`

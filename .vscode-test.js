@@ -11,6 +11,11 @@ module.exports = defineConfig([
 			timeout: 20000,
 			require: ['./test-path-register.cjs']
 		},
+		coverage: {
+			include: ['src/**/*.ts'],
+			exclude: ['src/**/*.test.ts', 'src/**/__fixtures__/**'],
+			includeAll: true
+		},
 		launchArgs: [
 			'--disable-gpu',
 			'--disable-workspace-trust',

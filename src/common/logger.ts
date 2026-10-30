@@ -5,13 +5,17 @@ import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { BasicTracerProvider, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import {
-    SEMRESATTRS_DEPLOYMENT_ENVIRONMENT,
-    SEMRESATTRS_OS_TYPE,
-    SEMRESATTRS_SERVICE_NAME,
-    SEMRESATTRS_SERVICE_VERSION,
+    ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
+    ATTR_SERVICE_NAME,
+    ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
 import type { Attributes, TimeInput, Tracer } from "@opentelemetry/api";
 import { getSetting, isConfigAffected } from "./configuration";
+
+// `os.type` is still an incubating semantic convention. Importing it from the
+// `/incubating` entry point cannot be resolved by the Node10 module resolution
+// used by tsconfig.test.json, so the attribute key is kept here instead.
+const ATTR_OS_TYPE = "os.type";
 
 export class Logger {
     private static _outputChannel: vscode.OutputChannel;
@@ -48,10 +52,10 @@ export class Logger {
 
             this._provider = new BasicTracerProvider({
                 resource: resourceFromAttributes({
-                    [SEMRESATTRS_SERVICE_NAME]: "nugetpackagemanager",
-                    [SEMRESATTRS_SERVICE_VERSION]: context.extension.packageJSON.version,
-                    [SEMRESATTRS_DEPLOYMENT_ENVIRONMENT]: process.env.ENVIRONMENT ?? "",
-                    [SEMRESATTRS_OS_TYPE]: os.platform(),
+                    [ATTR_SERVICE_NAME]: "nugetpackagemanager",
+                    [ATTR_SERVICE_VERSION]: context.extension.packageJSON.version,
+                    [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: process.env.ENVIRONMENT ?? "",
+                    [ATTR_OS_TYPE]: os.platform(),
                     "extension.id": context.extension.id,
                     language: vscode.env.language,
                     "vscode.edition": vscode.env.appName,

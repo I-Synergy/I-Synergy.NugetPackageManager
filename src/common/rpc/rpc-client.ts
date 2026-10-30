@@ -16,6 +16,11 @@ export function createRpcClient(
   const pending = new Map<number, PendingCall>();
 
   window.addEventListener("message", (event: MessageEvent) => {
+    // The webview must not act on messages addressed to, or forwarded from,
+    // another window. VS Code webviews report `vscode-webview://` (or an empty
+    // origin for some hosts), so only a non-empty foreign origin is rejected.
+    if (event.origin && event.origin !== window.location.origin) return;
+
     const msg = event.data as RpcResponse;
     if (msg?.type !== "rpc-response") return;
 

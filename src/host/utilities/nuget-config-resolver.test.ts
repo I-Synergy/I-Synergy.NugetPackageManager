@@ -595,8 +595,9 @@ suite('NuGetConfigResolver Tests', () => {
              sandbox.stub(NuGetConfigResolver as any, 'ResolveConfigsAsync').resolves({ sources: [source], clearFound: false });
              vscodeGetConfigurationStub.returns({ get: () => [] });
 
-             await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
+             const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceDir);
 
+             assert.strictEqual(sources[0]!.Password, 'password');
         });
 
         test('refuses a password script in an untrusted workspace', async () => {

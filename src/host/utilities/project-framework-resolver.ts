@@ -8,6 +8,13 @@ import { Logger } from "../../common/logger";
 
 const execFileAsync = promisify(execFile);
 
+/** Locale-independent comparator, so cached key parts are stable across machines. */
+function compareStrings(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
 export type TargetFrameworkSource = "msbuild" | "xml" | "assets" | "override";
 
 export type TargetFrameworkInfo = {
@@ -325,7 +332,7 @@ export default class ProjectFrameworkResolver {
         parts.push(`${file}:missing`);
       }
     }
-    return parts.sort().join("|");
+    return [...parts].sort(compareStrings).join("|");
   }
 
   private static normalize(projectPath: string): string {

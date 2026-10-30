@@ -49,7 +49,7 @@ const styles = css`
 
 @customElement("project-row")
 export class ProjectRow extends LitElement {
-  static override styles = [codicon, sharedStyles, styles];
+  static override readonly styles = [codicon, sharedStyles, styles];
 
   @property({ type: Object }) project!: ProjectViewModel;
   @property() packageId!: string;

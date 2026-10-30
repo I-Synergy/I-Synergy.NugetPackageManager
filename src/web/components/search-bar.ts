@@ -5,7 +5,7 @@ import { sharedStyles } from "@/web/styles/shared.css";
 import { configuration, hostApi } from "../registrations";
 import type { DropdownOption } from "./dropdown";
 import "./dropdown";
-import lodash from "lodash";
+import debounce from "lodash/debounce";
 
 const styles = css`
   .search-bar {
@@ -98,9 +98,9 @@ export type FilterEvent = {
 
 @customElement("search-bar")
 export class SearchBar extends LitElement {
-  static override styles = [codicon, sharedStyles, styles];
+  static override readonly styles = [codicon, sharedStyles, styles];
 
-  private delayedPackagesLoader = lodash.debounce(() => this.emitFilterChangedEvent(), 500);
+  private delayedPackagesLoader = debounce(() => this.emitFilterChangedEvent(), 500);
   @state() prerelease: boolean = false;
   @state() filterQuery: string = "";
   @state() selectedSourceUrl: string = "";

@@ -217,6 +217,8 @@ npm run lint             # ESLint 9 flat config
 npm run lint:fix         # auto-fix
 npm test                 # VS Code Test CLI + Mocha
 npm run test-compile     # compile tests only (tsconfig.test.json)
+npm run quality          # local quality gate: build + lint (ESLint + SonarJS) + type check + tests + audit
+npm run quality:coverage # same, and writes coverage/lcov.info for the SonarCloud scan
 npm run package          # produce .vsix in releases/
 ```
 
@@ -225,7 +227,7 @@ install/update/restore, vulnerability and target-framework evaluation.
 
 After every code change:
 
-1. run `npm run esbuild` and `npm run lint`;
+1. run `npm run quality` (or at minimum `npm run esbuild` and `npm run lint`);
 2. run the most relevant tests (`npm test`, or a focused test file);
 3. fix failures before continuing;
 4. for multi-file changes, run the full suite.

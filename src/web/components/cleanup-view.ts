@@ -9,7 +9,7 @@ import type { CleanupReport } from "@/common/rpc/types";
 
 @customElement("cleanup-view")
 export class CleanupView extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     scrollableBase,
     sharedStyles,

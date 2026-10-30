@@ -105,7 +105,7 @@ const styles = css`
 
 @customElement("project-tree")
 export class ProjectTree extends LitElement {
-  static override styles = [codicon, scrollableBase, styles];
+  static override readonly styles = [codicon, scrollableBase, styles];
 
   @property({ type: Array }) projects: ProjectViewModel[] = [];
   @property({ type: Boolean }) loading: boolean = false;

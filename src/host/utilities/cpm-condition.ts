@@ -37,7 +37,7 @@ type Token =
   | { type: "identifier"; value: string };
 
 const PROPERTY_FUNCTION_RE =
-  /^([A-Za-z_][\w.-]*)\.(StartsWith|EndsWith|Contains)\(\s*(['"])(.*?)\3\s*\)$/i;
+  /^([a-z_][\w.-]*)\.(StartsWith|EndsWith|Contains)\(\s*(['"])(.*?)\3\s*\)$/i;
 const PROPERTY_NAME_RE = /^[A-Za-z_][\w.-]*$/;
 
 class Tokenizer {

@@ -31,7 +31,7 @@ export type CacheControl = {
 // Request Types
 // ============================================================
 
-export type GetProjectsRequest = CacheControl;
+export type GetProjectsRequest = CacheControl; // eslint-disable-line sonarjs/redundant-type-aliases -- public RPC name kept for API stability
 
 export type GetPackagesRequest = SourceContext &
   PaginationParams &

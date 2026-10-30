@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- chore: add a quality gate mirroring the CI workflow — `npm run quality` builds, lints with ESLint + SonarJS, type-checks, runs the test suite and audits dependencies; `npm run quality:coverage` also writes `coverage/lcov.info` for SonarQube Cloud.
+- ci: add the `Quality Gate` workflow with a SonarCloud scan (`sonar-project.properties`, gate wait enabled when `SONAR_TOKEN` is set).
+- fix: clear the SonarJS correctness findings the new gate reported (dead store, unused collection/variable, redundant null comparison, duplicate character class, deprecated OpenTelemetry semantic-convention constants, writable static styles, message-origin check in the RPC client, locale-independent cache-key sorting).
+- docs: add CI, quality-gate, SonarCloud and Marketplace badges to `README.md`.
+
 ## 2.2.0 (2026-10-28)
 
 - fix: a slow update on a large solution is no longer cancelled and reverted by the webview's 120 s request deadline. The deadline now stops the webview waiting but lets the host finish; files are only rolled back for a real write/restore failure or an explicit cancel.

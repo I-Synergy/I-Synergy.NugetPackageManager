@@ -502,7 +502,7 @@ export default class NuGetApi {
     const params = config?.params as Record<string, unknown> | undefined;
     if (!params || typeof params !== "object") return url;
     const query = Object.keys(params)
-      .sort()
+      .sort((a, b) => a.localeCompare(b))
       .filter((key) => params[key] !== undefined)
       .map((key) => `${key}=${String(params[key])}`)
       .join("&");

@@ -7,6 +7,10 @@ dist
 .playwright-mcp/
 releases/
 
+# Quality gate output
+coverage/
+.scannerwork/
+
 # Fixture build output generated while resolving target frameworks in tests
 src/host/utilities/__fixtures__/**/obj/
 

@@ -15,7 +15,7 @@ import "./package-row";
 
 @customElement("updates-view")
 export class UpdatesView extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     scrollableBase,
     sharedStyles,
