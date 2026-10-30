@@ -105,7 +105,7 @@ const styles = css`
 
 @customElement("project-tree")
 export class ProjectTree extends LitElement {
-  static override styles = [codicon, scrollableBase, styles];
+  static override readonly styles = [codicon, scrollableBase, styles];
 
   @property({ type: Array }) projects: ProjectViewModel[] = [];
   @property({ type: Boolean }) loading: boolean = false;
@@ -166,6 +166,7 @@ export class ProjectTree extends LitElement {
   }
 
   override render() {
+    const items = this.renderItems();
     return html`
       <div class="tree-container" role="group" aria-label="Project selection">
         <div class="tree-header">
@@ -181,39 +182,48 @@ export class ProjectTree extends LitElement {
           <span class="header-count">${this.loading ? "…" : `${this.selectedPaths.length}/${this.projects.length}`}</span>
         </div>
         <div class="tree-list" role="list" aria-busy=${this.loading}>
-          ${this.loading
-            ? html`<div class="loading-state" role="status" aria-live="polite">
-                <span class="codicon codicon-loading codicon-modifier-spin"></span>
-                <span>${this.loadingMessage}</span>
-              </div>`
-            : this.projects.length === 0
-              ? html`<div class="empty-state">No projects found</div>`
-              : nothing}
-          ${this.loading
-            ? nothing
-            : this.projects.map(
-            (p) => html`
-              <div class="tree-item" role="listitem">
-                <input
-                  type="checkbox"
-                  aria-label="Select ${p.Name}"
-                  .checked=${this.selectedPaths.includes(p.Path)}
-                  @change=${(e: Event) =>
-                    this.OnItemChanged(
-                      p.Path,
-                      (e.target as HTMLInputElement).checked
-                    )}
-                />
-                <span class="codicon codicon-file-code"></span>
-                <span class="item-label" title=${p.Path}>${p.Name}</span>
-                ${p.TargetFrameworks?.length
-                  ? html`<span class="item-meta">${p.TargetFrameworks.join(" · ")}</span>`
-                  : nothing}
-              </div>
-            `
-          )}
+          ${this.renderListState()}
+          ${items}
         </div>
       </div>
     `;
+  }
+
+  private renderListState(): unknown {
+    if (this.loading) {
+      return html`<div class="loading-state" role="status" aria-live="polite">
+        <span class="codicon codicon-loading codicon-modifier-spin"></span>
+        <span>${this.loadingMessage}</span>
+      </div>`;
+    }
+    if (this.projects.length === 0) {
+      return html`<div class="empty-state">No projects found</div>`;
+    }
+    return nothing;
+  }
+
+  private renderItems(): unknown {
+    if (this.loading) return nothing;
+    return this.projects.map(
+      (p) => html`
+        <div class="tree-item" role="listitem">
+          <input
+            type="checkbox"
+            aria-label="Select ${p.Name}"
+            .checked=${this.selectedPaths.includes(p.Path)}
+            @change=${(e: Event) =>
+              this.OnItemChanged(
+                p.Path,
+                (e.target as HTMLInputElement).checked
+              )}
+          />
+          <span class="codicon codicon-file-code"></span>
+          <span class="item-label" title=${p.Path}>${p.Name}</span>
+          ${p.TargetFrameworks?.length
+            ? html`<span class="item-meta">${p.TargetFrameworks.join(" · ")}</span>`
+            : nothing}
+        </div>
+      `
+    );
   }
 }

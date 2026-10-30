@@ -13,7 +13,8 @@ export default class StatusBarUtils {
       this._item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     }
 
-    this._item.text = `$(sync~spin) NuGet: ${Math.round(percentage)}%${message ? ` - ${message}` : ""}`;
+    const messageSuffix = message ? ` - ${message}` : "";
+    this._item.text = `$(sync~spin) NuGet: ${Math.round(percentage)}%${messageSuffix}`;
     this._item.show();
   }
 

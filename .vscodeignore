@@ -20,7 +20,6 @@ esbuild.js
 eslint.config.mjs
 tools/**
 scripts/**
-RELEASE_NOTES.md
 **/tsconfig.json
 **/tsconfig.test.json
 **/*.map

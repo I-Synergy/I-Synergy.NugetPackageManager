@@ -34,11 +34,10 @@ export type RestoreConflict = {
     constraints: RestoreConstraint[];
 };
 
-const ERROR_LINE_RE = /\berror\s+(NU\d{4})\s*:\s*(.*)$/i;
+const ERROR_LINE_RE = /\berror\s+(NU\d{4})\s*:\s*(.*)/i;
 // MSBuild prefixes each diagnostic with `<project> : `. Strip it so the same
 // parser works for `dotnet restore` output with and without the prefix.
 const PATH_PREFIX_RE = /^.*?\s:\s/;
-const CHAIN_LINE_RE = /^\s*.*?\s->\s.*$/;
 
 function stripPathPrefix(line: string): string {
     return line.replace(PATH_PREFIX_RE, "");
@@ -56,36 +55,51 @@ function extractConstraint(sanitized: string): RestoreConstraint | null {
 
 function parseHead(code: string, message: string): Omit<RestoreConflict, "constraints"> {
     const conflict: Omit<RestoreConflict, "constraints"> = { code, packageId: "", message };
+    if (code === "NU1107") return parseNu1107(conflict, message);
+    if (code === "NU1605" || code === "NU1109") return parseDowngrade(conflict, message);
+    if (code === "NU1608") return parseOutsideConstraint(conflict, message);
+    if (code === "NU1102") return parseMissingPackage(conflict, message);
+    return conflict;
+}
 
-    if (code === "NU1107") {
-        const conflictMatch = /Version conflict detected for (.+?)\.\s/.exec(message);
-        if (conflictMatch?.[1]) conflict.packageId = conflictMatch[1].trim();
-        const installMatch = /Install\/reference (.+?) (\S+) directly to project (.+?) to resolve/i.exec(message);
-        if (installMatch?.[2]) conflict.suggestedVersion = installMatch[2].trim();
-        if (installMatch?.[3]) conflict.projectName = installMatch[3].trim();
-        return conflict;
-    }
+function parseNu1107(
+    conflict: Omit<RestoreConflict, "constraints">,
+    message: string
+): Omit<RestoreConflict, "constraints"> {
+    const conflictMatch = /Version conflict detected for (.+?)\.\s/.exec(message);
+    if (conflictMatch?.[1]) conflict.packageId = conflictMatch[1].trim();
+    const installMatch = /Install\/reference (.+?) (\S+) directly to project (.+?) to resolve/i.exec(message);
+    if (installMatch?.[2]) conflict.suggestedVersion = installMatch[2].trim();
+    if (installMatch?.[3]) conflict.projectName = installMatch[3].trim();
+    return conflict;
+}
 
-    if (code === "NU1605" || code === "NU1109") {
-        const downgradeMatch = /Detected package downgrade: (.+?) from (\S+) to (\S+)/i.exec(message);
-        if (downgradeMatch?.[1]) conflict.packageId = downgradeMatch[1].trim();
-        if (downgradeMatch?.[2]) conflict.suggestedVersion = downgradeMatch[2].trim();
-        return conflict;
-    }
+function parseDowngrade(
+    conflict: Omit<RestoreConflict, "constraints">,
+    message: string
+): Omit<RestoreConflict, "constraints"> {
+    const downgradeMatch = /Detected package downgrade: (.+?) from (\S+) to (\S+)/i.exec(message);
+    if (downgradeMatch?.[1]) conflict.packageId = downgradeMatch[1].trim();
+    if (downgradeMatch?.[2]) conflict.suggestedVersion = downgradeMatch[2].trim();
+    return conflict;
+}
 
-    if (code === "NU1608") {
-        const outsideMatch =
-            /Detected package version outside of dependency constraint: .+? \S+ requires (.+?) \(([^)]+)\)/i.exec(message);
-        if (outsideMatch?.[1]) conflict.packageId = outsideMatch[1].trim();
-        return conflict;
-    }
+function parseOutsideConstraint(
+    conflict: Omit<RestoreConflict, "constraints">,
+    message: string
+): Omit<RestoreConflict, "constraints"> {
+    const outsideMatch =
+        /Detected package version outside of dependency constraint: .+? \S+ requires (.+?) \(([^)]+)\)/i.exec(message);
+    if (outsideMatch?.[1]) conflict.packageId = outsideMatch[1].trim();
+    return conflict;
+}
 
-    if (code === "NU1102") {
-        const missingMatch = /Unable to find package (.+?) with version/i.exec(message);
-        if (missingMatch?.[1]) conflict.packageId = missingMatch[1].trim();
-        return conflict;
-    }
-
+function parseMissingPackage(
+    conflict: Omit<RestoreConflict, "constraints">,
+    message: string
+): Omit<RestoreConflict, "constraints"> {
+    const missingMatch = /Unable to find package (.+?) with version/i.exec(message);
+    if (missingMatch?.[1]) conflict.packageId = missingMatch[1].trim();
     return conflict;
 }
 
@@ -110,7 +124,7 @@ export function ParseRestoreConflicts(output: string): RestoreConflict[] {
 
         if (!sanitized.trim()) continue;
 
-        if (CHAIN_LINE_RE.test(sanitized)) {
+        if (sanitized.includes("->")) {
             const constraint = extractConstraint(sanitized);
             if (constraint) current.constraints.push(constraint);
             continue;

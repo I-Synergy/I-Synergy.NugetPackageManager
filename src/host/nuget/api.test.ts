@@ -6,7 +6,6 @@ import { Logger } from '../../common/logger';
 
 suite('NuGetApi Tests', () => {
     let sandbox: sinon.SinonSandbox;
-    let _axiosGetStub: sinon.SinonStub;
     let loggerDebugStub: sinon.SinonStub;
     let loggerErrorStub: sinon.SinonStub;
     let _loggerInfoStub: sinon.SinonStub;

@@ -84,7 +84,12 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       font-size: 13px;
       /* Override the 20px left padding from web.css body rule */
-      padding: 0 !important;
+      padding: 0;
+    }
+
+    /* Higher specificity than web.css's `body` rule, without !important. */
+    html body {
+      padding: 0;
     }
 
     nuget-package-manager {

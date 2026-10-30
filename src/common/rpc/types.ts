@@ -31,8 +31,6 @@ export type CacheControl = {
 // Request Types
 // ============================================================
 
-export type GetProjectsRequest = CacheControl;
-
 export type GetPackagesRequest = SourceContext &
   PaginationParams &
   CacheControl & {
@@ -354,7 +352,7 @@ export type RpcMessage = RpcRequest | RpcResponse | RpcCancel;
 // ============================================================
 
 export interface HostAPI {
-  getProjectsAsync(req: GetProjectsRequest, signal?: AbortSignal): Promise<Result<GetProjectsResponse>>;
+  getProjectsAsync(req: CacheControl, signal?: AbortSignal): Promise<Result<GetProjectsResponse>>;
   getPackagesAsync(req: GetPackagesRequest, signal?: AbortSignal): Promise<Result<GetPackagesResponse>>;
   getPackageAsync(req: GetPackageRequest, signal?: AbortSignal): Promise<Result<GetPackageResponse>>;
   getPackageDetailsAsync(req: GetPackageDetailsRequest, signal?: AbortSignal): Promise<Result<GetPackageDetailsResponse>>;

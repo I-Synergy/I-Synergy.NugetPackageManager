@@ -133,7 +133,7 @@
       var entry = byKey[key];
       var versions = Object.keys(entry.versions);
       if (versions.length > 1) {
-        var sorted = versions.slice().sort().reverse();
+        var sorted = versions.slice().sort((a, b) => a.localeCompare(b)).reverse();
         result.push({
           Id: entry.id,
           Versions: versions.map(function (v) {

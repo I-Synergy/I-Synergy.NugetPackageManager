@@ -1,44 +1,159 @@
+# Release versioning on every push to main.
+#
+# Versions are never bumped by hand. Each release derives its version from the
+# UTC build time in the form YYYY.1MMdd.1HHmm (the same scheme as the AI repo):
+#   1. derive the build number (or accept one via workflow_dispatch),
+#   2. stop when the tag already exists,
+#   3. set the derived version in package.json for this run only,
+#   4. run the quality gate, package and publish the .vsix,
+#   5. tag the commit with the build number (no `v` prefix) and create a
+#      GitHub Release with notes generated from the commits since the last tag.
+#
+# `main` is never modified and no changelog or release-notes file is committed.
 name: Release
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
-      version:
-        description: "Version bump type"
-        required: true
-        default: "patch"
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
+      build_number:
+        description: 'Build number (YYYY.1MMdd.1HHmm). Leave empty to use the current UTC time.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
 
 jobs:
-  bump:
-    name: Bump Version
+  release:
+    name: Version, publish and tag
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    permissions:
-      contents: write
     steps:
-      - name: Checkout
+      - name: Checkout (full history and tags)
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Configure Git
+      - name: Resolve build number
+        id: build
+        env:
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          set -euo pipefail
+          BUILD_NUMBER="${INPUT_BUILD_NUMBER:-}"
+          if [ -z "$BUILD_NUMBER" ]; then
+            BUILD_NUMBER="$(date -u +%Y.1%m%d.1%H%M)"
+          fi
+          if ! [[ "$BUILD_NUMBER" =~ ^[0-9]{4}\.1[0-9]{4}\.1[0-9]{4}(\.[0-9]{1,2})?$ ]]; then
+            echo "::error::Invalid build number '$BUILD_NUMBER'. Expected YYYY.1MMdd.1HHmm."
+            exit 1
+          fi
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
 
-      - name: Bump version and push
-        run: node tools/release.mjs ${{ inputs.version }}
+      - name: Skip when the tag already exists
+        id: check
+        env:
+          BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/${BUILD_NUMBER}" >/dev/null 2>&1; then
+            echo "::notice::Tag ${BUILD_NUMBER} already exists; skipping release."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.check.outputs.skip != 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Set release version
+        if: steps.check.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.build.outputs.build_number }}
+        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Quality gate
+        if: steps.check.outputs.skip != 'true'
+        run: xvfb-run -a npm run quality
+
+      - name: Package .vsix
+        if: steps.check.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.build.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          npm run package:ci
+          mv nugetpackagemanager.vsix "nugetpackagemanager-${VERSION}.vsix"
+
+      - name: Publish to VS Code Marketplace
+        if: steps.check.outputs.skip != 'true'
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VERSION: ${{ steps.build.outputs.build_number }}
+        run: npm run publish:vsix -- "nugetpackagemanager-${VERSION}.vsix"
+
+      - name: Generate release notes
+        id: notes
+        if: steps.check.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.build.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          previous_tag="$(git describe --tags --abbrev=0 HEAD 2>/dev/null || true)"
+          if [ -n "$previous_tag" ]; then
+            range="${previous_tag}..HEAD"
+          else
+            range="HEAD"
+          fi
+          notes_file="${RUNNER_TEMP:-/tmp}/release-notes.md"
+          {
+            echo "## ${VERSION} - $(date -u +%Y-%m-%d)"
+            echo
+            git log --no-merges --pretty=format:'- %s (%h)%n' "$range"
+          } > "$notes_file"
+          echo "notes_file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push annotated tag
+        if: steps.check.outputs.skip != 'true'
+        env:
+          VERSION: ${{ steps.build.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Release $VERSION" HEAD
+          git push origin "$VERSION"
+
+      - name: Create GitHub release
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.build.outputs.build_number }}
+          NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
+        run: |
+          set -euo pipefail
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes-file "$NOTES_FILE" \
+            --verify-tag
+
+      - name: Upload .vsix
+        if: steps.check.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.build.outputs.build_number }}
+        run: gh release upload "$VERSION" "nugetpackagemanager-${VERSION}.vsix" --clobber

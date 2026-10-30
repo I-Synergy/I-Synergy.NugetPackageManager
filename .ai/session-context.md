@@ -1,8 +1,8 @@
 # TheNugetPackageManager — Session Context
 
-**Last Updated:** 2026-10-28
+**Last Updated:** 2026-10-30
 **Project Version:** 2.2.0
-**Branch:** feat/update-jobs-and-cancel
+**Branch:** development/main
 **Written By:** Reasonix Code
 **Next Session May Use:** Any
 
@@ -18,6 +18,25 @@
 ---
 
 ## Recent Work (this session and last)
+
+### In progress: SonarCloud remediation + automatic releases — PR #40 (2026-10-30)
+- Branch `development/main` pushed; PR #40 → `main`: https://github.com/I-Synergy/NugetPackageManager/pull/40
+- Plan: `.ai/plans/sonar-remediation.md`; progress: `.ai/progress/sonar-remediation.md`
+- Sonar scope: `.sonarcloud.properties` now drives automatic analysis (`.ai/**` and `docs/**` excluded, `src/**`/`tools/**`/`.github/**` kept). `sonar-project.properties` and the token-based scan step were removed.
+- Product findings: all 269 scoped issues addressed, including 13 vulnerabilities; cognitive-complexity hotspots were refactored into helpers, not suppressed. `eslint src` is clean (0 errors, 0 warnings).
+- CI hardening: `npm ci --ignore-scripts`, no `npx`, pinned `softprops/action-gh-release`.
+- Releases: `release.yml` now derives `YYYY.1MMdd.1HHmm` from the UTC build time, sets it for the build only, runs the quality gate, publishes, tags without `v`, and creates generated notes. `tools/release.mjs`, `RELEASE_NOTES.md` and the manual release workflow were removed.
+- Verification: `npm run quality` PASS (434 tests), `.ai/tests/run-all-tests.sh` 11/11, `git diff --check` clean.
+
+### Completed: quality gate (2026-10-30)
+- Plan: `.ai/plans/quality-gate.md`; progress: `.ai/progress/quality-gate.md`
+- Added `npm run quality` (`tools/quality-gate.mjs`): build, ESLint + SonarJS, `tsc --noEmit`, tests, `npm audit --audit-level=high`; `npm run quality:coverage` also writes `coverage/lcov.info`.
+- Added `.github/workflows/quality-gate.yml`, `sonar-project.properties` (`sonar.projectKey=I-Synergy_NugetPackageManager`, org `i-synergy`) and the `Quality Gate` wait flag. The Sonar scan step is skipped when `SONAR_TOKEN` is absent.
+- Coverage uses `@vscode/test-cli --coverage` (c8) — a bare `c8` wrapper around `vscode-test` reports 0% because the Electron extension host does not inherit `NODE_V8_COVERAGE`.
+- Cleared the SonarJS correctness/security findings; 72 maintainability warnings remain (complexity, nesting, template literals, two duplicate test helpers, five super-linear regexes).
+- README badges: CI, quality gate, SonarCloud (alert/security/maintainability/reliability), Marketplace version/installs/downloads/rating, license, VS Code.
+- Verification: `npm run quality` PASS (434 tests), `npm run test:coverage` produces lcov at ~68% statements, `git diff --check` clean. Committed locally (`chore: add quality gate with SonarJS, coverage and SonarCloud`), not pushed.
+- Follow-up: the SonarCloud project `I-Synergy_NugetPackageManager` now exists; add the `SONAR_TOKEN` repository secret so the scan runs and the badges compute.
 
 ### Completed: batch preflight, single restore, attributed retry, live progress + cancel (2026-10-28)
 - Plan: `.ai/plans/batch-preflight-retry-progress.md`; progress: `.ai/completed/batch-preflight-retry-progress.md`
@@ -267,5 +286,5 @@ was completed on 2026-10-24 and archived to `.ai/completed/`.
 1. **If releasing**: Update `package.json` version, run `npm run package`, verify `.vsix`
 2. **If adding RPC method**: types.ts → host-api.ts → webview call
 3. **If editing `src/common/`**: Ensure no Node.js-only imports (test with `npm run esbuild`)
-4. **Before any commit**: `npm run esbuild` + `npm run lint` (0 errors required)
+4. **Before any commit**: `npm run quality` (build + lint with SonarJS + type check + tests + audit; 0 errors required)
 5. **After changing AI context**: `bash .ai/tests/run-all-tests.sh` (11 suites) and regenerate junctions with `python .ai/scripts/sync-skills.py`

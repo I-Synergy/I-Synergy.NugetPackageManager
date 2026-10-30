@@ -1,9 +1,9 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createHostAPI } from './host-api';
 import ProjectParser from './utilities/project-parser';
 import nugetApiFactory from './nuget/api-factory';
@@ -15,6 +15,16 @@ import { OperationJobs } from './utilities/operation-jobs';
 import type { Result } from '../common/rpc/result';
 import type { GetJobResponse } from '../common/rpc/types';
 import { Logger } from '../common/logger';
+
+function fixturesRoot(): string {
+    const candidates = [
+        path.join(process.cwd(), 'src', 'host', 'utilities', '__fixtures__'),
+        path.resolve(__dirname, '..', '..', 'src', 'host', 'utilities', '__fixtures__'),
+    ];
+    const found = candidates.find((candidate) => fs.existsSync(candidate));
+    assert.ok(found, `fixtures directory not found; tried ${candidates.join(', ')}`);
+    return found!;
+}
 
 suite('HostAPI Tests', () => {
     let sandbox: sinon.SinonSandbox;
@@ -356,7 +366,7 @@ suite('HostAPI Tests', () => {
             assert.ok(result.ok);
             assert.strictEqual(result.value.Packages.length, 2);
             assert.deepStrictEqual(
-                result.value.Packages.map((pkg) => [pkg.CpmFramework, pkg.InstalledVersion]).sort(),
+                result.value.Packages.map((pkg) => [pkg.CpmFramework, pkg.InstalledVersion]).sort((a, b) => a.join("\0").localeCompare(b.join("\0"))),
                 [['net10.0', '1.0.0'], ['net11.0', '2.0.0']]
             );
         });
@@ -459,16 +469,6 @@ suite('HostAPI Tests', () => {
     suite('CPM multi-framework projects', () => {
         let workspaceDir: string;
         let projectsDir: string;
-
-        function fixturesRoot(): string {
-            const candidates = [
-                path.join(process.cwd(), 'src', 'host', 'utilities', '__fixtures__'),
-                path.resolve(__dirname, '..', '..', 'src', 'host', 'utilities', '__fixtures__'),
-            ];
-            const found = candidates.find((candidate) => fs.existsSync(candidate));
-            assert.ok(found, `fixtures directory not found; tried ${candidates.join(', ')}`);
-            return found!;
-        }
 
         function projectUris(): vscode.Uri[] {
             return fs.readdirSync(projectsDir)
@@ -669,16 +669,6 @@ suite('HostAPI Tests', () => {
     suite('CPM write scope', () => {
         let workspaceDir: string;
         let projectPath: string;
-
-        function fixturesRoot(): string {
-            const candidates = [
-                path.join(process.cwd(), 'src', 'host', 'utilities', '__fixtures__'),
-                path.resolve(__dirname, '..', '..', 'src', 'host', 'utilities', '__fixtures__'),
-            ];
-            const found = candidates.find((candidate) => fs.existsSync(candidate));
-            assert.ok(found, `fixtures directory not found; tried ${candidates.join(', ')}`);
-            return found!;
-        }
 
         function setupWorkspace(fixture: string): void {
             workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'host-cpm-write-'));
@@ -1015,16 +1005,6 @@ suite('HostAPI Tests', () => {
     suite('mutation jobs', () => {
         let workspaceDir: string;
         let projectPath: string;
-
-        function fixturesRoot(): string {
-            const candidates = [
-                path.join(process.cwd(), 'src', 'host', 'utilities', '__fixtures__'),
-                path.resolve(__dirname, '..', '..', 'src', 'host', 'utilities', '__fixtures__'),
-            ];
-            const found = candidates.find((candidate) => fs.existsSync(candidate));
-            assert.ok(found, `fixtures directory not found; tried ${candidates.join(', ')}`);
-            return found!;
-        }
 
         function setupWorkspace(fixture: string): void {
             workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), 'host-batch-job-'));

@@ -1,7 +1,7 @@
 import { JSDOM } from 'jsdom';
-import * as path from 'path';
+import * as path from 'node:path';
 import * as tsConfigPaths from 'tsconfig-paths';
-import * as Module from 'module';
+import * as Module from 'node:module';
 
 type RequireFunction = (id: string) => unknown;
 

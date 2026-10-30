@@ -728,8 +728,8 @@ suite('PackagesView Component', () => {
             assert.strictEqual(updateRequests.length, 2);
             assert.ok(updateRequests.every((request) => request.Type === 'UNINSTALL'));
             assert.deepStrictEqual(
-                updateRequests.map((request) => request.ProjectPath).sort(),
-                projectA.Path && projectB.Path ? [projectA.Path, projectB.Path].sort() : []
+                updateRequests.map((request) => request.ProjectPath).sort((a, b) => a.localeCompare(b)),
+                projectA.Path && projectB.Path ? [projectA.Path, projectB.Path].sort((a, b) => a.localeCompare(b)) : []
             );
             assert.strictEqual(restoreStub.callCount, 1);
             assert.strictEqual(packagesView.selectedPackage, null);

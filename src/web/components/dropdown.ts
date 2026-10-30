@@ -9,7 +9,7 @@ export interface DropdownOption {
 
 @customElement("custom-dropdown")
 export class CustomDropdown extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     css`
       :host {

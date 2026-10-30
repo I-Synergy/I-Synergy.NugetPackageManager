@@ -1,5 +1,5 @@
 import { Mutex } from "async-mutex";
-import { spawn } from "child_process";
+import { spawn } from "node:child_process";
 import { Logger } from "../../common/logger";
 
 export interface OperationProgress {
@@ -15,7 +15,7 @@ export class DotnetError extends Error {
 }
 
 export class TaskExecutor {
-  private globalMutex: Mutex = new Mutex();
+  private readonly globalMutex: Mutex = new Mutex();
   private progress = new Map<string, OperationProgress>();
 
   async ExecuteCommandAsync(

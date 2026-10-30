@@ -11,11 +11,11 @@
  *   → opens http://localhost:3729 in the default browser
  */
 
-import { createServer } from 'http';
-import { readFile } from 'fs/promises';
-import { fileURLToPath } from 'url';
-import { dirname, join, extname } from 'path';
-import { exec } from 'child_process';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, extname } from 'node:path';
+import { exec } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -71,17 +71,13 @@ async function fetchRegistrationItems(registrationBaseUrl, pkgId) {
   const res = await fetch(url);
   if (!res.ok) return [];
   const data = await res.json();
-  const items = [];
-  for (const page of data.items || []) {
-    if (page.items) {
-      items.push(...page.items);
-    } else {
-      const pageRes = await fetch(page['@id']);
-      const pageData = await pageRes.json();
-      items.push(...(pageData.items || []));
-    }
-  }
-  return items;
+  const pages = await Promise.all((data.items || []).map(async (page) => {
+    if (page.items) return page.items;
+    const pageRes = await fetch(page['@id']);
+    const pageData = await pageRes.json();
+    return pageData.items || [];
+  }));
+  return pages.flat();
 }
 
 function parseVersion(v) {
@@ -89,7 +85,7 @@ function parseVersion(v) {
   // e.g. "1.2.3-alpha.1" → { parts: [1,2,3], pre: "alpha.1" }
   const [numeric, ...preParts] = (v || '').split('-');
   const pre = preParts.length > 0 ? preParts.join('-') : null;
-  const parts = (numeric || '').split('.').map(n => parseInt(n, 10) || 0);
+  const parts = (numeric || '').split('.').map(n => Number.parseInt(n, 10) || 0);
   return { parts, pre };
 }
 
@@ -110,29 +106,30 @@ function compareVersions(a, b) {
 
 function isVersionInRange(version, range) {
   if (!range) return false;
-  try {
-    // Match NuGet range notation: [min,max], (min,max), [min,), etc.
-    // Version segments may include prerelease labels like "1.0.0-alpha"
-    const match = range.match(/^([\[\(])\s*([^,]*?)\s*,\s*([^,]*?)\s*([\]\)])$/);
-    if (!match) {
-      const exact = range.match(/^\[\s*([^\]]+?)\s*\]$/);
-      return exact ? compareVersions(version, exact[1]) === 0 : false;
-    }
-    const [, openBracket, minVer, maxVer, closeBracket] = match;
-    if (minVer) {
-      const cmp = compareVersions(version, minVer);
-      if (openBracket === '[' && cmp < 0) return false;
-      if (openBracket === '(' && cmp <= 0) return false;
-    }
-    if (maxVer) {
-      const cmp = compareVersions(version, maxVer);
-      if (closeBracket === ']' && cmp > 0) return false;
-      if (closeBracket === ')' && cmp >= 0) return false;
-    }
-    return true;
-  } catch {
-    return false;
+  const open = range[0];
+  const close = range[range.length - 1];
+  if ((open !== '[' && open !== '(') || (close !== ']' && close !== ')')) return false;
+
+  const inner = range.slice(1, -1).trim();
+  const comma = inner.indexOf(',');
+  if (comma === -1) {
+    // Exact version: [1.2.3]
+    return open === '[' && close === ']' && compareVersions(version, inner) === 0;
   }
+
+  const minVer = inner.slice(0, comma).trim();
+  const maxVer = inner.slice(comma + 1).trim();
+  if (minVer) {
+    const cmp = compareVersions(version, minVer);
+    if (open === '[' && cmp < 0) return false;
+    if (open === '(' && cmp <= 0) return false;
+  }
+  if (maxVer) {
+    const cmp = compareVersions(version, maxVer);
+    if (close === ']' && cmp > 0) return false;
+    if (close === ')' && cmp >= 0) return false;
+  }
+  return true;
 }
 
 function mapSearchItem(item) {
@@ -242,154 +239,135 @@ function validateNugetSourceUrl(raw) {
 
 // ── NuGet RPC proxy ───────────────────────────────────────────────────────────
 
+function selectPrerelease(items, prerelease) {
+  if (prerelease) return items;
+  const filtered = items.filter(v => {
+    const ce = typeof v.catalogEntry === 'object' ? v.catalogEntry : null;
+    return !ce?.version?.includes('-');
+  });
+  return filtered.length > 0 ? filtered : items;
+}
+
+async function proxyGetPackagesAsync(services, params) {
+  const searchBase = services.search.endsWith('/') ? services.search.slice(0, -1) : services.search;
+  const searchUrl = new URL(searchBase);
+  searchUrl.searchParams.set('q', params.Filter || '');
+  searchUrl.searchParams.set('take', String(params.Take ?? 20));
+  searchUrl.searchParams.set('skip', String(params.Skip ?? 0));
+  searchUrl.searchParams.set('prerelease', String(params.Prerelease ?? false));
+  searchUrl.searchParams.set('semVerLevel', '2.0.0');
+  const res = await fetch(searchUrl.toString());
+  const data = await res.json();
+  return { ok: true, value: { Packages: (data.data || []).map(mapSearchItem) } };
+}
+
+async function proxyGetPackageAsync(services, params, sourceUrl) {
+  const items = await fetchRegistrationItems(services.registration, params.Id);
+  if (!items.length) return { ok: false, error: `Package ${params.Id} not found` };
+  const toUse = selectPrerelease(items, params.Prerelease);
+  return { ok: true, value: { Package: mapCatalogEntry(toUse.at(-1), toUse), SourceUrl: sourceUrl } };
+}
+
+async function proxyGetPackageDetailsAsync(_services, params) {
+  const empty = { ok: true, value: { Package: { dependencies: { frameworks: {} } } } };
+  const pvUrl = params.PackageVersionUrl;
+  if (!pvUrl) return empty;
+
+  const pvRes = await fetch(pvUrl);
+  if (!pvRes.ok) return empty;
+  const pvData = await pvRes.json();
+
+  let catalogData;
+  const ce = pvData.catalogEntry;
+  if (typeof ce === 'object' && ce !== null && Array.isArray(ce.dependencyGroups)) {
+    catalogData = ce;
+  } else {
+    const catalogUrl = typeof ce === 'string' ? ce : ce?.['@id'];
+    if (!catalogUrl) return empty;
+    const catRes = await fetch(catalogUrl);
+    catalogData = await catRes.json();
+  }
+
+  const frameworks = {};
+  for (const group of catalogData?.dependencyGroups || []) {
+    const deps = (group.dependencies || []).map(d => ({ package: d.id, versionRange: d.range }));
+    if (deps.length > 0) frameworks[group.targetFramework] = deps;
+  }
+  return { ok: true, value: { Package: { dependencies: { frameworks } } } };
+}
+
+async function proxyGetOutdatedPackagesAsync(services, params, sourceUrl) {
+  const installed = params._installedPackages || [];
+  const outdated = [];
+
+  await Promise.all(installed.map(async ({ id, version, projects }) => {
+    try {
+      const items = await fetchRegistrationItems(services.registration, id);
+      if (!items.length) return;
+      const toUse = selectPrerelease(items, params.Prerelease);
+      const lastEntry = toUse.at(-1);
+      const latestVersion = (typeof lastEntry.catalogEntry === 'object' ? lastEntry.catalogEntry.version : '') || '';
+      if (latestVersion && compareVersions(latestVersion, version) > 0) {
+        outdated.push({ Id: id, InstalledVersion: version, LatestVersion: latestVersion, Projects: projects, SourceUrl: sourceUrl, SourceName: 'nuget.org' });
+      }
+    } catch (e) {
+      console.warn(`[nuget-proxy] getOutdatedPackagesAsync: failed for ${id}:`, e.message);
+    }
+  }));
+
+  return { ok: true, value: { Packages: outdated } };
+}
+
+async function proxyGetVulnerablePackagesAsync(services, params) {
+  const installed = params._installedPackages || [];
+  if (!services.vulnerability || !installed.length) return { ok: true, value: { Packages: [] } };
+
+  const vulnRes = await fetch(services.vulnerability);
+  if (!vulnRes.ok) return { ok: true, value: { Packages: [] } };
+  const vulnIndex = await vulnRes.json();
+
+  const vulnMap = {};
+  await Promise.all(vulnIndex.map(async page => {
+    try {
+      const pageRes = await fetch(page['@id']);
+      const pageData = await pageRes.json();
+      for (const [pkgId, entries] of Object.entries(pageData)) {
+        vulnMap[pkgId.toLowerCase()] = entries;
+      }
+    } catch (e) {
+      console.warn('[nuget-proxy] getVulnerablePackagesAsync: failed to fetch page:', e.message);
+    }
+  }));
+
+  const vulnerable = [];
+  for (const { id, version, projects } of installed) {
+    const entries = vulnMap[id.toLowerCase()];
+    if (!entries) continue;
+    for (const entry of entries) {
+      if (isVersionInRange(version, entry.versions)) {
+        vulnerable.push({ Id: id, InstalledVersion: version, Severity: entry.severity, AdvisoryUrl: entry.advisoryUrl, AffectedVersionRange: entry.versions, Projects: projects });
+        break;
+      }
+    }
+  }
+  return { ok: true, value: { Packages: vulnerable } };
+}
+
+const NUGET_PROXY_HANDLERS = {
+  getPackagesAsync: proxyGetPackagesAsync,
+  getPackageAsync: proxyGetPackageAsync,
+  getPackageDetailsAsync: proxyGetPackageDetailsAsync,
+  getOutdatedPackagesAsync: proxyGetOutdatedPackagesAsync,
+  getVulnerablePackagesAsync: proxyGetVulnerablePackagesAsync,
+};
+
 async function handleNugetProxy(method, params) {
   const rawUrl = params?.Url || 'https://api.nuget.org/v3/index.json';
   const sourceUrl = validateNugetSourceUrl(rawUrl);
   const services = await getNugetServices(sourceUrl);
-
-  switch (method) {
-    case 'getPackagesAsync': {
-      const searchBase = services.search.endsWith('/') ? services.search.slice(0, -1) : services.search;
-      const searchUrl = new URL(searchBase);
-      searchUrl.searchParams.set('q', params.Filter || '');
-      searchUrl.searchParams.set('take', String(params.Take ?? 20));
-      searchUrl.searchParams.set('skip', String(params.Skip ?? 0));
-      searchUrl.searchParams.set('prerelease', String(params.Prerelease ?? false));
-      searchUrl.searchParams.set('semVerLevel', '2.0.0');
-      const res = await fetch(searchUrl.toString());
-      const data = await res.json();
-      return { ok: true, value: { Packages: (data.data || []).map(mapSearchItem) } };
-    }
-
-    case 'getPackageAsync': {
-      const items = await fetchRegistrationItems(services.registration, params.Id);
-      if (!items.length) return { ok: false, error: `Package ${params.Id} not found` };
-
-      const filtered = params.Prerelease
-        ? items
-        : items.filter(v => {
-            const ce = typeof v.catalogEntry === 'object' ? v.catalogEntry : null;
-            return !ce?.version?.includes('-');
-          });
-      const toUse = filtered.length > 0 ? filtered : items;
-      const last = toUse[toUse.length - 1];
-      return { ok: true, value: { Package: mapCatalogEntry(last, toUse), SourceUrl: sourceUrl } };
-    }
-
-    case 'getPackageDetailsAsync': {
-      const pvUrl = params.PackageVersionUrl;
-      if (!pvUrl) return { ok: true, value: { Package: { dependencies: { frameworks: {} } } } };
-
-      const pvRes = await fetch(pvUrl);
-      if (!pvRes.ok) return { ok: true, value: { Package: { dependencies: { frameworks: {} } } } };
-      const pvData = await pvRes.json();
-
-      let catalogData;
-      const ce = pvData.catalogEntry;
-      if (typeof ce === 'object' && ce !== null && Array.isArray(ce.dependencyGroups)) {
-        catalogData = ce;
-      } else {
-        const catalogUrl = typeof ce === 'string' ? ce : ce?.['@id'];
-        if (!catalogUrl) return { ok: true, value: { Package: { dependencies: { frameworks: {} } } } };
-        const catRes = await fetch(catalogUrl);
-        catalogData = await catRes.json();
-      }
-
-      const frameworks = {};
-      for (const group of catalogData?.dependencyGroups || []) {
-        const deps = (group.dependencies || []).map(d => ({ package: d.id, versionRange: d.range }));
-        if (deps.length > 0) frameworks[group.targetFramework] = deps;
-      }
-      return { ok: true, value: { Package: { dependencies: { frameworks } } } };
-    }
-
-    case 'getOutdatedPackagesAsync': {
-      // _installedPackages: [{ id, version, projects: [{ Name, Path, Version }] }]
-      const installed = params._installedPackages || [];
-      const outdated = [];
-
-      await Promise.all(installed.map(async ({ id, version, projects }) => {
-        try {
-          const items = await fetchRegistrationItems(services.registration, id);
-          if (!items.length) return;
-
-          const filtered = params.Prerelease
-            ? items
-            : items.filter(v => {
-                const ce = typeof v.catalogEntry === 'object' ? v.catalogEntry : null;
-                return !ce?.version?.includes('-');
-              });
-          const toUse = filtered.length > 0 ? filtered : items;
-          const latestVersion = (typeof toUse[toUse.length - 1].catalogEntry === 'object'
-            ? toUse[toUse.length - 1].catalogEntry.version : '') || '';
-
-          if (latestVersion && compareVersions(latestVersion, version) > 0) {
-            outdated.push({
-              Id: id,
-              InstalledVersion: version,
-              LatestVersion: latestVersion,
-              Projects: projects,
-              SourceUrl: sourceUrl,
-              SourceName: 'nuget.org',
-            });
-          }
-        } catch (e) {
-          console.warn(`[nuget-proxy] getOutdatedPackagesAsync: failed for ${id}:`, e.message);
-        }
-      }));
-
-      return { ok: true, value: { Packages: outdated } };
-    }
-
-    case 'getVulnerablePackagesAsync': {
-      // _installedPackages: [{ id, version, projects: [{ Name, Path, Version }] }]
-      const installed = params._installedPackages || [];
-      if (!services.vulnerability || !installed.length) {
-        return { ok: true, value: { Packages: [] } };
-      }
-
-      const vulnRes = await fetch(services.vulnerability);
-      if (!vulnRes.ok) return { ok: true, value: { Packages: [] } };
-      const vulnIndex = await vulnRes.json();
-
-      const vulnMap = {};
-      await Promise.all(vulnIndex.map(async page => {
-        try {
-          const pageRes = await fetch(page['@id']);
-          const pageData = await pageRes.json();
-          for (const [pkgId, entries] of Object.entries(pageData)) {
-            vulnMap[pkgId.toLowerCase()] = entries;
-          }
-        } catch (e) {
-          console.warn('[nuget-proxy] getVulnerablePackagesAsync: failed to fetch page:', e.message);
-        }
-      }));
-
-      const vulnerable = [];
-      for (const { id, version, projects } of installed) {
-        const entries = vulnMap[id.toLowerCase()];
-        if (!entries) continue;
-        for (const entry of entries) {
-          if (isVersionInRange(version, entry.versions)) {
-            vulnerable.push({
-              Id: id,
-              InstalledVersion: version,
-              Severity: entry.severity,
-              AdvisoryUrl: entry.advisoryUrl,
-              AffectedVersionRange: entry.versions,
-              Projects: projects,
-            });
-            break;
-          }
-        }
-      }
-
-      return { ok: true, value: { Packages: vulnerable } };
-    }
-
-    default:
-      return { ok: false, error: `Unknown NuGet proxy method: ${method}` };
-  }
+  const handler = NUGET_PROXY_HANDLERS[method];
+  if (!handler) return { ok: false, error: `Unknown NuGet proxy method: ${method}` };
+  return handler(services, params, sourceUrl);
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
@@ -442,10 +420,14 @@ server.listen(PORT, '127.0.0.1', () => {
   const url = `http://localhost:${PORT}`;
   console.log(`\nDev server running at ${url}\n`);
 
-  const cmd =
-    process.platform === 'win32' ? `start "" "${url}"` :
-    process.platform === 'darwin' ? `open "${url}"` :
-    `xdg-open "${url}"`;
+  let cmd;
+  if (process.platform === 'win32') {
+    cmd = `start "" "${url}"`;
+  } else if (process.platform === 'darwin') {
+    cmd = `open "${url}"`;
+  } else {
+    cmd = `xdg-open "${url}"`;
+  }
   exec(cmd);
 
   console.log('Press Ctrl+C to stop.\n');

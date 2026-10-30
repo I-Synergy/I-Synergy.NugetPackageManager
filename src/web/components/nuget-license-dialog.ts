@@ -11,7 +11,7 @@ export type LicenseRequest = {
 
 @customElement("nuget-license-dialog")
 export class NugetLicenseDialog extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     css`
       .overlay {

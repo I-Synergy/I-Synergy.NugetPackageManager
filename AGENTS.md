@@ -217,15 +217,25 @@ npm run lint             # ESLint 9 flat config
 npm run lint:fix         # auto-fix
 npm test                 # VS Code Test CLI + Mocha
 npm run test-compile     # compile tests only (tsconfig.test.json)
+npm run quality          # local quality gate: build + lint (ESLint + SonarJS) + type check + tests + audit
+npm run quality:coverage # same, and writes coverage/lcov.info for the SonarCloud scan
 npm run package          # produce .vsix in releases/
 ```
 
 Requirements: Node.js 19+ (for `globalThis.crypto.randomUUID()`), and `dotnet` on PATH for
 install/update/restore, vulnerability and target-framework evaluation.
 
+### Release versioning
+
+Versions are automatic and are never bumped by hand. A push to `main` runs
+`.github/workflows/release.yml`, which derives `YYYY.1MMdd.1HHmm` from the UTC build
+time (the same scheme as the AI repo), sets it for the build only, publishes the `.vsix`,
+and tags the commit with that build number (no `v` prefix). No changelog or
+release-notes file is committed and `main` is not modified.
+
 After every code change:
 
-1. run `npm run esbuild` and `npm run lint`;
+1. run `npm run quality` (or at minimum `npm run esbuild` and `npm run lint`);
 2. run the most relevant tests (`npm test`, or a focused test file);
 3. fix failures before continuing;
 4. for multi-file changes, run the full suite.

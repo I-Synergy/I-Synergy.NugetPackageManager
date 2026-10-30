@@ -5,9 +5,9 @@
  * Usage:  npm run docs
  *         node ./tools/generate-docs.mjs
  */
-import { execSync, spawn } from 'child_process';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { execSync, spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -30,7 +30,7 @@ run('node ./esbuild.js');
 
 // ── 3. Start dev server in background ────────────────────────────────────────
 log('Starting dev server...');
-const server = spawn('node', ['./tools/dev-server.mjs'], {
+const server = spawn(process.execPath, ['./tools/dev-server.mjs'], {
   cwd: ROOT,
   stdio: 'ignore',
   detached: false,
@@ -53,8 +53,6 @@ try {
   // ── 6. Kill dev server ──────────────────────────────────────────────────────
   log('Stopping dev server...');
   server.kill();
-  // Belt-and-suspenders: kill anything still on port 3729
-  try { execSync('npx kill-port 3729', { cwd: ROOT, stdio: 'ignore' }); } catch { /* ok */ }
 
   // ── 7. Uninstall capture dependencies ────────────────────────────────────────
   log('Cleaning up capture dependencies...');

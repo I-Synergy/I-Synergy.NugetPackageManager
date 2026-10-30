@@ -36,15 +36,11 @@ const webConfig = {
   outfile: "./dist/web.js",
 };
 
-(async () => {
-  const buildConfigs = [extensionConfig, webConfig];
-  try {
-    for (const config of buildConfigs) {
-      await build(config);
-    }
+Promise.all([extensionConfig, webConfig].map((config) => build(config)))
+  .then(() => {
     console.log("build complete");
-  } catch (err) {
+  })
+  .catch((err) => {
     process.stderr.write(err.stderr);
     process.exit(1);
-  }
-})();
+  });

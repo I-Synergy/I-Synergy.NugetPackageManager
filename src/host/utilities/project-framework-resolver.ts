@@ -1,12 +1,17 @@
-import fs from "fs";
-import * as path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
+import fs from "node:fs";
+import * as path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { DOMParser } from "@xmldom/xmldom";
 import xpath from "xpath";
 import { Logger } from "../../common/logger";
 
 const execFileAsync = promisify(execFile);
+
+/** Locale-fixed comparator, so cached key parts are stable across machines. */
+function compareStrings(a: string, b: string): number {
+  return a.localeCompare(b, "en");
+}
 
 export type TargetFrameworkSource = "msbuild" | "xml" | "assets" | "override";
 
@@ -325,7 +330,7 @@ export default class ProjectFrameworkResolver {
         parts.push(`${file}:missing`);
       }
     }
-    return parts.sort().join("|");
+    return [...parts].sort(compareStrings).join("|");
   }
 
   private static normalize(projectPath: string): string {

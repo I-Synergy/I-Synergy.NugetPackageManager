@@ -1,56 +1,63 @@
 /** NuGet SemVer comparison and version-range matching. */
 
-export function compareVersions(a: string, b: string): number {
+type ParsedVersion = { release: string; prerelease: string };
+
+function splitVersion(value: string): ParsedVersion {
   // Strip NuGet version range brackets/parentheses and build metadata (+...).
-  const stripOuter = (v: string) => v.replace(/[[\]()]/g, "").split("+")[0] ?? v;
-  const cleanA = stripOuter(a);
-  const cleanB = stripOuter(b);
-
-  // Separate release tuple from prerelease label on the FIRST hyphen only.
+  const clean = value.replace(/[[\]()]/g, "").split("+")[0] ?? value;
   // NuGet follows SemVer: 1.0.0-beta is a prerelease of 1.0.0.
-  const firstDashA = cleanA.indexOf("-");
-  const firstDashB = cleanB.indexOf("-");
-  const releaseA = firstDashA >= 0 ? cleanA.substring(0, firstDashA) : cleanA;
-  const releaseB = firstDashB >= 0 ? cleanB.substring(0, firstDashB) : cleanB;
-  const prereleaseA = firstDashA >= 0 ? cleanA.substring(firstDashA + 1) : "";
-  const prereleaseB = firstDashB >= 0 ? cleanB.substring(firstDashB + 1) : "";
+  const firstDash = clean.indexOf("-");
+  if (firstDash < 0) return { release: clean, prerelease: "" };
+  return {
+    release: clean.substring(0, firstDash),
+    prerelease: clean.substring(firstDash + 1),
+  };
+}
 
-  // Compare numeric release components (major.minor.patch[.revision]).
-  const toNumParts = (s: string) =>
-    s.split(".").map((p) => {
-      const n = parseInt(p, 10);
-      return isNaN(n) ? 0 : n;
-    });
-  const numA = toNumParts(releaseA);
-  const numB = toNumParts(releaseB);
+function parseNumericParts(value: string): number[] {
+  return value.split(".").map((part) => {
+    const parsed = Number.parseInt(part, 10);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  });
+}
+
+function compareNumericParts(a: string, b: string): number {
+  const numA = parseNumericParts(a);
+  const numB = parseNumericParts(b);
   const maxLen = Math.max(numA.length, numB.length);
   for (let i = 0; i < maxLen; i++) {
-    const pA = numA[i] ?? 0;
-    const pB = numB[i] ?? 0;
-    if (pA !== pB) return pA - pB;
+    const diff = (numA[i] ?? 0) - (numB[i] ?? 0);
+    if (diff !== 0) return diff;
   }
+  return 0;
+}
 
-  // Numeric parts are equal — apply NuGet prerelease precedence: a stable
-  // release is always greater than any prerelease of the same base version.
-  if (prereleaseA === "" && prereleaseB === "") return 0;
-  if (prereleaseA === "") return 1;
-  if (prereleaseB === "") return -1;
+function comparePrerelease(a: string, b: string): number {
+  if (a === "" && b === "") return 0;
+  if (a === "") return 1;
+  if (b === "") return -1;
 
-  // Both have prerelease labels: numeric identifiers compare numerically,
-  // alphanumeric identifiers lexicographically.
-  const preA = prereleaseA.split(".");
-  const preB = prereleaseB.split(".");
+  const preA = a.split(".");
+  const preB = b.split(".");
   const preLen = Math.max(preA.length, preB.length);
   for (let i = 0; i < preLen; i++) {
     const pA = preA[i] ?? "";
     const pB = preB[i] ?? "";
     if (pA === pB) continue;
-    const nA = parseInt(pA, 10);
-    const nB = parseInt(pB, 10);
-    if (!isNaN(nA) && !isNaN(nB)) return nA - nB;
+    const nA = Number.parseInt(pA, 10);
+    const nB = Number.parseInt(pB, 10);
+    if (!Number.isNaN(nA) && !Number.isNaN(nB)) return nA - nB;
     return pA.localeCompare(pB);
   }
   return 0;
+}
+
+export function compareVersions(a: string, b: string): number {
+  const versionA = splitVersion(a);
+  const versionB = splitVersion(b);
+  const numeric = compareNumericParts(versionA.release, versionB.release);
+  if (numeric !== 0) return numeric;
+  return comparePrerelease(versionA.prerelease, versionB.prerelease);
 }
 
 /**
@@ -67,33 +74,27 @@ export function isVersionInRange(version: string, range: string): boolean {
 
   const lowerInclusive = trimmed.startsWith("[");
   const upperInclusive = trimmed.endsWith("]");
-
   const inner = trimmed.slice(1, -1);
   const commaIdx = inner.indexOf(",");
 
   if (commaIdx === -1) {
-    if (lowerInclusive && upperInclusive) {
-      return compareVersions(version, inner.trim()) === 0;
-    }
-    return false;
+    return lowerInclusive && upperInclusive && compareVersions(version, inner.trim()) === 0;
   }
 
-  const lowerBound = inner.substring(0, commaIdx).trim();
-  const upperBound = inner.substring(commaIdx + 1).trim();
+  return satisfiesLowerBound(version, inner.substring(0, commaIdx).trim(), lowerInclusive)
+    && satisfiesUpperBound(version, inner.substring(commaIdx + 1).trim(), upperInclusive);
+}
 
-  if (lowerBound) {
-    const cmp = compareVersions(version, lowerBound);
-    if (lowerInclusive && cmp < 0) return false;
-    if (!lowerInclusive && cmp <= 0) return false;
-  }
+function satisfiesLowerBound(version: string, bound: string, inclusive: boolean): boolean {
+  if (!bound) return true;
+  const cmp = compareVersions(version, bound);
+  return inclusive ? cmp >= 0 : cmp > 0;
+}
 
-  if (upperBound) {
-    const cmp = compareVersions(version, upperBound);
-    if (upperInclusive && cmp > 0) return false;
-    if (!upperInclusive && cmp >= 0) return false;
-  }
-
-  return true;
+function satisfiesUpperBound(version: string, bound: string, inclusive: boolean): boolean {
+  if (!bound) return true;
+  const cmp = compareVersions(version, bound);
+  return inclusive ? cmp <= 0 : cmp < 0;
 }
 
 /** Lowercased release version used by vulnerability lists. */

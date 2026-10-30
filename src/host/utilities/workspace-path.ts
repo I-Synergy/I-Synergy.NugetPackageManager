@@ -1,5 +1,5 @@
-import fs from "fs";
-import * as path from "path";
+import fs from "node:fs";
+import * as path from "node:path";
 
 /** Returns true when `candidate` is inside `root` (or is the root itself). */
 export function isPathInside(root: string, candidate: string): boolean {

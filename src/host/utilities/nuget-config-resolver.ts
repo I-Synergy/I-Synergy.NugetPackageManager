@@ -1,8 +1,8 @@
-import fs from "fs";
-import * as path from "path";
+import fs from "node:fs";
+import * as path from "node:path";
 import { DOMParser } from "@xmldom/xmldom";
 import xpath from "xpath";
-import os from "os";
+import os from "node:os";
 import * as vscode from "vscode";
 import PasswordScriptExecutor from "./password-script-executor";
 import { isPathInside } from "./workspace-path";
@@ -23,12 +23,22 @@ export default class NuGetConfigResolver {
   private static readonly CONFIG_FILENAMES = ["nuget.config", "NuGet.Config", "NuGet.config"];
 
   static async GetSourcesAndDecodePasswordsAsync(workspaceRoots?: string | string[]): Promise<SourceWithCredentials[]> {
-    const roots = Array.isArray(workspaceRoots) ? workspaceRoots : (workspaceRoots ? [workspaceRoots] : []);
+    const roots = this.normalizeRoots(workspaceRoots);
     Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Starting resolution (workspaceRoots: ${roots.join(", ")})`);
-    const sourcesMap = new Map<string, SourceWithCredentials>();
 
     const { sources: sourcesWithCreds, clearFound } = await this.ResolveConfigsAsync(roots);
+    const sourcesMap = this.buildSourcesMap(sourcesWithCreds);
+    const passwordScriptPaths = this.applyVscodeSources(sourcesMap, clearFound);
+    const sources = Array.from(sourcesMap.values());
+    const allowlist = getSetting<string[]>("passwordScriptAllowlist", []);
+    const trusted = vscode.workspace.isTrusted !== false;
 
+    await this.decodePasswordsAsync(sources, passwordScriptPaths, allowlist, roots, trusted);
+    return this.filterSupportedSources(sources);
+  }
+
+  private static buildSourcesMap(sourcesWithCreds: SourceWithCredentials[]): Map<string, SourceWithCredentials> {
+    const sourcesMap = new Map<string, SourceWithCredentials>();
     sourcesWithCreds.forEach(s => {
       const entry: SourceWithCredentials = { Name: s.Name, Url: s.Url };
       if (s.Username !== undefined) entry.Username = s.Username;
@@ -36,81 +46,75 @@ export default class NuGetConfigResolver {
       if (s.Patterns !== undefined) entry.Patterns = s.Patterns;
       sourcesMap.set(s.Name, entry);
     });
+    return sourcesMap;
+  }
 
-    const vscodeSourcesRaw = getSetting<string[]>("sources", []);
+  private static applyVscodeSources(
+    sourcesMap: Map<string, SourceWithCredentials>,
+    clearFound: boolean
+  ): Map<string, string> {
     const passwordScriptPaths = new Map<string, string>();
-
-    vscodeSourcesRaw.forEach((x) => {
+    for (const raw of getSetting<string[]>("sources", [])) {
       try {
-        const parsed = JSON.parse(x) as {
-          name?: string;
-          url?: string;
-          passwordScriptPath?: string;
-        };
+        const parsed = JSON.parse(raw) as { name?: string; url?: string; passwordScriptPath?: string };
         Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Found source from setting: ${parsed.name}`);
-        if (parsed.name) {
-          const existingSource = sourcesMap.get(parsed.name);
-          if (existingSource) {
-            if (parsed.passwordScriptPath) {
-              passwordScriptPaths.set(parsed.name, parsed.passwordScriptPath);
-            }
-          } else if (parsed.url && !clearFound) {
-            // When <clear /> was found in a workspace nuget.config, respect the intent to
-            // restrict sources to only what is explicitly declared — don't add extra sources
-            // from VS Code settings (passwordScriptPath for existing sources is still honoured above).
-            sourcesMap.set(parsed.name, {
-              Name: parsed.name,
-              Url: parsed.url,
-            });
-            if (parsed.passwordScriptPath) {
-              passwordScriptPaths.set(parsed.name, parsed.passwordScriptPath);
-            }
-          }
+        if (!parsed.name) continue;
+
+        const existingSource = sourcesMap.get(parsed.name);
+        if (existingSource) {
+          if (parsed.passwordScriptPath) passwordScriptPaths.set(parsed.name, parsed.passwordScriptPath);
+        } else if (parsed.url && !clearFound) {
+          // When <clear /> was found, respect the intent to restrict sources to what
+          // is explicitly declared — don't add extra sources from VS Code settings.
+          sourcesMap.set(parsed.name, { Name: parsed.name, Url: parsed.url });
+          if (parsed.passwordScriptPath) passwordScriptPaths.set(parsed.name, parsed.passwordScriptPath);
         }
       } catch { /* ignore unparseable source entries */ }
-    });
+    }
+    return passwordScriptPaths;
+  }
 
-    const sources = Array.from(sourcesMap.values());
-    const allowlist = getSetting<string[]>("passwordScriptAllowlist", []);
-    const trusted = vscode.workspace.isTrusted !== false;
-
+  private static async decodePasswordsAsync(
+    sources: SourceWithCredentials[],
+    passwordScriptPaths: Map<string, string>,
+    allowlist: string[],
+    roots: string[],
+    trusted: boolean
+  ): Promise<void> {
     for (const source of sources) {
       const passwordScriptPath = passwordScriptPaths.get(source.Name);
-      
-      if (passwordScriptPath && source.Password) {
-        if (!trusted) {
-          Logger.warn(`NuGetConfigResolver: Refusing password script for ${source.Name}: workspace is untrusted`);
-          continue;
+      if (!passwordScriptPath || !source.Password) {
+        if (source.Username || source.Password) {
+          Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Using credentials for ${source.Name}`);
         }
-        if (!await this.IsPasswordScriptAllowedAsync(passwordScriptPath, allowlist, roots)) {
-          Logger.warn(`NuGetConfigResolver: Refusing password script for ${source.Name}: path is not in the machine-scoped passwordScriptAllowlist`);
-          continue;
-        }
-
-        try {
-          Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Decoding password for ${source.Name}`);
-          const decodedPassword = await PasswordScriptExecutor.ExecuteScriptAsync(
-            passwordScriptPath,
-            source.Password
-          );
-          source.Password = decodedPassword;
-        } catch (error) {
-          Logger.error(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Failed to decode password for ${source.Name}`, error);
-        }
-      } else if (source.Username || source.Password) {
-        Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Using credentials for ${source.Name}`);
+        continue;
+      }
+      if (!trusted) {
+        Logger.warn(`NuGetConfigResolver: Refusing password script for ${source.Name}: workspace is untrusted`);
+        continue;
+      }
+      if (!await this.IsPasswordScriptAllowedAsync(passwordScriptPath, allowlist, roots)) {
+        Logger.warn(`NuGetConfigResolver: Refusing password script for ${source.Name}: path is not in the machine-scoped passwordScriptAllowlist`);
+        continue;
+      }
+      try {
+        Logger.debug(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Decoding password for ${source.Name}`);
+        source.Password = await PasswordScriptExecutor.ExecuteScriptAsync(passwordScriptPath, source.Password);
+      } catch (error) {
+        Logger.error(`NuGetConfigResolver.GetSourcesAndDecodePasswords: Failed to decode password for ${source.Name}`, error);
       }
     }
+  }
 
-    const supportedSources = sources.filter(
-      (source) => this.IsHttpSource(source.Url) || LocalNuGetFeed.IsLocalSource(source.Url)
-    );
+  private static filterSupportedSources(sources: SourceWithCredentials[]): SourceWithCredentials[] {
     for (const source of sources) {
       if (!this.IsHttpSource(source.Url) && !LocalNuGetFeed.IsLocalSource(source.Url)) {
         Logger.info(`NuGetConfigResolver: Skipping unsupported source ${source.Name} (${source.Url})`);
       }
     }
-    return supportedSources;
+    return sources.filter(
+      (source) => this.IsHttpSource(source.Url) || LocalNuGetFeed.IsLocalSource(source.Url)
+    );
   }
 
   private static IsHttpSource(url: string): boolean {
@@ -152,9 +156,14 @@ export default class NuGetConfigResolver {
   }
 
   static async GetSourcesWithCredentialsAsync(workspaceRoots?: string | string[]): Promise<SourceWithCredentials[]> {
-    const roots = Array.isArray(workspaceRoots) ? workspaceRoots : (workspaceRoots ? [workspaceRoots] : []);
+    const roots = this.normalizeRoots(workspaceRoots);
     const { sources } = await this.ResolveConfigsAsync(roots);
     return sources;
+  }
+
+  private static normalizeRoots(workspaceRoots?: string | string[]): string[] {
+    if (Array.isArray(workspaceRoots)) return workspaceRoots;
+    return workspaceRoots ? [workspaceRoots] : [];
   }
 
   private static async ResolveConfigsAsync(workspaceRoots: string[]): Promise<{ sources: SourceWithCredentials[]; clearFound: boolean }> {
@@ -393,7 +402,7 @@ export default class NuGetConfigResolver {
   // NuGet encodes characters that are invalid in XML element names using _xHHHH_ notation,
   // e.g. "rfh/nuget" is stored as "rfh_x002F_nuget". Decode back to the original source name.
   private static DecodeNuGetXmlName(name: string): string {
-    return name.replace(/_x([0-9A-Fa-f]{4})_/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    return name.replace(/_x([0-9A-Fa-f]{4})_/g, (_, hex) => String.fromCodePoint(Number.parseInt(hex, 16)));
   }
 
   private static ParseCredentialNode(

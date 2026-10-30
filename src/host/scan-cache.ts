@@ -23,11 +23,16 @@ export type ScanCacheKeyParts = {
     excludeGlobs: string[];
 };
 
+/** Locale-fixed comparator: cache keys must be identical on every machine. */
+function compareStrings(a: string, b: string): number {
+    return a.localeCompare(b, "en");
+}
+
 /** FNV-1a; keeps the persisted key short and stable. */
 function hashKey(value: string): string {
     let hash = 0x811c9dc5;
-    for (let i = 0; i < value.length; i++) {
-        hash ^= value.charCodeAt(i);
+    for (const char of value) {
+        hash ^= char.codePointAt(0)!;
         hash = Math.imul(hash, 0x01000193);
     }
     return (hash >>> 0).toString(16).padStart(8, "0");
@@ -35,11 +40,11 @@ function hashKey(value: string): string {
 
 export function BuildScanCacheKey(parts: ScanCacheKeyParts): string {
     const normalized = JSON.stringify({
-        workspaceRoots: [...parts.workspaceRoots].map((root) => root.toLowerCase()).sort(),
-        projectPaths: [...parts.projectPaths].map((project) => project.toLowerCase()).sort(),
-        sourceUrls: [...parts.sourceUrls].map((url) => url.toLowerCase()).sort(),
+        workspaceRoots: [...parts.workspaceRoots].map((root) => root.toLowerCase()).sort(compareStrings),
+        projectPaths: [...parts.projectPaths].map((project) => project.toLowerCase()).sort(compareStrings),
+        sourceUrls: [...parts.sourceUrls].map((url) => url.toLowerCase()).sort(compareStrings),
         prerelease: parts.prerelease,
-        excludeGlobs: [...parts.excludeGlobs].sort(),
+        excludeGlobs: [...parts.excludeGlobs].sort(compareStrings),
     });
     return `scan:${hashKey(normalized)}`;
 }
@@ -53,13 +58,13 @@ export function BuildScanCacheKey(parts: ScanCacheKeyParts): string {
 export class ScanCacheStore {
     constructor(private readonly memento?: vscode.Memento) {}
 
-    async LoadAsync(key: string): Promise<ScanCacheEntry | null> {
-        if (!this.memento) return null;
+    LoadAsync(key: string): Promise<ScanCacheEntry | null> {
+        if (!this.memento) return Promise.resolve(null);
         const entry = this.memento.get<ScanCacheEntry>(STORAGE_KEY);
-        if (!entry) return null;
-        if (entry.SchemaVersion !== SCHEMA_VERSION || entry.Key !== key) return null;
-        if (!Array.isArray(entry.Packages)) return null;
-        return entry;
+        if (!entry) return Promise.resolve(null);
+        if (entry.SchemaVersion !== SCHEMA_VERSION || entry.Key !== key) return Promise.resolve(null);
+        if (!Array.isArray(entry.Packages)) return Promise.resolve(null);
+        return Promise.resolve(entry);
     }
 
     async SaveAsync(entry: Omit<ScanCacheEntry, "SchemaVersion">): Promise<void> {

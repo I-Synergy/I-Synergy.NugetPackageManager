@@ -1,7 +1,7 @@
-import fs from "fs";
+import fs from "node:fs";
 import { DOMParser } from "@xmldom/xmldom";
 import xpath from "xpath";
-import * as path from "path";
+import * as path from "node:path";
 import { Logger } from "../../common/logger";
 
 export default class ProjectParser {
@@ -11,9 +11,9 @@ export default class ProjectParser {
     const document = new DOMParser().parseFromString(projectContent);
 
     // Check for parsing errors or empty document
-    if (!document || !document.documentElement) {
+    if (!document?.documentElement) {
       Logger.error(`ProjectParser.Parse: ${projectPath} has invalid content`);
-      throw `${projectPath} has invalid content`;
+      throw new Error(`${projectPath} has invalid content`);
     }
 
     // Handle XML Namespaces
@@ -47,67 +47,63 @@ export default class ProjectParser {
 
     (packagesReferences || []).forEach((p) => {
       const el = p as Element;
-      const versionNode = el.attributes?.getNamedItem("Version");
-      let version = versionNode ? versionNode.value : undefined;
-
-      // Check for child element if attribute is missing
-      if (!version) {
-          const versionChild = xpath.select("string(Version)", p); // Relative path from 'p'
-          if (versionChild) {
-              version = versionChild.toString();
-          }
-           // Also try namespaced child if applicable
-           if (!version) {
-               const versionChildNS = xpath.select("string(*[local-name()='Version'])", p);
-               if (versionChildNS) {
-                   version = versionChildNS.toString();
-               }
-           }
-      }
-
       const packageId = el.attributes?.getNamedItem("Include")?.value ?? "";
-
-      // Check for VersionOverride attribute (CPM override at project level)
-      let versionOverride = el.attributes?.getNamedItem("VersionOverride")?.value;
-      if (!versionOverride) {
-        const versionOverrideChild = xpath.select("string(*[local-name()='VersionOverride'])", p);
-        if (versionOverrideChild) {
-          versionOverride = versionOverrideChild.toString() || undefined;
-        }
-      }
+      let version = readPackageVersion(el, p);
+      const versionOverride = readVersionOverride(el, p);
 
       let versionSource: VersionSource = "project";
-
       if (cpmVersions) {
-        if (versionOverride) {
-          version = versionOverride;
-          versionSource = "override";
-          Logger.debug(`ProjectParser.Parse: Package ${packageId} uses VersionOverride ${versionOverride} in ${projectPath}`);
-        } else {
-          const cpmVersion = cpmVersions.get(packageId) || null;
-          if (cpmVersion) {
-            version = cpmVersion;
-            versionSource = "central";
-          } else {
-            Logger.warn(`ProjectParser.Parse: CPM version not found for package ${packageId} in ${projectPath}`);
-          }
-        }
+        const cpmResolution = resolveCpmVersion(packageId, version, versionOverride, cpmVersions, projectPath);
+        version = cpmResolution.version;
+        versionSource = cpmResolution.versionSource;
       }
 
-      // Check if version is pinned (exact version match using [x.x.x] notation - no comma)
-      // According to NuGet versioning: [1.0] means x == 1.0 (exact version match, pinned)
-      // Ranges like [1.0,2.0], (1.0,), [1.0,) etc. are NOT pinned
-      const isPinned = version ? (version.startsWith('[') && version.endsWith(']') && !version.includes(',')) : false;
-
-      const projectPackage: ProjectPackage = {
+      project.Packages.push({
         Id: packageId,
         Version: version || "",
-        IsPinned: isPinned,
+        IsPinned: isPinnedVersion(version),
         VersionSource: versionSource,
-      };
-      project.Packages.push(projectPackage);
+      });
     });
 
     return project;
   }
+}
+
+function readPackageVersion(el: Element, node: Node): string | undefined {
+  const attribute = el.attributes?.getNamedItem("Version")?.value;
+  if (attribute) return attribute;
+  const child = xpath.select("string(Version)", node);
+  if (child) return child.toString();
+  const namespacedChild = xpath.select("string(*[local-name()='Version'])", node);
+  return namespacedChild ? namespacedChild.toString() : undefined;
+}
+
+function readVersionOverride(el: Element, node: Node): string | undefined {
+  const attribute = el.attributes?.getNamedItem("VersionOverride")?.value;
+  if (attribute) return attribute;
+  const child = xpath.select("string(*[local-name()='VersionOverride'])", node);
+  return child ? child.toString() || undefined : undefined;
+}
+
+function resolveCpmVersion(
+  packageId: string,
+  version: string | undefined,
+  versionOverride: string | undefined,
+  cpmVersions: Map<string, string>,
+  projectPath: string
+): { version: string | undefined; versionSource: VersionSource } {
+  if (versionOverride) {
+    Logger.debug(`ProjectParser.Parse: Package ${packageId} uses VersionOverride ${versionOverride} in ${projectPath}`);
+    return { version: versionOverride, versionSource: "override" };
+  }
+  const cpmVersion = cpmVersions.get(packageId) || null;
+  if (cpmVersion) return { version: cpmVersion, versionSource: "central" };
+  Logger.warn(`ProjectParser.Parse: CPM version not found for package ${packageId} in ${projectPath}`);
+  return { version, versionSource: "project" };
+}
+
+function isPinnedVersion(version: string | undefined): boolean {
+  // NuGet: [1.0] means x == 1.0 (exact, pinned); ranges with a comma are not pinned.
+  return !!version && version.startsWith('[') && version.endsWith(']') && !version.includes(',');
 }

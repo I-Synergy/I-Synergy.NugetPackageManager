@@ -10,7 +10,7 @@ export type LogEntry = {
 
 @customElement("nuget-output-log")
 export class NugetOutputLog extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     css`
       :host {

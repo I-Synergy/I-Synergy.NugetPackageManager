@@ -17,7 +17,7 @@ const severityColors: Record<number, string> = {
 
 @customElement("vulnerabilities-view")
 export class VulnerabilitiesView extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     scrollableBase,
     sharedStyles,

@@ -16,6 +16,10 @@ export function createRpcClient(
   const pending = new Map<number, PendingCall>();
 
   window.addEventListener("message", (event: MessageEvent) => {
+    // Only accept messages from this webview's own origin. Messages relayed from
+    // another window (or a host that cannot prove its origin) are ignored.
+    if (event.origin !== window.location.origin) return;
+
     const msg = event.data as RpcResponse;
     if (msg?.type !== "rpc-response") return;
 

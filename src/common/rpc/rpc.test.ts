@@ -23,7 +23,7 @@ suite('RPC transport', () => {
 
     function respond(id: number, value: unknown): void {
         const response: RpcResponse = { type: 'rpc-response', id, result: { ok: true, value } };
-        window.dispatchEvent(new window.MessageEvent('message', { data: response }));
+        window.dispatchEvent(new window.MessageEvent('message', { data: response, origin: window.location.origin }));
     }
 
     test('resolves an RPC response by id', async () => {

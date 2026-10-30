@@ -7,12 +7,12 @@
  * Usage: node screenshot-harness/take-screenshots.mjs
  */
 
-import { createServer } from 'http';
-import { readFile } from 'fs/promises';
-import { writeFileSync, mkdirSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join, extname } from 'path';
-import { createRequire } from 'module';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { writeFileSync, mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, extname } from 'node:path';
+import { createRequire } from 'node:module';
 
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
@@ -254,7 +254,9 @@ async function main() {
   console.log('\nDone.\n');
 }
 
-main().catch((err) => {
+try {
+  await main();
+} catch (err) {
   console.error('\nFailed:', err.message ?? err);
   process.exit(1);
-});
+}

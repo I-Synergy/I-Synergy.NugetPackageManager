@@ -33,7 +33,7 @@ export function buildFrameworkOptions(
   return [
     { value: "", label: getFrameworkLabel("") },
     ...(hasShared ? [{ value: SHARED_FRAMEWORK, label: getFrameworkLabel(SHARED_FRAMEWORK) }] : []),
-    ...[...frameworks].sort().map((value) => ({ value, label: getFrameworkLabel(value) })),
+    ...[...frameworks].sort((a, b) => a.localeCompare(b)).map((value) => ({ value, label: getFrameworkLabel(value) })),
   ];
 }
 

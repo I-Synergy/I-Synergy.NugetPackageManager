@@ -10,6 +10,6 @@ body {
 
 @font-face {
   font-family: "codicon";
-  font-display: block;
+  font-display: swap;
   src: url("./assets/codicon.ttf") format("truetype");
 }

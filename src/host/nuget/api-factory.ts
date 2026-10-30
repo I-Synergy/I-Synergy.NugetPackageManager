@@ -24,10 +24,17 @@ class NuGetApiFactory {
     const workspaceRoots = (vscode.workspace.workspaceFolders ?? []).map(f => f.uri.fsPath);
     const sources = await NuGetConfigResolver.GetSourcesAndDecodePasswordsAsync(workspaceRoots);
 
-    Logger.debug(`NuGetApiFactory.GetSourceApiAsync: Available sources: ${sources.map(s => `${s.Name}=${s.Url} (hasAuth=${!!s.Username || !!s.Password})`).join(", ")}`);
+    const sourceSummary = sources
+      .map(s => `${s.Name}=${s.Url} (hasAuth=${!!s.Username || !!s.Password})`)
+      .join(", ");
+    Logger.debug(`NuGetApiFactory.GetSourceApiAsync: Available sources: ${sourceSummary}`);
 
     // Match by URL with/without trailing slash normalization
-    const normalizeUrl = (u: string) => u.replace(/\/+$/, "").toLowerCase();
+    const normalizeUrl = (u: string) => {
+      let end = u.length;
+      while (end > 0 && u[end - 1] === "/") end--;
+      return u.slice(0, end).toLowerCase();
+    };
     const sourceWithCreds = sources.find(s => normalizeUrl(s.Url) === normalizeUrl(url));
 
     const hasAuth = !!(sourceWithCreds?.Username || sourceWithCreds?.Password);

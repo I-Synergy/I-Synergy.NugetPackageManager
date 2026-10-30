@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- chore: add a quality gate mirroring the CI workflow — `npm run quality` builds, lints with ESLint + SonarJS, type-checks, runs the test suite and audits dependencies; `npm run quality:coverage` also writes `coverage/lcov.info` for SonarQube Cloud.
+- ci: add the `Quality Gate` workflow; SonarCloud analysis is handled by its GitHub integration (automatic analysis), configured by `.sonarcloud.properties`, so no scanner or `SONAR_TOKEN` is required.
+- fix: clear the SonarQube Cloud findings for product code — dead stores, unused collections/variables, redundant comparisons and type aliases, duplicate character classes, deprecated OpenTelemetry constants, writable static styles, message-origin verification in the RPC client, locale-independent cache keys, throwing non-`Error` values, and all cognitive-complexity hotspots (extracted helpers instead of suppressing).
+- ci: scope SonarCloud automatic analysis to product paths (`.ai/**` skill templates and `docs/**` mockups excluded) and harden the workflows (`npm ci --ignore-scripts`, no `npx`, pinned release action).
+- refactor: release versions are now automatic and follow the AI-repo scheme — each push to `main` derives `YYYY.1MMdd.1HHmm` from the UTC build time, publishes with that version, and tags it without a `v` prefix. The manual release script and `RELEASE_NOTES.md` were removed.
+- docs: add CI, quality-gate, SonarCloud and Marketplace badges to `README.md`, and document the automatic release flow.
+
 ## 2.2.0 (2026-10-28)
 
 - fix: a slow update on a large solution is no longer cancelled and reverted by the webview's 120 s request deadline. The deadline now stops the webview waiting but lets the host finish; files are only rolled back for a real write/restore failure or an explicit cancel.

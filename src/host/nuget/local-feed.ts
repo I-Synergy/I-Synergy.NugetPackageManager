@@ -1,6 +1,6 @@
-import fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
+import fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 import { DOMParser } from "@xmldom/xmldom";
 import xpath from "xpath";

@@ -1,7 +1,7 @@
 import * as assert from 'assert';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 import CpmResolver from './cpm-resolver';
 import { Logger } from '../../common/logger';
 
@@ -583,7 +583,7 @@ suite('CpmResolver Tests', () => {
         const logging = resolutions.get('Microsoft.Extensions.Logging')!;
         assert.strictEqual(logging.length, 2);
         assert.deepStrictEqual(
-            logging.map((r) => r.ConditionLabel).sort(),
+            logging.map((r) => r.ConditionLabel).sort((a, b) => a.localeCompare(b)),
             ['net11.0', 'not net11.0']
         );
     });

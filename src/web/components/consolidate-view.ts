@@ -14,7 +14,7 @@ import { InconsistentPackageViewModel } from "../types";
 
 @customElement("consolidate-view")
 export class ConsolidateView extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     codicon,
     scrollableBase,
     sharedStyles,
@@ -269,9 +269,10 @@ export class ConsolidateView extends LitElement {
         bubbles: true,
         composed: true,
       }));
+      const packageWord = this.packages.length === 1 ? "package" : "packages";
       this.statusText =
         this.packages.length > 0
-          ? `${this.packages.length} package${this.packages.length !== 1 ? "s" : ""} with inconsistent versions`
+          ? `${this.packages.length} ${packageWord} with inconsistent versions`
           : "All versions are consistent";
       return true;
     } catch (err) {

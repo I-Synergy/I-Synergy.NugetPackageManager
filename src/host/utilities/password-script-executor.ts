@@ -1,12 +1,12 @@
 import * as vscode from "vscode";
-import { spawn } from "child_process";
+import { spawn } from "node:child_process";
 import { Logger } from "../../common/logger";
 
 class PasswordScriptTerminal implements vscode.Pseudoterminal {
-  private writeEmitter = new vscode.EventEmitter<string>();
+  private readonly writeEmitter = new vscode.EventEmitter<string>();
   onDidWrite = this.writeEmitter.event;
   
-  private closeEmitter = new vscode.EventEmitter<number>();
+  private readonly closeEmitter = new vscode.EventEmitter<number>();
   onDidClose = this.closeEmitter.event;
 
   private output: string = '';
@@ -71,6 +71,7 @@ class PasswordScriptTerminal implements vscode.Pseudoterminal {
   }
 
   close(): void {
+    // Nothing to stop: the spawned process closes itself and fires onDidClose.
   }
 
   getOutput(): string {
@@ -83,13 +84,14 @@ class PasswordScriptTerminal implements vscode.Pseudoterminal {
 }
 
 export default class PasswordScriptExecutor {
-  private static cache: Map<string, { password: string; timestamp: number }> = new Map();
-  private static pendingExecutions: Map<string, Promise<string>> = new Map();
+  private static readonly cache: Map<string, { password: string; timestamp: number }> = new Map();
+  private static readonly pendingExecutions: Map<string, Promise<string>> = new Map();
   private static readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
   // START: Test Hook
   // Exposed for testing purposes to mock child_process.spawn
-  public static _spawn = spawn;
+  // eslint-disable-next-line sonarjs/public-static-readonly -- writable test hook
+  public static _spawn = spawn; // NOSONAR: writable test hook
   // END: Test Hook
 
   static async ExecuteScriptAsync(scriptPath: string, encodedPassword: string): Promise<string> {

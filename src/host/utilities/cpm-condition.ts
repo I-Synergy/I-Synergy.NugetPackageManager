@@ -37,7 +37,7 @@ type Token =
   | { type: "identifier"; value: string };
 
 const PROPERTY_FUNCTION_RE =
-  /^([A-Za-z_][\w.-]*)\.(StartsWith|EndsWith|Contains)\(\s*(['"])(.*?)\3\s*\)$/i;
+  /^([a-z_][\w.-]*)\.(StartsWith|EndsWith|Contains)\(\s*(['"])(.*?)\3\s*\)$/i;
 const PROPERTY_NAME_RE = /^[A-Za-z_][\w.-]*$/;
 
 class Tokenizer {
@@ -50,54 +50,60 @@ class Tokenizer {
     while (this.index < this.input.length) {
       this.skipWhitespace();
       if (this.index >= this.input.length) break;
-
-      const ch = this.input[this.index]!;
-      if (this.input.startsWith("!=", this.index)) {
-        tokens.push({ type: "ne" });
-        this.index += 2;
-        continue;
-      }
-      if (ch === "!") {
-        tokens.push({ type: "not" });
-        this.index++;
-        continue;
-      }
-      if (ch === "(") {
-        tokens.push({ type: "lparen" });
-        this.index++;
-        continue;
-      }
-      if (ch === ")") {
-        tokens.push({ type: "rparen" });
-        this.index++;
-        continue;
-      }
-      if (ch === "'" || ch === '"') {
-        const value = this.readQuoted(ch);
-        if (value === null) return null;
-        tokens.push(this.classifyValue(value));
-        continue;
-      }
-      if (ch === "$" && this.input[this.index + 1] === "(") {
-        const value = this.readPropertyExpression();
-        if (value === null) return null;
-        tokens.push(this.classifyPropertyExpression(value));
-        continue;
-      }
-      if (this.input.startsWith("==", this.index)) {
-        tokens.push({ type: "eq" });
-        this.index += 2;
-        continue;
-      }
-
-      const word = this.readWord();
-      if (word === null || word.length === 0) return null;
-      const lower = word.toLowerCase();
-      if (lower === "and") tokens.push({ type: "and" });
-      else if (lower === "or") tokens.push({ type: "or" });
-      else tokens.push({ type: "identifier", value: word });
+      const token = this.readNextToken();
+      if (token === null) return null;
+      if (token) tokens.push(token);
     }
     return tokens;
+  }
+
+  private readNextToken(): Token | null | undefined {
+    const symbol = this.readSymbolToken();
+    if (symbol) return symbol;
+
+    const ch = this.input[this.index]!;
+    if (ch === "'" || ch === '"') {
+      const value = this.readQuoted(ch);
+      return value === null ? null : this.classifyValue(value);
+    }
+    if (ch === "$" && this.input[this.index + 1] === "(") {
+      const value = this.readPropertyExpression();
+      return value === null ? null : this.classifyPropertyExpression(value);
+    }
+    return this.readWordToken();
+  }
+
+  private readSymbolToken(): Token | undefined {
+    if (this.input.startsWith("!=", this.index)) {
+      this.index += 2;
+      return { type: "ne" };
+    }
+    if (this.input.startsWith("==", this.index)) {
+      this.index += 2;
+      return { type: "eq" };
+    }
+    switch (this.input[this.index]) {
+      case "!":
+        this.index++;
+        return { type: "not" };
+      case "(":
+        this.index++;
+        return { type: "lparen" };
+      case ")":
+        this.index++;
+        return { type: "rparen" };
+      default:
+        return undefined;
+    }
+  }
+
+  private readWordToken(): Token | null {
+    const word = this.readWord();
+    if (word === null || word.length === 0) return null;
+    const lower = word.toLowerCase();
+    if (lower === "and") return { type: "and" };
+    if (lower === "or") return { type: "or" };
+    return { type: "identifier", value: word };
   }
 
   private skipWhitespace(): void {
@@ -232,48 +238,56 @@ class Parser {
   private parsePrimary(): CpmConditionAst | null {
     const token = this.peek();
     if (!token) return null;
-
-    if (token.type === "lparen") {
-      this.index++;
-      const expr = this.parseOr();
-      if (!expr || this.peek()?.type !== "rparen") return null;
-      this.index++;
-      return expr;
-    }
-
-    if (token.type === "call") {
-      this.index++;
-      return {
-        kind: "call",
-        property: token.property,
-        method: token.method,
-        value: token.value,
-      };
-    }
-
-    if (token.type === "property" || token.type === "string") {
-      this.index++;
-      const next = this.peek();
-      if (next?.type === "eq" || next?.type === "ne") {
-        this.index++;
-        const right = this.peek();
-        if (!right || (right.type !== "string" && right.type !== "property")) return null;
-        this.index++;
-        const value = right.type === "string" ? right.value : `$(${right.name})`;
-        return {
-          kind: "compare",
-          property: token.type === "property" ? `$(${token.name})` : token.value,
-          operator: next.type === "eq" ? "==" : "!=",
-          value,
-        };
-      }
-      if (token.type === "property") {
-        return { kind: "property", name: token.name };
-      }
-      return this.parseLiteral(token.value);
-    }
-
+    if (token.type === "lparen") return this.parseParenthesized();
+    if (token.type === "call") return this.parseCallToken(token);
+    if (token.type === "property" || token.type === "string") return this.parseValueToken(token);
     return null;
+  }
+
+  private parseParenthesized(): CpmConditionAst | null {
+    this.index++;
+    const expr = this.parseOr();
+    if (!expr || this.peek()?.type !== "rparen") return null;
+    this.index++;
+    return expr;
+  }
+
+  private parseCallToken(token: Token & { type: "call" }): CpmConditionAst {
+    this.index++;
+    return {
+      kind: "call",
+      property: token.property,
+      method: token.method,
+      value: token.value,
+    };
+  }
+
+  private parseValueToken(token: Token & { type: "property" | "string" }): CpmConditionAst | null {
+    this.index++;
+    const next = this.peek();
+    if (next?.type === "eq" || next?.type === "ne") {
+      return this.parseComparisonToken(token, next);
+    }
+    if (token.type === "property") {
+      return { kind: "property", name: token.name };
+    }
+    return this.parseLiteral(token.value);
+  }
+
+  private parseComparisonToken(
+    token: Token & { type: "property" | "string" },
+    operator: Token & { type: "eq" | "ne" }
+  ): CpmConditionAst | null {
+    this.index++;
+    const right = this.peek();
+    if (!right || (right.type !== "string" && right.type !== "property")) return null;
+    this.index++;
+    return {
+      kind: "compare",
+      property: token.type === "property" ? `$(${token.name})` : token.value,
+      operator: operator.type === "eq" ? "==" : "!=",
+      value: right.type === "string" ? right.value : `$(${right.name})`,
+    };
   }
 
   private parseLiteral(value: string): CpmConditionAst | null {
@@ -312,57 +326,75 @@ function evaluateAst(ast: CpmConditionAst, properties: Map<string, string>): boo
   switch (ast.kind) {
     case "literal":
       return ast.value;
+    case "not":
+      return evaluateNot(ast, properties);
+    case "and":
+      return evaluateAnd(ast, properties);
+    case "or":
+      return evaluateOr(ast, properties);
+    case "property":
+      return evaluateProperty(ast, properties);
+    case "compare":
+      return evaluateCompare(ast, properties);
+    case "call":
+      return evaluateCall(ast, properties);
+  }
+}
 
-    case "not": {
-      const value = evaluateAst(ast.operand, properties);
-      return value === null ? null : !value;
-    }
+function evaluateNot(ast: CpmConditionAst & { kind: "not" }, properties: Map<string, string>): boolean | null {
+  const value = evaluateAst(ast.operand, properties);
+  return value === null ? null : !value;
+}
 
-    case "and": {
-      const left = evaluateAst(ast.left, properties);
-      const right = evaluateAst(ast.right, properties);
-      if (left === false || right === false) return false;
-      return left === null || right === null ? null : true;
-    }
+function evaluateAnd(ast: CpmConditionAst & { kind: "and" }, properties: Map<string, string>): boolean | null {
+  const left = evaluateAst(ast.left, properties);
+  const right = evaluateAst(ast.right, properties);
+  if (left === false || right === false) return false;
+  return left === null || right === null ? null : true;
+}
 
-    case "or": {
-      const left = evaluateAst(ast.left, properties);
-      const right = evaluateAst(ast.right, properties);
-      if (left === true || right === true) return true;
-      return left === null || right === null ? null : false;
-    }
+function evaluateOr(ast: CpmConditionAst & { kind: "or" }, properties: Map<string, string>): boolean | null {
+  const left = evaluateAst(ast.left, properties);
+  const right = evaluateAst(ast.right, properties);
+  if (left === true || right === true) return true;
+  return left === null || right === null ? null : false;
+}
 
-    case "property": {
-      const value = properties.get(ast.name.toLowerCase());
-      if (value === undefined) return null;
-      const lower = value.trim().toLowerCase();
-      if (lower === "true") return true;
-      if (lower === "false" || lower === "") return false;
-      return null;
-    }
+function evaluateProperty(
+  ast: CpmConditionAst & { kind: "property" },
+  properties: Map<string, string>
+): boolean | null {
+  const value = properties.get(ast.name.toLowerCase());
+  if (value === undefined) return null;
+  const lower = value.trim().toLowerCase();
+  if (lower === "true") return true;
+  if (lower === "false" || lower === "") return false;
+  return null;
+}
 
-    case "compare": {
-      const left = resolveOperand(ast.property, properties);
-      const right = resolveOperand(ast.value, properties);
-      if (left === null || right === null) return null;
-      const equal = left.toLowerCase() === right.toLowerCase();
-      return ast.operator === "==" ? equal : !equal;
-    }
+function evaluateCompare(
+  ast: CpmConditionAst & { kind: "compare" },
+  properties: Map<string, string>
+): boolean | null {
+  const left = resolveOperand(ast.property, properties);
+  const right = resolveOperand(ast.value, properties);
+  if (left === null || right === null) return null;
+  const equal = left.toLowerCase() === right.toLowerCase();
+  return ast.operator === "==" ? equal : !equal;
+}
 
-    case "call": {
-      const value = properties.get(ast.property.toLowerCase());
-      if (value === undefined) return null;
-      const haystack = value.toLowerCase();
-      const needle = ast.value.toLowerCase();
-      switch (ast.method) {
-        case "startswith":
-          return haystack.startsWith(needle);
-        case "endswith":
-          return haystack.endsWith(needle);
-        case "contains":
-          return haystack.includes(needle);
-      }
-    }
+function evaluateCall(ast: CpmConditionAst & { kind: "call" }, properties: Map<string, string>): boolean | null {
+  const value = properties.get(ast.property.toLowerCase());
+  if (value === undefined) return null;
+  const haystack = value.toLowerCase();
+  const needle = ast.value.toLowerCase();
+  switch (ast.method) {
+    case "startswith":
+      return haystack.startsWith(needle);
+    case "endswith":
+      return haystack.endsWith(needle);
+    case "contains":
+      return haystack.includes(needle);
   }
 }
 
@@ -393,37 +425,35 @@ function labelAst(ast: CpmConditionAst): string | null {
   switch (ast.kind) {
     case "literal":
       return ast.value ? "always" : "never";
-
-    case "not": {
-      const inner = labelAst(ast.operand);
-      return inner ? `not ${inner}` : null;
-    }
-
-    case "and": {
-      const left = labelAst(ast.left);
-      const right = labelAst(ast.right);
-      return left && right ? `${left} and ${right}` : null;
-    }
-
-    case "or": {
-      const left = labelAst(ast.left);
-      const right = labelAst(ast.right);
-      return left && right ? `${left} or ${right}` : null;
-    }
-
-    case "compare": {
-      if (!ast.value.startsWith("$(")) {
-        return ast.operator === "==" ? ast.value : `not ${ast.value}`;
-      }
-      return null;
-    }
-
+    case "not":
+      return labelNot(ast);
+    case "and":
+      return labelBinary(ast, "and");
+    case "or":
+      return labelBinary(ast, "or");
+    case "compare":
+      return labelCompare(ast);
     case "call":
       return ast.value;
-
     case "property":
       return null;
   }
+}
+
+function labelNot(ast: CpmConditionAst & { kind: "not" }): string | null {
+  const inner = labelAst(ast.operand);
+  return inner ? `not ${inner}` : null;
+}
+
+function labelBinary(ast: CpmConditionAst & { kind: "and" | "or" }, joiner: "and" | "or"): string | null {
+  const left = labelAst(ast.left);
+  const right = labelAst(ast.right);
+  return left && right ? `${left} ${joiner} ${right}` : null;
+}
+
+function labelCompare(ast: CpmConditionAst & { kind: "compare" }): string | null {
+  if (ast.value.startsWith("$(")) return null;
+  return ast.operator === "==" ? ast.value : `not ${ast.value}`;
 }
 
 function fallbackLabel(raw: string): string {
@@ -436,5 +466,5 @@ function fallbackLabel(raw: string): string {
  */
 export function getTfmMajorVersion(tfm: string): number | null {
   const match = /^net(\d+)\.\d+/i.exec(tfm.trim());
-  return match ? parseInt(match[1]!, 10) : null;
+  return match ? Number.parseInt(match[1]!, 10) : null;
 }

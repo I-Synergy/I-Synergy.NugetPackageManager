@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import * as path from "path";
+import * as path from "node:path";
 import nonce from "@/common/nonce";
 import { RpcHost } from "@/common/rpc/rpc-host";
 import { createHostAPI } from "./host-api";
@@ -118,8 +118,8 @@ export function activate(context: vscode.ExtensionContext) {
     { treeDataProvider: new NugetLauncherTreeProvider() }
   );
   RegisterBadgeView(launcherTree);
-  context.subscriptions.push(launcherTree);
   context.subscriptions.push(
+    launcherTree,
     launcherTree.onDidChangeVisibility((event) => {
       if (event.visible) webviews.openPanel();
     })
@@ -127,19 +127,14 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.window.registerWebviewPanelSerializer(PANEL_ID, {
-      deserializeWebviewPanel: async (panel: vscode.WebviewPanel) => {
+      deserializeWebviewPanel: (panel: vscode.WebviewPanel) => {
         webviews.restorePanel(panel);
+        return Promise.resolve();
       },
-    })
-  );
-
-  context.subscriptions.push(
+    }),
     vscode.commands.registerCommand(COMMAND_IDS.open, () => {
       webviews.openPanel();
-    })
-  );
-
-  context.subscriptions.push(
+    }),
     vscode.commands.registerCommand(COMMAND_IDS.install, async () => {
       const packageId = await vscode.window.showInputBox({
         prompt: "Enter the NuGet package ID to install",
@@ -148,32 +143,20 @@ export function activate(context: vscode.ExtensionContext) {
       if (!packageId) return;
       webviews.openPanel();
       webviews.sendSearchQuery(packageId);
-    })
-  );
-
-  context.subscriptions.push(
+    }),
     vscode.commands.registerCommand(COMMAND_IDS.update, () => {
       webviews.openPanel();
       webviews.sendNavigateToTab("updates");
-    })
-  );
-
-  context.subscriptions.push(
+    }),
     vscode.commands.registerCommand(COMMAND_IDS.remove, () => {
       webviews.openPanel();
       webviews.sendNavigateToTab("installed");
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.commands.registerCommand(COMMAND_IDS.reportProblem, async () => {
+    }),
+    vscode.commands.registerCommand(COMMAND_IDS.reportProblem, () => {
       vscode.env.openExternal(
         vscode.Uri.parse("https://github.com/I-Synergy/NugetPackageManager/issues/new")
       );
-    })
-  );
-
-  context.subscriptions.push(
+    }),
     vscode.commands.registerCommand(COMMAND_IDS.openSettings, () => {
       webviews.openPanel();
       webviews.sendNavigateToRoute("SETTINGS");
