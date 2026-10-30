@@ -67,16 +67,20 @@ if (!skipBuild) {
   steps.push(["Build", "npm", ["run", "esbuild"]]);
 }
 
-steps.push(["Lint + SonarJS", "npm", ["run", "lint"]]);
-steps.push(["Type check", "npm", ["run", "typecheck"]]);
+steps.push(
+  ["Lint + SonarJS", "npm", ["run", "lint"]],
+  ["Type check", "npm", ["run", "typecheck"]],
+);
 
 if (!skipTests) {
-  steps.push(["Compile tests", "npm", ["run", "test-compile"]]);
-  steps.push([
-    coverage ? "Tests with coverage" : "Tests",
-    "npm",
-    ["run", coverage ? "test:coverage" : "test"],
-  ]);
+  steps.push(
+    ["Compile tests", "npm", ["run", "test-compile"]],
+    [
+      coverage ? "Tests with coverage" : "Tests",
+      "npm",
+      ["run", coverage ? "test:coverage" : "test"],
+    ],
+  );
 }
 
 steps.push(["Dependency audit", "npm", ["audit", "--audit-level=high"]]);
