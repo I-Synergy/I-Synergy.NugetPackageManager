@@ -2,19 +2,11 @@
 
 **A full-featured NuGet package manager for Visual Studio Code** — browse, install, update, and audit packages across all your .NET projects without leaving the editor.
 
-[![Release](https://img.shields.io/github/v/release/I-Synergy/NugetPackageManager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager)
-[![CI](https://img.shields.io/github/actions/workflow/status/I-Synergy/NugetPackageManager/ci.yml?label=CI)](https://github.com/I-Synergy/NugetPackageManager/actions/workflows/ci.yml)
-[![Quality Gate](https://img.shields.io/github/actions/workflow/status/I-Synergy/NugetPackageManager/quality-gate.yml?label=quality%20gate)](https://github.com/I-Synergy/NugetPackageManager/actions/workflows/quality-gate.yml)
-[![SonarQube Cloud](https://sonarcloud.io/api/project_badges/measure?project=I-Synergy_NugetPackageManager&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=I-Synergy_NugetPackageManager)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=I-Synergy_NugetPackageManager&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=I-Synergy_NugetPackageManager)
-[![Maintainability](https://sonarcloud.io/api/project_badges/measure?project=I-Synergy_NugetPackageManager&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=I-Synergy_NugetPackageManager)
-[![Reliability](https://sonarcloud.io/api/project_badges/measure?project=I-Synergy_NugetPackageManager&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=I-Synergy_NugetPackageManager)
-[![VS Marketplace](https://vsmarketplacebadges.dev/version-short/I-Synergy.nugetpackagemanager.svg)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager)
-[![Installs](https://vsmarketplacebadges.dev/installs-short/I-Synergy.nugetpackagemanager.svg)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager)
-[![Downloads](https://vsmarketplacebadges.dev/downloads-short/I-Synergy.nugetpackagemanager.svg)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager)
-[![Rating](https://vsmarketplacebadges.dev/rating-short/I-Synergy.nugetpackagemanager.svg)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.110%2B-blue)](https://code.visualstudio.com/)
+[![Release](https://img.shields.io/github/v/release/I-Synergy/NugetPackageManager?color=6366f1)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager) [![CI](https://img.shields.io/github/actions/workflow/status/I-Synergy/NugetPackageManager/ci.yml?label=CI)](https://github.com/I-Synergy/NugetPackageManager/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE) [![VS Code](https://img.shields.io/badge/VS%20Code-1.110%2B-blue)](https://code.visualstudio.com/)
+
+[![Quality Gate](https://img.shields.io/github/actions/workflow/status/I-Synergy/NugetPackageManager/quality-gate.yml?label=quality%20gate)](https://github.com/I-Synergy/NugetPackageManager/actions/workflows/quality-gate.yml) [![SonarQube Cloud](https://sonarcloud.io/api/project_badges/measure?project=I-Synergy_NugetPackageManager&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=I-Synergy_NugetPackageManager) [![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=I-Synergy_NugetPackageManager&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=I-Synergy_NugetPackageManager) [![Maintainability](https://sonarcloud.io/api/project_badges/measure?project=I-Synergy_NugetPackageManager&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=I-Synergy_NugetPackageManager) [![Reliability](https://sonarcloud.io/api/project_badges/measure?project=I-Synergy_NugetPackageManager&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=I-Synergy_NugetPackageManager)
+
+[![VS Marketplace](https://vsmarketplacebadges.dev/version-short/I-Synergy.nugetpackagemanager.svg)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager) [![Installs](https://vsmarketplacebadges.dev/installs-short/I-Synergy.nugetpackagemanager.svg)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager) [![Downloads](https://vsmarketplacebadges.dev/downloads-short/I-Synergy.nugetpackagemanager.svg)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager) [![Rating](https://vsmarketplacebadges.dev/rating-short/I-Synergy.nugetpackagemanager.svg)](https://marketplace.visualstudio.com/items?itemName=I-Synergy.nugetpackagemanager)
 
 ---
 
